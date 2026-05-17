@@ -1393,6 +1393,13 @@ label {
   background: #fafbfc;
 }
 
+.markdown-preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin: 8px 0;
+}
+
 .checkline {
   display: flex;
   align-items: center;
