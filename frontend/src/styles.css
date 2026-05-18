@@ -696,7 +696,7 @@ label {
 /* standards detail with tree sidebar */
 .standards-detail-layout {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 260px minmax(0, 1fr) 200px;
   gap: 18px;
   align-items: start;
   min-height: calc(100vh - 140px);
@@ -1854,6 +1854,180 @@ td.row-actions {
     grid-template-columns: 1fr;
   }
   .post-dir-panel {
+    display: none;
+  }
+}
+
+/* ========== 管理后台操作按钮统一 ========== */
+.row-actions button,
+.type-item button.ghost,
+.type-item button.danger,
+.parameter-item button.ghost,
+.parameter-item button.danger {
+  font-size: 12px;
+  min-height: 26px;
+  padding: 0 10px;
+}
+
+/* ========== 标准发布表格 ========== */
+.standards-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+}
+.standards-filter-bar select {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+}
+.standards-table-wrap {
+  overflow-x: auto;
+}
+.standards-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.standards-table th {
+  text-align: left;
+  padding: 10px 14px;
+  background: #f5f7fa;
+  color: #526071;
+  font-weight: 600;
+  border-bottom: 2px solid #e0e4ea;
+  white-space: nowrap;
+}
+.standards-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f3f7;
+  color: #39445a;
+}
+.standards-table tbody tr:hover td {
+  background: #f8f9fb;
+}
+.standards-table .link-btn {
+  background: none;
+  border: none;
+  color: #2356a5;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  font-weight: 500;
+}
+.standards-table .link-btn:hover {
+  text-decoration: underline;
+}
+.standards-table .table-actions {
+  display: flex;
+  gap: 6px;
+}
+.standards-table .table-actions button {
+  font-size: 12px;
+  min-height: 26px;
+  padding: 0 10px;
+}
+
+/* ========== 标准文档分类 Tab ========== */
+.category-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e3e9f1;
+  flex-wrap: wrap;
+}
+.category-tab {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  background: transparent;
+  color: #526071;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.category-tab:hover {
+  background: #f0f4fa;
+  color: #2356a5;
+}
+.category-tab.active {
+  background: #2356a5;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ========== 文档预览三栏布局 ========== */
+.post-article {
+  background: #fff; border: 1px solid #e8ecf2; border-radius: 10px;
+  padding: 28px 32px; margin-bottom: 20px;
+}
+.post-title {
+  font-size: 26px; font-weight: 700; color: #1a1a2e; margin: 0 0 16px;
+  line-height: 1.35; letter-spacing: -0.3px;
+}
+.post-author-line {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+}
+.post-date { font-size: 13px; color: #8896a7; }
+.post-body {
+  padding: 0; border: none; background: transparent; max-height: none;
+  line-height: 1.85; font-size: 15px; color: #1a1a2e;
+}
+.doc-preview-backdrop {
+  place-items: stretch;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.doc-preview-full {
+  min-height: 100vh;
+  background: #eef2f7;
+  padding: 0 clamp(18px, 4vw, 48px) 48px;
+}
+
+.doc-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 0;
+  gap: 16px;
+}
+
+.doc-preview-toolbar h3 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0;
+  color: #182033;
+}
+
+.doc-preview-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 200px;
+  gap: 18px;
+  align-items: start;
+}
+
+.doc-preview-main {
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .doc-preview-layout {
+    grid-template-columns: 220px 1fr;
+  }
+  .doc-preview-layout .post-toc-panel {
+    display: none;
+  }
+}
+
+@media (max-width: 800px) {
+  .doc-preview-layout {
+    grid-template-columns: 1fr;
+  }
+  .doc-preview-layout .post-dir-panel {
     display: none;
   }
 }

@@ -16,6 +16,7 @@ public class StandardDocumentResponse {
     private String software;
     private String softwareVersion;
     private String standardVersion;
+    private String code;
     private String content;
     private String renderedContent;
     private LocalDateTime publishedAt;
@@ -35,6 +36,7 @@ public class StandardDocumentResponse {
         response.setSoftware(document.getSoftware());
         response.setSoftwareVersion(document.getSoftwareVersion());
         response.setStandardVersion(document.getStandardVersion());
+        response.setCode(document.getCode());
         response.setContent(document.getContent());
         response.setRenderedContent(renderedContent);
         response.setPublishedAt(document.getPublishedAt());
@@ -65,6 +67,8 @@ public class StandardDocumentResponse {
     public void setSoftwareVersion(String softwareVersion) { this.softwareVersion = softwareVersion; }
     public String getStandardVersion() { return standardVersion; }
     public void setStandardVersion(String standardVersion) { this.standardVersion = standardVersion; }
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
     public String getRenderedContent() { return renderedContent; }

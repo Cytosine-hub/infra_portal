@@ -31,6 +31,9 @@ public class StandardDocumentRequest {
     @Size(max = 80)
     private String standardVersion;
 
+    @Size(max = 20)
+    private String code;
+
     @NotBlank
     private String content;
 
@@ -52,6 +55,8 @@ public class StandardDocumentRequest {
     public void setSoftwareVersion(String softwareVersion) { this.softwareVersion = softwareVersion; }
     public String getStandardVersion() { return standardVersion; }
     public void setStandardVersion(String standardVersion) { this.standardVersion = standardVersion; }
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
 }

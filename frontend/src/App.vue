@@ -203,18 +203,23 @@
               <h3>标准文档</h3>
               <button class="ghost" @click="closePublicStandardDetail()">返回列表</button>
             </div>
-            <div v-for="group in publicDocumentGroups" :key="group.category" class="tree-category">
-              <div class="tree-category-name">{{ group.category }}</div>
-              <div class="tree-docs">
-                <button
-                  v-for="doc in group.documents"
-                  :key="doc.id"
-                  :class="['tree-doc-link', { active: String(selectedPublicStandard?.id) === String(doc.id) }]"
-                  @click="openPublicStandardDetail(doc.id)"
-                >
-                  {{ doc.title }}
-                </button>
-              </div>
+            <div class="category-tabs">
+              <button
+                v-for="cat in publicDocCategories"
+                :key="cat"
+                :class="['category-tab', { active: publicDocCategory === cat }]"
+                @click="publicDocCategory = cat"
+              >{{ cat }}</button>
+            </div>
+            <div class="tree-docs">
+              <button
+                v-for="doc in filteredPublicDocuments"
+                :key="doc.id"
+                :class="['tree-doc-link', { active: String(selectedPublicStandard?.id) === String(doc.id) }]"
+                @click="openPublicStandardDetail(doc.id)"
+              >
+                {{ doc.title }}
+              </button>
             </div>
           </aside>
           <article class="standards-detail-content">
@@ -234,6 +239,16 @@
             <div v-if="standardsLoading" class="loading-panel"><div class="spinner"></div><p>加载中...</p></div>
             <div v-else class="markdown-preview public-document" v-html="publicStandardHtml"></div>
           </article>
+          <aside class="post-toc-panel" v-if="standardTocItems.length">
+            <h4 class="toc-title">文档大纲</h4>
+            <button
+              v-for="item in standardTocItems"
+              :key="item.id"
+              :class="['toc-link', { active: activeStdTocId === item.id }]"
+              :style="{ '--toc-level': item.level - 1 }"
+              @click="scrollToStdHeading(item.id)"
+            >{{ item.text }}</button>
+          </aside>
         </div>
 
         <template v-else>
@@ -371,17 +386,28 @@
                   <button class="ghost" @click="loadStandardDocuments()">刷新</button>
                   <button @click="goDocumentEditor()">新增文档</button>
                 </div>
+                <div v-else-if="adminSection === 'users'" class="admin-actions">
+                  <button @click="openCreateUserDialog()">新增用户</button>
+                </div>
               </div>
 
-              <form v-if="showPassword" class="utility-panel" @submit.prevent="changePassword">
-                <h3>修改密码</h3>
-                <div class="form-grid">
-                  <label>当前密码<input v-model="passwordForm.currentPassword" type="password" required /></label>
-                  <label>新密码<input v-model="passwordForm.newPassword" type="password" minlength="8" required /></label>
-                  <label>确认密码<input v-model="passwordForm.confirmPassword" type="password" required /></label>
-                </div>
-                <button type="submit">保存密码</button>
-              </form>
+              <div v-if="showPassword" class="modal-backdrop" @click.self="showPassword = false">
+                <form class="modal-panel" @submit.prevent="changePassword">
+                  <div class="panel-title">
+                    <h3>修改密码</h3>
+                    <button type="button" class="ghost" @click="showPassword = false">关闭</button>
+                  </div>
+                  <div class="form-grid single">
+                    <label>当前密码<input v-model="passwordForm.currentPassword" type="password" required /></label>
+                    <label>新密码<input v-model="passwordForm.newPassword" type="password" minlength="8" required /></label>
+                    <label>确认密码<input v-model="passwordForm.confirmPassword" type="password" required /></label>
+                  </div>
+                  <div class="form-actions">
+                    <button type="submit">保存密码</button>
+                    <button type="button" class="ghost" @click="showPassword = false">取消</button>
+                  </div>
+                </form>
+              </div>
 
               <template v-if="adminSection === 'files'">
                 <div class="toolbar">
@@ -478,40 +504,46 @@
 
               <section v-else-if="adminSection === 'standardPublish'" class="utility-panel type-panel">
                 <template v-if="!selectedStandard">
-                  <div class="filters standard-filters">
+                  <div class="standards-filter-bar">
                     <select v-model="standardFilters.category" @change="handleStandardFilterCategoryChange">
-                      <option value="">全部分类</option>
+                      <option value="">软件分类</option>
                       <option v-for="category in softwareTypeCategories" :key="category" :value="category">{{ category }}</option>
                     </select>
-                    <select v-model="standardFilters.software" :disabled="!standardFilters.category" @change="applyStandardFilters()">
-                      <option value="">全部软件</option>
-                      <option v-for="type in standardFilterSoftwareOptions" :key="type.id" :value="type.name">{{ type.name }}</option>
-                    </select>
-                    <select v-model="standardFilters.status" @change="applyStandardFilters()">
-                      <option value="">全部状态</option>
-                      <option value="DRAFT">草稿</option>
-                      <option value="PUBLISHED">已发布</option>
-                    </select>
-                    <input v-model.trim="standardFilters.keyword" placeholder="标准版本/标题" @keyup.enter="applyStandardFilters()" />
-                    <button type="button" @click="applyStandardFilters()">查询</button>
                   </div>
-                  <div class="list-panel type-list-panel">
-                    <div class="type-list">
-                      <article v-for="doc in pagedStandardDocuments" :key="doc.id" class="type-item standard-item">
-                        <div>
-                          <strong>{{ doc.category || '-' }} / {{ doc.software || '-' }}</strong>
-                          <p>软件版本：{{ doc.softwareVersion || '-' }} · 标准版本：{{ doc.standardVersion || '-' }}</p>
-                          <p>{{ doc.title }}</p>
-                        </div>
-                        <span :class="['status', doc.status === 'PUBLISHED' ? 'ok' : 'off']">{{ doc.status === 'PUBLISHED' ? '已发布' : '草稿' }}</span>
-                        <button class="ghost" @click="openStandardDetail(doc)">详情</button>
-                        <button class="ghost" @click="openEditStandardDialog(doc)">编辑</button>
-                        <button class="ghost" @click="toggleDocumentPublish(doc)">{{ doc.status === 'PUBLISHED' ? '下架' : '发布' }}</button>
-                      </article>
-                      <p v-if="pagedStandardDocuments.length === 0" class="empty-state">暂无标准记录</p>
-                    </div>
-                    <Pagination :page="standardPage" @change="changeStandardPage" />
+                  <div class="standards-table-wrap">
+                    <table class="standards-table">
+                      <thead>
+                        <tr>
+                          <th>名称</th>
+                          <th>软件类型</th>
+                          <th>版本</th>
+                          <th>标准版本</th>
+                          <th>编码</th>
+                          <th>操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="doc in filteredStandardDocuments" :key="doc.id">
+                          <td>
+                            <button class="link-btn" @click="openStandardDetail(doc)">{{ doc.software || '-' }}</button>
+                          </td>
+                          <td>{{ doc.category || '-' }}</td>
+                          <td>{{ doc.softwareVersion || '-' }}</td>
+                          <td>{{ doc.standardVersion || '-' }}</td>
+                          <td>{{ doc.code || '-' }}</td>
+                          <td class="table-actions">
+                            <button class="ghost" @click="openStandardDetail(doc)">详情</button>
+                            <button class="ghost" @click="openEditStandardDialog(doc)">修改</button>
+                            <button class="ghost" @click="toggleDocumentPublish(doc)">{{ doc.status === 'PUBLISHED' ? '下架' : '发布' }}</button>
+                          </td>
+                        </tr>
+                        <tr v-if="filteredStandardDocuments.length === 0">
+                          <td colspan="6" class="empty-state">暂无标准记录</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
+                  <Pagination :page="standardPage" @change="changeStandardPage" />
                 </template>
 
                 <template v-else>
@@ -543,10 +575,6 @@
               </section>
 
               <section v-else-if="adminSection === 'users'" class="utility-panel type-panel">
-                <div class="admin-header" style="margin-bottom:14px">
-                  <div><p class="eyebrow">Users</p><h2>用户管理</h2></div>
-                  <div class="admin-actions"><button @click="openCreateUserDialog()">新增用户</button></div>
-                </div>
                 <div class="list-panel type-list-panel">
                   <div class="type-list">
                     <article v-for="user in userList" :key="user.id" class="parameter-item document-item">
@@ -744,6 +772,7 @@
           </label>
           <label>软件版本<input v-model.trim="standardForm.softwareVersion" required maxlength="80" /></label>
           <label>标准版本<input v-model.trim="standardForm.standardVersion" required maxlength="80" /></label>
+          <label>编码<input v-model.trim="standardForm.code" maxlength="20" /></label>
           <label>说明<textarea v-model.trim="standardForm.summary" maxlength="500" /></label>
         </div>
         <div class="form-actions">
@@ -774,14 +803,50 @@
       </form>
     </div>
 
-    <div v-if="showPreviewDialog" class="modal-backdrop" @click.self="showPreviewDialog = false">
-      <article class="modal-panel wide-modal">
-        <div class="panel-title">
+    <div v-if="selectedPreviewDocument" class="modal-backdrop doc-preview-backdrop">
+      <div class="doc-preview-full">
+        <div class="doc-preview-toolbar">
           <h3>文档预览</h3>
-          <button type="button" class="ghost" @click="showPreviewDialog = false">关闭</button>
+          <button type="button" class="ghost" @click="closePreviewDocument()">返回列表</button>
         </div>
-        <div class="markdown-preview" v-html="previewContent"></div>
-      </article>
+        <div class="doc-preview-layout">
+          <aside class="post-dir-panel">
+            <div class="post-dir-header">
+              <h3>文档列表</h3>
+            </div>
+            <div class="post-dir-list">
+              <button
+                v-for="doc in maintenanceDocuments"
+                :key="doc.id"
+                :class="['post-dir-item', { active: String(doc.id) === String(selectedPreviewDocument?.id) }]"
+                @click="previewDocument(doc)"
+              >{{ doc.title }}</button>
+            </div>
+          </aside>
+          <article class="doc-preview-main">
+            <div class="post-article">
+              <h1 class="post-title">{{ selectedPreviewDocument.title }}</h1>
+              <div class="post-author-line">
+                <span class="post-date">{{ documentTypeLabel(selectedPreviewDocument.documentType) }}</span>
+                <span class="post-date">{{ selectedPreviewDocument.category || '-' }} / {{ selectedPreviewDocument.software || '-' }}</span>
+                <span class="post-date">{{ formatDate(selectedPreviewDocument.updatedAt) }}</span>
+              </div>
+              <p v-if="selectedPreviewDocument.summary" class="description" style="margin-bottom:16px">{{ selectedPreviewDocument.summary }}</p>
+              <div class="post-body markdown-preview" v-html="previewRenderedHtml"></div>
+            </div>
+          </article>
+          <aside class="post-toc-panel" v-if="previewTocItems.length">
+            <h4 class="toc-title">文档大纲</h4>
+            <button
+              v-for="item in previewTocItems"
+              :key="item.id"
+              :class="['toc-link', { active: previewTocActiveId === item.id }]"
+              :style="{ '--toc-level': item.level - 1 }"
+              @click="scrollToPreviewHeading(item.id)"
+            >{{ item.text }}</button>
+          </aside>
+        </div>
+      </div>
     </div>
 
     <div v-if="showUserDialog" class="modal-backdrop" @click.self="closeUserDialog()">
@@ -872,7 +937,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import { clearAuth, fileUrl, getSavedAuth, request, saveAuth } from './api'
 import CryptoJS from 'crypto-js'
@@ -894,6 +959,27 @@ const selectedRelease = ref(null)
 const publicStandards = ref([])
 const selectedPublicStandard = ref(null)
 const publicDocuments = ref([])
+const publicDocCategory = ref('全部')
+const activeStdTocId = ref('')
+
+let stdScrollHandler = null
+function initStdScrollSpy() {
+  if (stdScrollHandler) window.removeEventListener('scroll', stdScrollHandler)
+  stdScrollHandler = () => {
+    const items = standardTocItems.value
+    if (!items.length) return
+    let current = ''
+    for (const item of items) {
+      const el = document.getElementById(item.id)
+      if (el && el.getBoundingClientRect().top <= 120) current = item.id
+    }
+    activeStdTocId.value = current
+  }
+  window.addEventListener('scroll', stdScrollHandler, { passive: true })
+}
+function destroyStdScrollSpy() {
+  if (stdScrollHandler) { window.removeEventListener('scroll', stdScrollHandler); stdScrollHandler = null }
+}
 const standardsLoading = ref(false)
 const editing = ref(false)
 const adminSection = ref('files')
@@ -906,7 +992,8 @@ const showTypes = ref(false)
 const showCategoryDialog = ref(false)
 const showTypeDialog = ref(false)
 const showStandardDialog = ref(false)
-const showPreviewDialog = ref(false)
+const selectedPreviewDocument = ref(null)
+const previewTocActiveId = ref('')
 const showParameterDialog = ref(false)
 const selectedStandard = ref(null)
 const deleteTarget = ref(null)
@@ -924,7 +1011,6 @@ const softwareCategories = ref([])
 const softwareTypes = ref([])
 const standardDocuments = ref([])
 const standardParameters = ref([])
-const previewContent = ref('')
 const userList = ref([])
 const showUserDialog = ref(false)
 const showRoleDialog = ref(false)
@@ -967,7 +1053,28 @@ const pageTitle = computed(() => {
   if (route.name && route.name.startsWith('forum')) return 'infra论坛'
   return '管理后台'
 })
-const publicStandardHtml = computed(() => markdown.render(selectedPublicStandard.value?.renderedContent || selectedPublicStandard.value?.content || ''))
+const publicStandardHtml = computed(() => {
+  let html = markdown.render(selectedPublicStandard.value?.renderedContent || selectedPublicStandard.value?.content || '')
+  let idx = 0
+  html = html.replace(/<(h[1-3])([^>]*)>([\s\S]*?)<\/\1>/g, (_, tag, attrs, inner) => {
+    if (/id=/.test(attrs)) return `<${tag}${attrs}>${inner}</${tag}>`
+    return `<${tag}${attrs} id="std-toc-${idx++}">${inner}</${tag}>`
+  })
+  return html
+})
+
+const standardTocItems = computed(() => {
+  const items = []
+  const re = /<(h[1-3])[^>]*id="([^"]*)"[^>]*>([\s\S]*?)<\/\1>/g
+  let m
+  while ((m = re.exec(publicStandardHtml.value))) {
+    const level = parseInt(m[1][1])
+    const id = m[2]
+    const text = m[3].replace(/<[^>]+>/g, '').trim()
+    if (text) items.push({ level, id, text })
+  }
+  return items
+})
 const publicDocumentGroups = computed(() => {
   const groups = new Map()
   for (const doc of publicDocuments.value) {
@@ -983,6 +1090,25 @@ const publicDocumentGroups = computed(() => {
     })
   }
   return Array.from(groups, ([category, documents]) => ({ category, documents }))
+})
+
+const publicDocCategories = computed(() => {
+  const cats = new Set()
+  for (const doc of publicDocuments.value) {
+    if (doc.category) cats.add(doc.category)
+  }
+  return ['全部', ...Array.from(cats)]
+})
+
+const filteredPublicDocuments = computed(() => {
+  const tab = publicDocCategory.value
+  const docs = publicDocuments.value.filter(d => tab === '全部' || d.category === tab)
+  docs.sort((a, b) => {
+    if (a.documentType === 'STANDARD' && b.documentType !== 'STANDARD') return -1
+    if (a.documentType !== 'STANDARD' && b.documentType === 'STANDARD') return 1
+    return (a.title || '').localeCompare(b.title || '')
+  })
+  return docs
 })
 
 const publicStandardGroups = computed(() => {
@@ -1106,6 +1232,36 @@ const pagedMaintenanceDocuments = computed(() => {
   return maintenanceDocuments.value.slice(start, start + maintenanceDocumentFilters.size)
 })
 
+const previewRenderedHtml = computed(() => {
+  const doc = selectedPreviewDocument.value
+  if (!doc) return ''
+  let rendered = doc.renderedContent || doc.content || ''
+  for (const param of standardParameters.value) {
+    rendered = rendered.split(`{{${param.code}}}`).join(param.value)
+  }
+  let html = ''
+  try { html = markdown.render(rendered) } catch { html = '<p style="color:#b7333d">Markdown 渲染出错</p>' }
+  let idx = 0
+  html = html.replace(/<(h[1-3])([^>]*)>([\s\S]*?)<\/\1>/g, (_, tag, attrs, inner) => {
+    if (/id=/.test(attrs)) return `<${tag}${attrs}>${inner}</${tag}>`
+    return `<${tag}${attrs} id="pv-toc-${idx++}">${inner}</${tag}>`
+  })
+  return html
+})
+
+const previewTocItems = computed(() => {
+  const items = []
+  const re = /<(h[1-3])[^>]*id="([^"]*)"[^>]*>([\s\S]*?)<\/\1>/g
+  let m
+  while ((m = re.exec(previewRenderedHtml.value))) {
+    const level = parseInt(m[1][1])
+    const id = m[2]
+    const text = m[3].replace(/<[^>]+>/g, '').trim()
+    if (text) items.push({ level, id, text })
+  }
+  return items
+})
+
 function emptyPage(size) {
   return { content: [], page: 0, size, totalElements: 0, totalPages: 0, first: true, last: true }
 }
@@ -1146,6 +1302,7 @@ function defaultStandardForm() {
     softwareTypeId: '',
     softwareVersion: '',
     standardVersion: '',
+    code: '',
     summary: '',
     content: '# 参数标准\n\n'
   }
@@ -1254,8 +1411,11 @@ async function loadPublicDocuments() {
 
 async function loadPublicStandardDetail(id) {
   standardsLoading.value = true
+  activeStdTocId.value = ''
   try {
     selectedPublicStandard.value = await request(`/api/public/standards/${id}`, { token: null })
+    await nextTick()
+    initStdScrollSpy()
   } finally {
     standardsLoading.value = false
   }
@@ -1420,7 +1580,12 @@ function openPublicStandardDetail(id) {
 
 function closePublicStandardDetail() {
   selectedPublicStandard.value = null
+  destroyStdScrollSpy()
   window.location.hash = '#/standards'
+}
+
+function scrollToStdHeading(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 }
 
 function openPortalModule(name) {
@@ -1796,6 +1961,7 @@ function openEditStandardDialog(document) {
     softwareTypeId: selectedType?.id || '',
     softwareVersion: document.softwareVersion || '',
     standardVersion: document.standardVersion || '',
+    code: document.code || '',
     summary: document.summary || '',
     content: document.content || '# 参数标准\n\n'
   })
@@ -1829,6 +1995,7 @@ async function saveStandard() {
     software: selectedType.name,
     softwareVersion: standardForm.softwareVersion,
     standardVersion: standardForm.standardVersion,
+    code: standardForm.code,
     content: standardForm.content || '# 参数标准\n\n'
   }
   const actionText = standardForm.id ? '修改' : '新增'
@@ -1858,8 +2025,40 @@ async function toggleDocumentPublish(document) {
 }
 
 function previewDocument(document) {
-  previewContent.value = markdown.render(document.renderedContent || document.content || '')
-  showPreviewDialog.value = true
+  selectedPreviewDocument.value = document
+  previewTocActiveId.value = ''
+  if (document.relatedStandardDocumentId) {
+    loadStandardParameters(document.relatedStandardDocumentId)
+  } else {
+    standardParameters.value = []
+  }
+  nextTick(() => initPreviewScrollSpy())
+}
+
+function closePreviewDocument() {
+  selectedPreviewDocument.value = null
+  previewTocActiveId.value = ''
+  if (previewScrollHandler) { window.removeEventListener('scroll', previewScrollHandler); previewScrollHandler = null }
+}
+
+let previewScrollHandler = null
+function initPreviewScrollSpy() {
+  if (previewScrollHandler) window.removeEventListener('scroll', previewScrollHandler)
+  previewScrollHandler = () => {
+    const items = previewTocItems.value
+    if (!items.length) return
+    let current = ''
+    for (const item of items) {
+      const el = document.getElementById(item.id)
+      if (el && el.getBoundingClientRect().top <= 120) current = item.id
+    }
+    previewTocActiveId.value = current
+  }
+  window.addEventListener('scroll', previewScrollHandler, { passive: true })
+}
+
+function scrollToPreviewHeading(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 }
 
 function openCreateParameterDialog() {

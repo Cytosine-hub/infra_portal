@@ -156,6 +156,7 @@ public class StandardDocumentService {
         }
 
         document.setContent(requireText(request.getContent(), "Document content cannot be blank"));
+        document.setCode(trimToNull(request.getCode()));
     }
 
     private Specification<StandardDocument> specification(String keyword, String documentType, String status, String category) {

@@ -48,6 +48,9 @@ public class StandardDocument {
     @Column(length = 80)
     private String standardVersion;
 
+    @Column(length = 20)
+    private String code;
+
     @Lob
     @Column(nullable = false)
     private String content;
@@ -163,6 +166,9 @@ public class StandardDocument {
     public void setStandardVersion(String standardVersion) {
         this.standardVersion = standardVersion;
     }
+
+    public String getCode() { return code; }
+    public void setCode(String code) { this.code = code; }
 
     public String getContent() {
         return content;
