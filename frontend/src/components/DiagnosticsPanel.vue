@@ -4,6 +4,10 @@
     <aside class="session-sidebar">
       <div class="session-header">
         <h3>排查会话</h3>
+        <div class="agent-mode-toggle">
+          <button :class="{ active: agentMode === 'rag' }" @click="agentMode = 'rag'" title="知识库检索排查">RAG</button>
+          <button :class="{ active: agentMode === 'ops' }" @click="agentMode = 'ops'" title="Agent 自动排查（Skill + 工具调用）">Agent</button>
+        </div>
         <button class="ghost" @click="createSession">新建会话</button>
       </div>
       <div class="session-list">
@@ -43,7 +47,8 @@
         <div class="placeholder-content">
           <div class="placeholder-icon">诊</div>
           <h3>智能排查</h3>
-          <p>选择左侧会话或新建会话开始排查。</p>
+          <p v-if="agentMode === 'ops'">Agent 模式：自动匹配排查 Skill，调用工具获取数据，综合分析给出结论。</p>
+          <p v-else>RAG 模式：基于知识库检索，结合历史文档回答排查问题。</p>
           <button @click="createSession">新建排查会话</button>
         </div>
       </div>
@@ -57,7 +62,15 @@
             :class="['message-row', msg.role === 'user' ? 'message-user' : 'message-ai']"
           >
             <div :class="['message-bubble', msg.role === 'user' ? 'bubble-user' : 'bubble-ai']">
+              <!-- Agent 模式：显示匹配的 Skill -->
+              <div v-if="msg.role === 'assistant' && msg.skill" class="skill-tag">
+                <span class="skill-badge">Skill: {{ msg.skill }}</span>
+              </div>
               <div class="message-text" v-html="renderMarkdown(msg.content)"></div>
+              <!-- Agent 模式：显示使用的工具 -->
+              <div v-if="msg.role === 'assistant' && msg.tools && msg.tools.length > 0" class="tools-tag">
+                <span v-for="t in msg.tools" :key="t" class="tool-chip">{{ t }}</span>
+              </div>
               <!-- 引用来源 -->
               <div v-if="msg.role === 'assistant' && msg.references && msg.references.length > 0" class="references-section">
                 <button
@@ -121,6 +134,7 @@ const currentSessionId = ref(null)
 const messages = ref([])
 const inputMessage = ref('')
 const sending = ref(false)
+const agentMode = ref('ops')
 const chatContainer = ref(null)
 const inputRef = ref(null)
 const expandedRefs = ref({})
@@ -191,21 +205,38 @@ async function sendMessage() {
   abortController = new AbortController()
 
   try {
-    const result = await request('/api/agent/chat', {
-      method: 'POST',
-      body: { sessionId: currentSessionId.value, message: text },
-      signal: abortController.signal
-    })
-    if (result) {
-      if (result.sessionId && !currentSessionId.value) {
-        currentSessionId.value = result.sessionId
-      }
-      messages.value.push({
-        role: 'assistant',
-        content: result.answer || result.content || '',
-        references: result.references || []
+    let result
+    if (agentMode.value === 'ops') {
+      result = await request('/api/ops-agent/chat', {
+        method: 'POST',
+        body: { message: text, context: {} },
+        signal: abortController.signal
       })
-      await loadSessions()
+      if (result) {
+        messages.value.push({
+          role: 'assistant',
+          content: result.response || '',
+          skill: result.skill || null,
+          tools: result.availableTools || []
+        })
+      }
+    } else {
+      result = await request('/api/agent/chat', {
+        method: 'POST',
+        body: { sessionId: currentSessionId.value, message: text },
+        signal: abortController.signal
+      })
+      if (result) {
+        if (result.sessionId && !currentSessionId.value) {
+          currentSessionId.value = result.sessionId
+        }
+        messages.value.push({
+          role: 'assistant',
+          content: result.answer || result.content || '',
+          references: result.references || []
+        })
+        await loadSessions()
+      }
     }
   } catch (error) {
     if (error.name === 'AbortError') {
@@ -475,6 +506,26 @@ function getDocIcon(sourceType) {
 }
 
 /* 引用 */
+.skill-tag { margin-bottom: 6px; }
+.skill-badge {
+  display: inline-block; background: #dbeafe; color: #1e40af; font-size: 11px;
+  padding: 2px 8px; border-radius: 10px; font-weight: 600;
+}
+.tools-tag { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+.tool-chip {
+  display: inline-block; background: #f0fdf4; color: #166534; font-size: 11px;
+  padding: 2px 8px; border-radius: 10px; border: 1px solid #bbf7d0;
+}
+
+.agent-mode-toggle { display: flex; gap: 2px; }
+.agent-mode-toggle button {
+  padding: 3px 10px; font-size: 12px; border: 1px solid #d1d5db;
+  background: #fff; color: #64748b; border-radius: 4px; cursor: pointer;
+}
+.agent-mode-toggle button.active {
+  background: #2356a5; color: #fff; border-color: #2356a5;
+}
+
 .references-section { margin-top: 8px; border-top: 1px solid #d1d5db; padding-top: 8px; }
 .references-toggle { background: none; border: none; color: #2356a5; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; }
 .references-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
