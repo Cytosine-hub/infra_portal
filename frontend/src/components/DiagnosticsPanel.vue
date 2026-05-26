@@ -151,7 +151,9 @@ const kbDocs = ref([])
 let abortController = null
 
 const displaySessions = computed(() => {
-  return agentMode.value === 'ops' ? agentSessions.value : ragSessions.value
+  const all = [...agentSessions.value, ...ragSessions.value]
+  all.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
+  return all
 })
 
 onMounted(() => {
@@ -185,9 +187,9 @@ async function switchSession(sessionId) {
   readyToSend.value = true
 
   // Agent 会话从本地存储恢复
-  if (agentMode.value === 'ops') {
-    const session = agentSessions.value.find(s => s.id === sessionId)
-    if (session) messages.value = session.messages || []
+  const agentSession = agentSessions.value.find(s => s.id === sessionId)
+  if (agentSession) {
+    messages.value = agentSession.messages || []
     scrollToBottom()
   } else {
     await loadMessages(sessionId)
