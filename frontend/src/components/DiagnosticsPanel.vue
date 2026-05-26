@@ -4,23 +4,21 @@
     <aside class="session-sidebar">
       <div class="session-header">
         <h3>排查会话</h3>
-        <div class="agent-mode-toggle">
-          <button :class="{ active: agentMode === 'rag' }" @click="agentMode = 'rag'" title="知识库检索排查">RAG</button>
-          <button :class="{ active: agentMode === 'ops' }" @click="agentMode = 'ops'" title="Agent 自动排查（Skill + 工具调用）">Agent</button>
-        </div>
         <button class="ghost" @click="createSession">新建会话</button>
       </div>
       <div class="session-list">
         <button
-          v-for="session in sessions"
+          v-for="session in displaySessions"
           :key="session.id"
           :class="['session-item', { active: currentSessionId === session.id }]"
           @click="switchSession(session.id)"
         >
+          <span v-if="session.mode === 'ops'" class="session-mode-tag agent">Agent</span>
+          <span v-else class="session-mode-tag rag">RAG</span>
           <span class="session-title">{{ session.title || '未命名会话' }}</span>
           <span class="session-time">{{ formatSessionTime(session.createdAt || session.updatedAt) }}</span>
         </button>
-        <p v-if="sessions.length === 0" class="empty-hint">暂无会话，点击上方按钮新建。</p>
+        <p v-if="displaySessions.length === 0" class="empty-hint">暂无会话，点击上方按钮新建。</p>
       </div>
 
       <!-- 知识库文档列表 -->
@@ -47,8 +45,7 @@
         <div class="placeholder-content">
           <div class="placeholder-icon">诊</div>
           <h3>智能排查</h3>
-          <p v-if="agentMode === 'ops'">Agent 模式：自动匹配排查 Skill，调用工具获取数据，综合分析给出结论。</p>
-          <p v-else>RAG 模式：基于知识库检索，结合历史文档回答排查问题。</p>
+          <p>输入问题开始排查，支持 RAG 知识库检索和 Agent 自动排查两种模式。</p>
           <button @click="createSession">新建排查会话</button>
         </div>
       </div>
@@ -108,8 +105,17 @@
             rows="2"
             @keydown="handleKeydown"
           ></textarea>
-          <button v-if="sending" class="stop-btn" @click="stopSending">停止</button>
-          <button v-else :disabled="!inputMessage.trim()" @click="sendMessage">发送</button>
+          <div class="input-actions">
+            <button
+              :class="['agent-toggle-btn', { active: agentMode === 'ops' }]"
+              @click="agentMode = agentMode === 'ops' ? 'rag' : 'ops'"
+              title="切换 Agent / RAG 模式"
+            >
+              Agent
+            </button>
+            <button v-if="sending" class="stop-btn" @click="stopSending">停止</button>
+            <button v-else :disabled="!inputMessage.trim()" @click="sendMessage">发送</button>
+          </div>
         </div>
       </template>
     </div>
@@ -117,7 +123,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { request } from '../api'
 import MarkdownIt from 'markdown-it'
 
@@ -129,7 +135,8 @@ const md = new MarkdownIt({
   breaks: true
 })
 
-const sessions = ref([])
+const ragSessions = ref([])
+const agentSessions = ref([])
 const currentSessionId = ref(null)
 const messages = ref([])
 const inputMessage = ref('')
@@ -143,6 +150,10 @@ const showKbDocs = ref(false)
 const kbDocs = ref([])
 let abortController = null
 
+const displaySessions = computed(() => {
+  return agentMode.value === 'ops' ? agentSessions.value : ragSessions.value
+})
+
 onMounted(() => {
   loadSessions()
   loadKbDocs()
@@ -150,10 +161,10 @@ onMounted(() => {
 
 async function loadSessions() {
   try {
-    sessions.value = await request('/api/agent/sessions')
-    if (!Array.isArray(sessions.value)) sessions.value = []
+    const list = await request('/api/agent/sessions')
+    ragSessions.value = Array.isArray(list) ? list : []
   } catch {
-    sessions.value = []
+    ragSessions.value = []
   }
 }
 
@@ -172,7 +183,15 @@ async function switchSession(sessionId) {
   messages.value = []
   expandedRefs.value = {}
   readyToSend.value = true
-  await loadMessages(sessionId)
+
+  // Agent 会话从本地存储恢复
+  if (agentMode.value === 'ops') {
+    const session = agentSessions.value.find(s => s.id === sessionId)
+    if (session) messages.value = session.messages || []
+    scrollToBottom()
+  } else {
+    await loadMessages(sessionId)
+  }
 }
 
 async function loadMessages(sessionId) {
@@ -219,6 +238,12 @@ async function sendMessage() {
           skill: result.skill || null,
           tools: result.availableTools || []
         })
+        // 保存 Agent 会话到本地列表
+        if (!currentSessionId.value) {
+          const id = 'agent-' + Date.now()
+          currentSessionId.value = id
+        }
+        saveAgentSession(text)
       }
     } else {
       result = await request('/api/agent/chat', {
@@ -248,6 +273,23 @@ async function sendMessage() {
     sending.value = false
     abortController = null
     scrollToBottom()
+  }
+}
+
+function saveAgentSession(firstMessage) {
+  const existing = agentSessions.value.find(s => s.id === currentSessionId.value)
+  if (existing) {
+    existing.messages = [...messages.value]
+    existing.updatedAt = new Date().toISOString()
+  } else {
+    agentSessions.value.unshift({
+      id: currentSessionId.value,
+      title: firstMessage.slice(0, 30),
+      mode: 'ops',
+      messages: [...messages.value],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    })
   }
 }
 
@@ -285,7 +327,6 @@ function formatSessionTime(time) {
 function renderMarkdown(content) {
   if (!content) return ''
   let html = md.render(content)
-  // 来源标签高亮
   html = html.replace(/【知识库：(.+?)】/g, '<span class="tag-kb">📚 知识库：$1</span>')
   html = html.replace(/【模型知识】/g, '<span class="tag-model">🧠 模型知识</span>')
   return html
@@ -361,7 +402,8 @@ function getDocIcon(sourceType) {
 
 .session-item {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   width: 100%;
   padding: 10px 12px;
   border: none;
@@ -375,16 +417,28 @@ function getDocIcon(sourceType) {
 .session-item:hover { background: #e2e8f0; }
 .session-item.active { background: #dbeafe; border-left: 3px solid #2356a5; }
 
+.session-mode-tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.session-mode-tag.agent { background: #dbeafe; color: #1e40af; }
+.session-mode-tag.rag { background: #f0fdf4; color: #166534; }
+
 .session-title {
+  flex: 1;
   font-size: 13px;
   font-weight: 500;
   color: #1e293b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
-.session-time { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.session-time { font-size: 11px; color: #94a3b8; flex-shrink: 0; }
 .empty-hint { padding: 20px 12px; text-align: center; color: #94a3b8; font-size: 13px; }
 
 /* 知识库文档列表 */
@@ -505,7 +559,7 @@ function getDocIcon(sourceType) {
   30% { transform: translateY(-5px); }
 }
 
-/* 引用 */
+/* Skill 和工具标签 */
 .skill-tag { margin-bottom: 6px; }
 .skill-badge {
   display: inline-block; background: #dbeafe; color: #1e40af; font-size: 11px;
@@ -517,15 +571,7 @@ function getDocIcon(sourceType) {
   padding: 2px 8px; border-radius: 10px; border: 1px solid #bbf7d0;
 }
 
-.agent-mode-toggle { display: flex; gap: 2px; }
-.agent-mode-toggle button {
-  padding: 3px 10px; font-size: 12px; border: 1px solid #d1d5db;
-  background: #fff; color: #64748b; border-radius: 4px; cursor: pointer;
-}
-.agent-mode-toggle button.active {
-  background: #2356a5; color: #fff; border-color: #2356a5;
-}
-
+/* 引用 */
 .references-section { margin-top: 8px; border-top: 1px solid #d1d5db; padding-top: 8px; }
 .references-toggle { background: none; border: none; color: #2356a5; font-size: 12px; cursor: pointer; padding: 0; text-decoration: underline; }
 .references-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
@@ -547,6 +593,23 @@ function getDocIcon(sourceType) {
 .chat-input-area textarea:focus {
   outline: none; border-color: #2356a5;
   box-shadow: 0 0 0 2px rgba(35,86,165,0.15);
+}
+
+.input-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.agent-toggle-btn {
+  padding: 4px 12px; font-size: 12px; font-weight: 600;
+  border: 1px solid #d1d5db; background: #f8fafc; color: #64748b;
+  border-radius: 14px; cursor: pointer; transition: all 0.15s;
+}
+.agent-toggle-btn:hover { border-color: #2356a5; color: #2356a5; }
+.agent-toggle-btn.active {
+  background: #2356a5; color: #fff; border-color: #2356a5;
 }
 
 .chat-input-area button { padding: 10px 24px; white-space: nowrap; }

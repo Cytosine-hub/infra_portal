@@ -29,8 +29,12 @@ public class KnowledgeSearchTool implements Tool {
 
     @Override
     public String call(Map<String, Object> params) {
-        String query = (String) params.get("query");
-        int topK = params.containsKey("top_k") ? ((Number) params.get("top_k")).intValue() : 5;
+        String query = String.valueOf(params.get("query"));
+        int topK = 5;
+        if (params.containsKey("top_k")) {
+            Object v = params.get("top_k");
+            topK = v instanceof Number ? ((Number) v).intValue() : Integer.parseInt(String.valueOf(v));
+        }
 
         float[] vector = embeddingService.embed(query);
         List<VectorStore.VectorSearchResult> results = vectorStore.search(vector, topK);
