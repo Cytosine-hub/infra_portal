@@ -98,6 +98,8 @@ public class SoftwareTypeService implements ApplicationRunner {
         type.setName(name);
         type.setDescription(trimToNull(request.getDescription()));
         type.setActive(request.isActive());
+        type.setCreatedAt(LocalDateTime.now());
+        type.setUpdatedAt(LocalDateTime.now());
         softwareTypeMapper.insert(type);
         return type;
     }
@@ -117,6 +119,7 @@ public class SoftwareTypeService implements ApplicationRunner {
         type.setName(name);
         type.setDescription(trimToNull(request.getDescription()));
         type.setActive(request.isActive());
+        type.setUpdatedAt(LocalDateTime.now());
         softwareTypeMapper.update(type);
         return type;
     }
@@ -158,6 +161,8 @@ public class SoftwareTypeService implements ApplicationRunner {
         }
         SoftwareCategory softwareCategory = new SoftwareCategory();
         softwareCategory.setName(category);
+        softwareCategory.setCreatedAt(LocalDateTime.now());
+        softwareCategory.setUpdatedAt(LocalDateTime.now());
         softwareCategoryMapper.insert(softwareCategory);
     }
 
