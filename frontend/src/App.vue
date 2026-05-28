@@ -242,6 +242,9 @@
             </div>
             <div v-else class="muted" style="padding:16px 0">暂无关联文档</div>
 
+            <div v-if="standardsLoading" class="loading-panel"><div class="spinner"></div><p>加载中...</p></div>
+            <div v-else class="markdown-preview public-document" v-html="publicStandardHtml"></div>
+
             <div v-if="publicStandardParams.length > 0" class="public-params-section">
               <div class="public-params-header">
                 <h3>参数列表</h3>
