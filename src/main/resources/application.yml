@@ -59,16 +59,22 @@ app:
 
 # ========== 知识库 & Agent 配置 ==========
   ai:
-    base-url: https://token-plan-cn.xiaomimimo.com/v1
-    api-key: tp-c917uu165jgq2dosv8104vtxi7i8uaqb3wqkq5zxlbwm5haz
-    model: mimo-v2.5-pro
-    max-tokens: 4096
-    temperature: 0.1
+    base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
+    api-key: ${AI_API_KEY:tp-c917uu165jgq2dosv8104vtxi7i8uaqb3wqkq5zxlbwm5haz}
+    model: ${AI_MODEL:mimo-v2.5-pro}
+    max-tokens: ${AI_MAX_TOKENS:4096}
+    temperature: ${AI_TEMPERATURE:0.1}
   vector:
     type: ${VECTOR_TYPE:milvus}          # memory 或 milvus
     host: ${VECTOR_HOST:localhost}
     port: ${VECTOR_PORT:19530}
     collection: ${VECTOR_COLLECTION:knowledge_chunks}
+  # Zabbix 监控配置
+  zabbix:
+    url: ${ZABBIX_URL:http://localhost:8080/api_jsonrpc.php}
+    username: ${ZABBIX_USERNAME:Admin}
+    password: ${ZABBIX_PASSWORD:zabbix}
+    timeout: ${ZABBIX_TIMEOUT:30}
 
 # LangChain4j 配置
 langchain4j:
@@ -82,6 +88,9 @@ langchain4j:
       log-requests: true
       log-responses: true
     embedding-model:
-      base-url: https://token-plan-cn.xiaomimimo.com/v1
-      api-key: tp-c917uu165jgq2dosv8104vtxi7i8uaqb3wqkq5zxlbwm5haz
-      model-name: mimo-v2.5-pro
+      base-url: ${EMBEDDING_BASE_URL:http://localhost:11434/v1}
+      api-key: ${EMBEDDING_API_KEY:ollama}
+      model-name: ${EMBEDDING_MODEL:bge-large}
+
+skills:
+  external-dir: ${SKILLS_DIR:./data/skills}
