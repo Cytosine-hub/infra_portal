@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.middleware.manager.repository.PostLikeMapper">
+    <select id="existsByPostIdAndUsername" resultType="boolean">SELECT COUNT(*) > 0 FROM forum_post_likes WHERE post_id = #{postId} AND username = #{username}</select>
+    <delete id="deleteByPostIdAndUsername">DELETE FROM forum_post_likes WHERE post_id = #{postId} AND username = #{username}</delete>
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">INSERT INTO forum_post_likes (post_id, username) VALUES (#{postId}, #{username})</insert>
+</mapper>

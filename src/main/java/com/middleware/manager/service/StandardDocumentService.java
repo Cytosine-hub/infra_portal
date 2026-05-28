@@ -4,11 +4,10 @@ import com.middleware.manager.domain.ParameterStandard;
 import com.middleware.manager.domain.ReviewRecord;
 import com.middleware.manager.domain.StandardDocument;
 import com.middleware.manager.domain.StandardParameter;
-import com.middleware.manager.repository.ParameterStandardRepository;
-import com.middleware.manager.repository.ReviewRecordRepository;
-import com.middleware.manager.repository.StandardDocumentRepository;
+import com.middleware.manager.repository.ParameterStandardMapper;
+import com.middleware.manager.repository.ReviewRecordMapper;
+import com.middleware.manager.repository.StandardDocumentMapper;
 import com.middleware.manager.web.api.dto.StandardDocumentRequest;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -19,38 +18,38 @@ import java.util.List;
 
 @Service
 public class StandardDocumentService {
-    private final StandardDocumentRepository repository;
-    private final ReviewRecordRepository reviewRecordRepository;
+    private final StandardDocumentMapper standardDocumentMapper;
+    private final ReviewRecordMapper reviewRecordMapper;
     private final StandardParameterService parameterService;
     private final SoftwareTypeService softwareTypeService;
-    private final ParameterStandardRepository parameterStandardRepository;
+    private final ParameterStandardMapper parameterStandardMapper;
 
-    public StandardDocumentService(StandardDocumentRepository repository,
-                                   ReviewRecordRepository reviewRecordRepository,
+    public StandardDocumentService(StandardDocumentMapper standardDocumentMapper,
+                                   ReviewRecordMapper reviewRecordMapper,
                                    StandardParameterService parameterService,
                                    SoftwareTypeService softwareTypeService,
-                                   ParameterStandardRepository parameterStandardRepository) {
-        this.repository = repository;
-        this.reviewRecordRepository = reviewRecordRepository;
+                                   ParameterStandardMapper parameterStandardMapper) {
+        this.standardDocumentMapper = standardDocumentMapper;
+        this.reviewRecordMapper = reviewRecordMapper;
         this.parameterService = parameterService;
         this.softwareTypeService = softwareTypeService;
-        this.parameterStandardRepository = parameterStandardRepository;
+        this.parameterStandardMapper = parameterStandardMapper;
     }
 
     public List<StandardDocument> list(String keyword, String documentType, String status, String category) {
-        return repository.findAll(specification(keyword, documentType, status, category));
+        return standardDocumentMapper.findWithFilter(keyword, documentType, status, category);
     }
 
     public List<StandardDocument> listPublishedStandards() {
-        return repository.findByDocumentTypeAndStatusOrderByPublishedAtDescUpdatedAtDesc("STANDARD", "PUBLISHED");
+        return standardDocumentMapper.findByDocumentTypeAndStatusOrderByPublishedAtDescUpdatedAtDesc("STANDARD", "PUBLISHED");
     }
 
     public List<StandardDocument> listAllPublished() {
-        return repository.findByStatusOrderByCategoryAscPublishedAtDesc("PUBLISHED");
+        return standardDocumentMapper.findByStatusOrderByCategoryAscPublishedAtDesc("PUBLISHED");
     }
 
     public List<StandardDocument> listAllPublic() {
-        List<StandardDocument> docs = repository.findByStatusInOrderByUpdatedAtDesc(
+        List<StandardDocument> docs = standardDocumentMapper.findByStatusInOrderByUpdatedAtDesc(
                 java.util.Arrays.asList("PUBLISHED", "MODIFYING"));
         for (StandardDocument doc : docs) {
             if ("MODIFYING".equals(doc.getStatus()) && doc.getPreviousContent() != null) {
@@ -62,12 +61,15 @@ public class StandardDocumentService {
     }
 
     public List<StandardDocument> listPublishedRelatedDocuments(Long standardDocumentId) {
-        return repository.findByRelatedStandardDocumentIdAndStatusOrderByPublishedAtDescUpdatedAtDesc(standardDocumentId, "PUBLISHED");
+        return standardDocumentMapper.findByRelatedStandardDocumentIdAndStatusOrderByPublishedAtDescUpdatedAtDesc(standardDocumentId, "PUBLISHED");
     }
 
     public StandardDocument get(Long id) {
-        return repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("文档不存在"));
+        StandardDocument document = standardDocumentMapper.findById(id);
+        if (document == null) {
+            throw new IllegalArgumentException("文档不存在");
+        }
+        return document;
     }
 
     public StandardDocument getPublished(Long id) {
@@ -80,7 +82,14 @@ public class StandardDocumentService {
 
     @Transactional
     public StandardDocument save(StandardDocument document) {
-        return repository.save(document);
+        document.setUpdatedAt(LocalDateTime.now());
+        if (document.getId() == null) {
+            document.setCreatedAt(LocalDateTime.now());
+            standardDocumentMapper.insert(document);
+        } else {
+            standardDocumentMapper.update(document);
+        }
+        return document;
     }
 
     @Transactional
@@ -89,9 +98,11 @@ public class StandardDocumentService {
         apply(document, request);
         document.setStatus("DRAFT");
         document.setVersion(VersionManager.firstDraftVersion());
-        StandardDocument saved = repository.save(document);
-        refreshRenderedContent(saved);
-        return saved;
+        document.setCreatedAt(LocalDateTime.now());
+        document.setUpdatedAt(LocalDateTime.now());
+        standardDocumentMapper.insert(document);
+        refreshRenderedContent(document);
+        return document;
     }
 
     @Transactional
@@ -110,9 +121,10 @@ public class StandardDocumentService {
         } else {
             document.setVersion(VersionManager.nextModifyingVersion(document.getVersion()));
         }
-        StandardDocument saved = repository.save(document);
-        refreshRenderedContent(saved);
-        return saved;
+        document.setUpdatedAt(LocalDateTime.now());
+        standardDocumentMapper.update(document);
+        refreshRenderedContent(document);
+        return document;
     }
 
     @Transactional
@@ -140,14 +152,15 @@ public class StandardDocumentService {
         record.setSubmittedAt(LocalDateTime.now());
         record.setPreviousContent(document.getPreviousContent());
         record.setCurrentContent(document.getContent());
-        ReviewRecord saved = reviewRecordRepository.save(record);
+        reviewRecordMapper.insert(record);
 
         // 文档关联审核记录
-        document.setPendingReviewRecordId(saved.getId());
+        document.setPendingReviewRecordId(record.getId());
         document.setSubmittedAt(LocalDateTime.now());
-        repository.save(document);
+        document.setUpdatedAt(LocalDateTime.now());
+        standardDocumentMapper.update(document);
 
-        return saved;
+        return record;
     }
 
     @Transactional
@@ -166,7 +179,9 @@ public class StandardDocumentService {
         document.setReviewedAt(null);
         document.setReviewedBy(null);
         document.setReviewComment(null);
-        return repository.save(document);
+        document.setUpdatedAt(LocalDateTime.now());
+        standardDocumentMapper.update(document);
+        return document;
     }
 
     @Transactional
@@ -188,9 +203,10 @@ public class StandardDocumentService {
         document.setReviewedAt(null);
         document.setReviewedBy(null);
         document.setReviewComment(null);
-        StandardDocument saved = repository.save(document);
-        refreshRenderedContent(saved);
-        return saved;
+        document.setUpdatedAt(LocalDateTime.now());
+        standardDocumentMapper.update(document);
+        refreshRenderedContent(document);
+        return document;
     }
 
     @Transactional
@@ -202,7 +218,7 @@ public class StandardDocumentService {
         if ("PUBLISHED".equals(document.getStatus())) {
             throw new IllegalStateException("已发布的文档不能删除，请先开始修改后再删除");
         }
-        repository.delete(document);
+        standardDocumentMapper.deleteById(id);
     }
 
     public String render(StandardDocument document) {
@@ -226,7 +242,8 @@ public class StandardDocumentService {
             rendered = rendered.replace("{{" + parameter.getCode() + "}}", parameter.getValue());
         }
         document.setRenderedContent(rendered);
-        repository.save(document);
+        document.setUpdatedAt(LocalDateTime.now());
+        standardDocumentMapper.update(document);
     }
 
     @Transactional
@@ -254,8 +271,10 @@ public class StandardDocumentService {
             if (relatedId == null) {
                 throw new IllegalArgumentException("文档必须关联标准");
             }
-            ParameterStandard ps = parameterStandardRepository.findById(relatedId)
-                    .orElseThrow(() -> new IllegalArgumentException("关联的参数标准不存在"));
+            ParameterStandard ps = parameterStandardMapper.findById(relatedId);
+            if (ps == null) {
+                throw new IllegalArgumentException("关联的参数标准不存在");
+            }
             document.setRelatedStandardDocumentId(relatedId);
             document.setSoftwareTypeId(ps.getSoftwareTypeId());
             document.setCategory(ps.getCategory());
@@ -265,32 +284,6 @@ public class StandardDocumentService {
 
         document.setContent(requireText(request.getContent(), "文档内容不能为空"));
         document.setCode(trimToNull(request.getCode()));
-    }
-
-    private Specification<StandardDocument> specification(String keyword, String documentType, String status, String category) {
-        Specification<StandardDocument> specification = Specification.where(null);
-        if (StringUtils.hasText(keyword)) {
-            String pattern = "%" + keyword.trim().toLowerCase() + "%";
-            specification = specification.and((root, query, cb) -> cb.or(
-                    cb.like(cb.lower(root.get("title")), pattern),
-                    cb.like(cb.lower(cb.coalesce(root.get("summary"), "")), pattern),
-                    cb.like(cb.lower(cb.coalesce(root.get("category"), "")), pattern),
-                    cb.like(cb.lower(cb.coalesce(root.get("software"), "")), pattern),
-                    cb.like(cb.lower(cb.coalesce(root.get("softwareVersion"), "")), pattern),
-                    cb.like(cb.lower(cb.coalesce(root.get("standardVersion"), "")), pattern),
-                    cb.like(cb.lower(root.get("content")), pattern)
-            ));
-        }
-        if (StringUtils.hasText(documentType)) {
-            specification = specification.and((root, query, cb) -> cb.equal(root.get("documentType"), documentType.trim()));
-        }
-        if (StringUtils.hasText(status)) {
-            specification = specification.and((root, query, cb) -> cb.equal(root.get("status"), status.trim()));
-        }
-        if (StringUtils.hasText(category)) {
-            specification = specification.and((root, query, cb) -> cb.equal(root.get("category"), category.trim()));
-        }
-        return specification;
     }
 
     private String normalizeDocumentType(String documentType) {
@@ -314,8 +307,6 @@ public class StandardDocumentService {
         }
         return document.getRelatedStandardDocumentId();
     }
-
-
 
     private String requireText(String value, String message) {
         if (!StringUtils.hasText(value)) {

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.middleware.manager.repository.ReleaseAssetMapper">
+    <select id="findById" resultType="ReleaseAsset">SELECT * FROM release_assets WHERE id = #{id}</select>
+    <select id="findByDownloadTokenAndPublishedTrue" resultType="ReleaseAsset">SELECT * FROM release_assets WHERE download_token = #{downloadToken} AND published = true</select>
+    <select id="existsByStoredFileNameIgnoreCase" resultType="boolean">SELECT COUNT(*) > 0 FROM release_assets WHERE LOWER(stored_file_name) = LOWER(#{storedFileName})</select>
+    <select id="existsBySoftwareTypeId" resultType="boolean">SELECT COUNT(*) > 0 FROM release_assets WHERE software_type_id = #{softwareTypeId}</select>
+    <select id="findWithFilter" resultType="ReleaseAsset">
+        SELECT * FROM release_assets
+        <where>
+            <if test="published != null">AND published = #{published}</if>
+            <if test="keyword != null and keyword != ''">
+                AND (middleware_name LIKE CONCAT('%',#{keyword},'%') OR description LIKE CONCAT('%',#{keyword},'%') OR original_file_name LIKE CONCAT('%',#{keyword},'%'))
+            </if>
+        </where>
+        ORDER BY created_at DESC
+    </select>
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO release_assets (middleware_name, software_type_id, version, platform, description, released_at, published, download_token, original_file_name, stored_file_name, content_type, file_size, download_count, standard_document_id, created_at, updated_at)
+        VALUES (#{middlewareName}, #{softwareTypeId}, #{version}, #{platform}, #{description}, #{releasedAt}, #{published}, #{downloadToken}, #{originalFileName}, #{storedFileName}, #{contentType}, #{fileSize}, #{downloadCount}, #{standardDocumentId}, #{createdAt}, #{updatedAt})
+    </insert>
+    <update id="update">
+        UPDATE release_assets SET middleware_name=#{middlewareName}, software_type_id=#{softwareTypeId}, version=#{version}, platform=#{platform}, description=#{description}, released_at=#{releasedAt}, published=#{published}, download_token=#{downloadToken}, original_file_name=#{originalFileName}, stored_file_name=#{storedFileName}, content_type=#{contentType}, file_size=#{fileSize}, standard_document_id=#{standardDocumentId}, updated_at=#{updatedAt} WHERE id=#{id}
+    </update>
+    <delete id="deleteById">DELETE FROM release_assets WHERE id=#{id}</delete>
+    <update id="incrementDownloadCount">UPDATE release_assets SET download_count = download_count + 1 WHERE id = #{id}</update>
+</mapper>

@@ -3,7 +3,7 @@ package com.middleware.manager.service;
 import com.middleware.manager.domain.ParameterStandard;
 import com.middleware.manager.domain.ReviewRecord;
 import com.middleware.manager.domain.StandardDocument;
-import com.middleware.manager.repository.ReviewRecordRepository;
+import com.middleware.manager.repository.ReviewRecordMapper;
 import com.middleware.manager.security.PermissionService;
 import com.middleware.manager.web.api.dto.ReviewResponse;
 import org.springframework.security.core.Authentication;
@@ -17,16 +17,16 @@ import java.util.stream.Collectors;
 
 @Service
 public class ReviewService {
-    private final ReviewRecordRepository repository;
+    private final ReviewRecordMapper mapper;
     private final StandardDocumentService documentService;
     private final ParameterStandardService parameterStandardService;
     private final PermissionService permissionService;
 
-    public ReviewService(ReviewRecordRepository repository,
+    public ReviewService(ReviewRecordMapper mapper,
                          StandardDocumentService documentService,
                          ParameterStandardService parameterStandardService,
                          PermissionService permissionService) {
-        this.repository = repository;
+        this.mapper = mapper;
         this.documentService = documentService;
         this.parameterStandardService = parameterStandardService;
         this.permissionService = permissionService;
@@ -36,9 +36,9 @@ public class ReviewService {
         boolean isAdmin = permissionService.isAdmin(authentication);
         List<ReviewRecord> records;
         if (isAdmin) {
-            records = repository.findAllByOrderBySubmittedAtDesc();
+            records = mapper.findAllByOrderBySubmittedAtDesc();
         } else {
-            records = repository.findBySubmitterUsernameOrderBySubmittedAtDesc(authentication.getName());
+            records = mapper.findBySubmitterUsernameOrderBySubmittedAtDesc(authentication.getName());
         }
         return records.stream().map(ReviewResponse::from).collect(Collectors.toList());
     }
@@ -90,7 +90,7 @@ public class ReviewService {
             documentService.save(doc);
         }
 
-        repository.save(record);
+        mapper.update(record);
         return ReviewResponse.from(record);
     }
 
@@ -120,7 +120,7 @@ public class ReviewService {
             documentService.save(doc);
         }
 
-        repository.save(record);
+        mapper.update(record);
         return ReviewResponse.from(record);
     }
 
@@ -134,8 +134,11 @@ public class ReviewService {
     }
 
     private ReviewRecord getRecord(Long id) {
-        return repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("审核记录不存在"));
+        ReviewRecord record = mapper.findById(id);
+        if (record == null) {
+            throw new IllegalArgumentException("审核记录不存在");
+        }
+        return record;
     }
 
     private String computeLineDiff(String oldText, String newText) {

@@ -6,6 +6,7 @@ public class ChatSession {
 
     private Long id;
     private String title;
+    private String mode; // "rag" or "ops"
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -26,6 +27,14 @@ public class ChatSession {
 
     public void setTitle(String title) {
         this.title = title;
+    }
+
+    public String getMode() {
+        return mode;
+    }
+
+    public void setMode(String mode) {
+        this.mode = mode;
     }
 
     public LocalDateTime getCreatedAt() {

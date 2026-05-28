@@ -63,6 +63,7 @@ public class TroubleshootAgent {
     public ChatSession createSession() {
         ChatSession session = new ChatSession();
         session.setTitle("新会话");
+        session.setMode("rag");
         return chatSessionRepository.save(session);
     }
 

@@ -21,6 +21,7 @@ public class ChatSessionRepository {
         ChatSession s = new ChatSession();
         s.setId(rs.getLong("id"));
         s.setTitle(rs.getString("title"));
+        s.setMode(rs.getString("mode"));
         Timestamp createdAt = rs.getTimestamp("created_at");
         if (createdAt != null) {
             s.setCreatedAt(createdAt.toLocalDateTime());
@@ -41,20 +42,22 @@ public class ChatSessionRepository {
             KeyHolder keyHolder = new GeneratedKeyHolder();
             jdbcTemplate.update(connection -> {
                 PreparedStatement ps = connection.prepareStatement(
-                        "INSERT INTO chat_sessions (title, created_at, updated_at) VALUES (?, ?, ?)",
+                        "INSERT INTO chat_sessions (title, mode, created_at, updated_at) VALUES (?, ?, ?, ?)",
                         Statement.RETURN_GENERATED_KEYS
                 );
                 ps.setString(1, s.getTitle());
+                ps.setString(2, s.getMode() != null ? s.getMode() : "rag");
                 Timestamp now = Timestamp.valueOf(java.time.LocalDateTime.now());
-                ps.setTimestamp(2, s.getCreatedAt() != null ? Timestamp.valueOf(s.getCreatedAt()) : now);
-                ps.setTimestamp(3, s.getUpdatedAt() != null ? Timestamp.valueOf(s.getUpdatedAt()) : now);
+                ps.setTimestamp(3, s.getCreatedAt() != null ? Timestamp.valueOf(s.getCreatedAt()) : now);
+                ps.setTimestamp(4, s.getUpdatedAt() != null ? Timestamp.valueOf(s.getUpdatedAt()) : now);
                 return ps;
             }, keyHolder);
             s.setId(keyHolder.getKey().longValue());
         } else {
             jdbcTemplate.update(
-                    "UPDATE chat_sessions SET title = ?, updated_at = ? WHERE id = ?",
-                    s.getTitle(), Timestamp.valueOf(java.time.LocalDateTime.now()), s.getId()
+                    "UPDATE chat_sessions SET title = ?, mode = ?, updated_at = ? WHERE id = ?",
+                    s.getTitle(), s.getMode() != null ? s.getMode() : "rag",
+                    Timestamp.valueOf(java.time.LocalDateTime.now()), s.getId()
             );
         }
         return s;

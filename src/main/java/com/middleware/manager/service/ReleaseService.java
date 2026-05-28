@@ -1,18 +1,15 @@
 package com.middleware.manager.service;
 
+import com.github.pagehelper.PageHelper;
+import com.github.pagehelper.PageInfo;
 import com.middleware.manager.domain.ReleaseAsset;
 import com.middleware.manager.domain.SoftwareType;
-import com.middleware.manager.repository.ReleaseAssetRepository;
+import com.middleware.manager.repository.ReleaseAssetMapper;
 import com.middleware.manager.web.form.BatchImportForm;
 import com.middleware.manager.web.form.ReleaseForm;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -23,6 +20,7 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -36,34 +34,48 @@ public class ReleaseService {
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 50;
 
-    private final ReleaseAssetRepository repository;
+    private final ReleaseAssetMapper releaseAssetMapper;
     private final StorageService storageService;
     private final SoftwareTypeService softwareTypeService;
 
-    public ReleaseService(ReleaseAssetRepository repository,
+    public ReleaseService(ReleaseAssetMapper releaseAssetMapper,
                           StorageService storageService,
                           SoftwareTypeService softwareTypeService) {
-        this.repository = repository;
+        this.releaseAssetMapper = releaseAssetMapper;
         this.storageService = storageService;
         this.softwareTypeService = softwareTypeService;
     }
 
-    public Page<ReleaseAsset> listAdminReleases(String keyword, String platform, Boolean published, String category, int page, int size) {
-        return repository.findAll(adminSpecification(keyword, platform, published, category), pageRequest(page, size));
+    public PageInfo<ReleaseAsset> listAdminReleases(String keyword, String platform, Boolean published, String category, int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+        PageHelper.startPage(safePage + 1, safeSize);
+        List<ReleaseAsset> list = releaseAssetMapper.findWithFilter(published, keyword, category, platform);
+        return new PageInfo<>(list);
     }
 
-    public Page<ReleaseAsset> listPublishedReleases(String keyword, String platform, int page, int size) {
-        return repository.findAll(publishedSpecification(keyword, platform), pageRequest(page, size));
+    public PageInfo<ReleaseAsset> listPublishedReleases(String keyword, String platform, int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+        PageHelper.startPage(safePage + 1, safeSize);
+        List<ReleaseAsset> list = releaseAssetMapper.findWithFilter(true, keyword, null, platform);
+        return new PageInfo<>(list);
     }
 
     public ReleaseAsset getAdminRelease(Long id) {
-        return repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("版本记录不存在"));
+        ReleaseAsset asset = releaseAssetMapper.findById(id);
+        if (asset == null) {
+            throw new IllegalArgumentException("版本记录不存在");
+        }
+        return asset;
     }
 
     public ReleaseAsset getPublishedRelease(String token) {
-        return repository.findByDownloadTokenAndPublishedTrue(token)
-                .orElseThrow(() -> new IllegalArgumentException("公开资源不存在或未发布"));
+        ReleaseAsset asset = releaseAssetMapper.findByDownloadTokenAndPublishedTrue(token);
+        if (asset == null) {
+            throw new IllegalArgumentException("公开资源不存在或未发布");
+        }
+        return asset;
     }
 
     @Transactional
@@ -89,13 +101,13 @@ public class ReleaseService {
             String displayPath = relativeDisplayPath(sourceDirectory, file);
             String managedStoredFileName = resolveManagedStoredFileName(file);
 
-            if (managedStoredFileName != null && repository.existsByStoredFileNameIgnoreCase(managedStoredFileName)) {
+            if (managedStoredFileName != null && releaseAssetMapper.existsByStoredFileNameIgnoreCase(managedStoredFileName)) {
                 result.addSkipped(displayPath, "管理目录中同名文件已存在，已跳过");
                 LOGGER.info("batch import skipped managed duplicate file={} storedFileName={}", file, managedStoredFileName);
                 continue;
             }
 
-            if (repository.existsByMiddlewareNameIgnoreCaseAndVersionIgnoreCaseAndOriginalFileNameIgnoreCase(
+            if (releaseAssetMapper.existsByMiddlewareNameIgnoreCaseAndVersionIgnoreCaseAndOriginalFileNameIgnoreCase(
                     middlewareName, version, originalFileName)) {
                 result.addSkipped(displayPath, "记录已存在，已跳过");
                 continue;
@@ -107,7 +119,7 @@ public class ReleaseService {
 
                 ReleaseAsset entity = new ReleaseAsset();
                 entity.setMiddlewareName(middlewareName);
-                entity.setSoftwareType(selectedType);
+                entity.setSoftwareTypeId(selectedType != null ? selectedType.getId() : null);
                 entity.setVersion(version);
                 entity.setPlatform(trimToNull(form.getPlatform()));
                 entity.setDescription(trimToNull(form.getDescription()));
@@ -118,8 +130,10 @@ public class ReleaseService {
                 entity.setContentType(storedFile.contentType());
                 entity.setFileSize(storedFile.size());
                 entity.setDownloadCount(0);
+                entity.setCreatedAt(LocalDateTime.now());
+                entity.setUpdatedAt(LocalDateTime.now());
 
-                repository.save(entity);
+                releaseAssetMapper.insert(entity);
                 result.addImported(displayPath, middlewareName, version);
             } catch (Exception ex) {
                 if (!sourceInsideStorage && storedFile != null) {
@@ -147,10 +161,12 @@ public class ReleaseService {
         entity.setContentType(storedFile.contentType());
         entity.setFileSize(storedFile.size());
         entity.setDownloadCount(0);
-        ReleaseAsset saved = repository.save(entity);
+        entity.setCreatedAt(LocalDateTime.now());
+        entity.setUpdatedAt(LocalDateTime.now());
+        releaseAssetMapper.insert(entity);
         LOGGER.info("release created id={} middleware={} version={} published={} file={}",
-                saved.getId(), saved.getMiddlewareName(), saved.getVersion(), saved.isPublished(), saved.getOriginalFileName());
-        return saved;
+                entity.getId(), entity.getMiddlewareName(), entity.getVersion(), entity.isPublished(), entity.getOriginalFileName());
+        return entity;
     }
 
     @Transactional
@@ -177,22 +193,24 @@ public class ReleaseService {
             entity.setStoredFileName(storageService.moveToMiddlewareDirectory(entity.getStoredFileName(), entity.getMiddlewareName()));
         }
 
-        ReleaseAsset saved = repository.save(entity);
+        entity.setUpdatedAt(LocalDateTime.now());
+        releaseAssetMapper.update(entity);
 
         if (StringUtils.hasText(oldStoredFileName)) {
             storageService.deleteIfExists(oldStoredFileName);
         }
         LOGGER.info("release updated id={} middleware={} version={} published={} fileChanged={}",
-                saved.getId(), saved.getMiddlewareName(), saved.getVersion(), saved.isPublished(),
+                entity.getId(), entity.getMiddlewareName(), entity.getVersion(), entity.isPublished(),
                 StringUtils.hasText(oldStoredFileName));
-        return saved;
+        return entity;
     }
 
     @Transactional
     public void publish(Long id) {
         ReleaseAsset entity = getAdminRelease(id);
         entity.setPublished(true);
-        repository.save(entity);
+        entity.setUpdatedAt(LocalDateTime.now());
+        releaseAssetMapper.update(entity);
         LOGGER.info("release published id={} middleware={} version={}",
                 entity.getId(), entity.getMiddlewareName(), entity.getVersion());
     }
@@ -201,7 +219,8 @@ public class ReleaseService {
     public void unpublish(Long id) {
         ReleaseAsset entity = getAdminRelease(id);
         entity.setPublished(false);
-        repository.save(entity);
+        entity.setUpdatedAt(LocalDateTime.now());
+        releaseAssetMapper.update(entity);
         LOGGER.info("release unpublished id={} middleware={} version={}",
                 entity.getId(), entity.getMiddlewareName(), entity.getVersion());
     }
@@ -214,7 +233,7 @@ public class ReleaseService {
                     entity.getId(), entity.getMiddlewareName(), entity.getVersion());
             throw new IllegalStateException("已发布资源不能删除，请先下架后再删除");
         }
-        repository.delete(entity);
+        releaseAssetMapper.deleteById(id);
         storageService.deleteIfExists(entity.getStoredFileName());
         LOGGER.info("release deleted id={} middleware={} version={} file={}",
                 entity.getId(), entity.getMiddlewareName(), entity.getVersion(), entity.getOriginalFileName());
@@ -222,13 +241,13 @@ public class ReleaseService {
 
     @Transactional
     public void incrementDownloadCount(ReleaseAsset entity) {
+        releaseAssetMapper.incrementDownloadCount(entity.getId());
         entity.setDownloadCount(entity.getDownloadCount() + 1);
-        repository.save(entity);
     }
 
     private void applyForm(ReleaseAsset entity, ReleaseForm form) {
         SoftwareType selectedType = resolveSoftwareType(form.getSoftwareTypeId());
-        entity.setSoftwareType(selectedType);
+        entity.setSoftwareTypeId(selectedType != null ? selectedType.getId() : null);
         entity.setMiddlewareName(selectedType != null ? selectedType.getName() : form.getMiddlewareName().trim());
         entity.setVersion(form.getVersion().trim());
         entity.setPlatform(trimToNull(form.getPlatform()));
@@ -308,55 +327,6 @@ public class ReleaseService {
 
     private String truncate(String value, int maxLength) {
         return value.length() <= maxLength ? value : value.substring(0, maxLength);
-    }
-
-    private Pageable pageRequest(int page, int size) {
-        int safePage = Math.max(page, 0);
-        int safeSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
-        return PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt"));
-    }
-
-    private Specification<ReleaseAsset> adminSpecification(String keyword, String platform, Boolean published, String category) {
-        Specification<ReleaseAsset> specification = Specification.where(keywordSpecification(keyword))
-                .and(platformSpecification(platform));
-        if (published != null) {
-            specification = specification.and((root, query, cb) -> cb.equal(root.get("published"), published));
-        }
-        if (category != null && !category.isEmpty()) {
-            specification = specification.and((root, query, cb) ->
-                    cb.equal(root.join("softwareType").get("category"), category));
-        }
-        return specification;
-    }
-
-    private Specification<ReleaseAsset> publishedSpecification(String keyword, String platform) {
-        return Specification.<ReleaseAsset>where((root, query, cb) -> cb.isTrue(root.get("published")))
-                .and(keywordSpecification(keyword))
-                .and(platformSpecification(platform));
-    }
-
-    private Specification<ReleaseAsset> keywordSpecification(String keyword) {
-        if (!StringUtils.hasText(keyword)) {
-            return null;
-        }
-
-        String pattern = "%" + keyword.trim().toLowerCase() + "%";
-        return (root, query, cb) -> cb.or(
-                cb.like(cb.lower(root.get("middlewareName")), pattern),
-                cb.like(cb.lower(root.get("version")), pattern),
-                cb.like(cb.lower(cb.coalesce(root.get("platform"), "")), pattern),
-                cb.like(cb.lower(cb.coalesce(root.get("description"), "")), pattern),
-                cb.like(cb.lower(root.get("originalFileName")), pattern)
-        );
-    }
-
-    private Specification<ReleaseAsset> platformSpecification(String platform) {
-        if (!StringUtils.hasText(platform)) {
-            return null;
-        }
-
-        String pattern = "%" + platform.trim().toLowerCase() + "%";
-        return (root, query, cb) -> cb.like(cb.lower(cb.coalesce(root.get("platform"), "")), pattern);
     }
 
     public static class BatchImportResult {

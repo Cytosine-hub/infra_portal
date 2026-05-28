@@ -3,11 +3,9 @@ package com.middleware.manager.web.api;
 import com.middleware.manager.domain.ParameterStandard;
 import com.middleware.manager.security.PermissionService;
 import com.middleware.manager.service.ParameterStandardService;
+import com.middleware.manager.web.api.dto.PageResult;
 import com.middleware.manager.web.api.dto.ParameterStandardRequest;
 import com.middleware.manager.web.api.dto.ParameterStandardResponse;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -22,7 +20,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
@@ -38,17 +35,24 @@ public class AdminParameterStandardController {
     }
 
     @GetMapping
-    public List<ParameterStandardResponse> list(@RequestParam(defaultValue = "") String keyword,
+    public PageResult<ParameterStandardResponse> list(@RequestParam(defaultValue = "") String keyword,
                                                 @RequestParam(defaultValue = "") String status,
                                                 @RequestParam(defaultValue = "0") int page,
                                                 @RequestParam(defaultValue = "20") int size,
                                                 Authentication authentication) {
         String category = permissionService.getManagedCategory(authentication);
-        Page<ParameterStandard> result = service.list(keyword, status, category,
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
-        return result.getContent().stream()
+        var pageInfo = service.list(keyword, status, category, page, size);
+        PageResult<ParameterStandardResponse> result = new PageResult<>();
+        result.setContent(pageInfo.getList().stream()
                 .map(doc -> ParameterStandardResponse.from(doc, service.render(doc)))
-                .collect(Collectors.toList());
+                .collect(Collectors.toList()));
+        result.setPage(pageInfo.getPageNum() - 1);
+        result.setSize(pageInfo.getPageSize());
+        result.setTotalElements(pageInfo.getTotal());
+        result.setTotalPages(pageInfo.getPages());
+        result.setFirst(pageInfo.isIsFirstPage());
+        result.setLast(pageInfo.isIsLastPage());
+        return result;
     }
 
     @GetMapping("/{id}")

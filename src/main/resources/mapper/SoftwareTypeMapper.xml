@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.middleware.manager.repository.SoftwareTypeMapper">
+    <select id="findByActiveTrueOrderByCategoryAscNameAsc" resultType="SoftwareType">SELECT * FROM software_types WHERE active = true ORDER BY category ASC, name ASC</select>
+    <select id="findAllByOrderByCategoryAscNameAsc" resultType="SoftwareType">SELECT * FROM software_types ORDER BY category ASC, name ASC</select>
+    <select id="findDistinctCategories" resultType="string">SELECT DISTINCT category FROM software_types ORDER BY category</select>
+    <select id="existsByCategoryIgnoreCaseAndNameIgnoreCase" resultType="boolean">SELECT COUNT(*) > 0 FROM software_types WHERE LOWER(category) = LOWER(#{category}) AND LOWER(name) = LOWER(#{name})</select>
+    <select id="findByCategoryIgnoreCaseAndNameIgnoreCase" resultType="SoftwareType">SELECT * FROM software_types WHERE LOWER(category) = LOWER(#{category}) AND LOWER(name) = LOWER(#{name})</select>
+    <select id="findById" resultType="SoftwareType">SELECT * FROM software_types WHERE id = #{id}</select>
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">INSERT INTO software_types (category, name, description, active, created_at, updated_at) VALUES (#{category}, #{name}, #{description}, #{active}, #{createdAt}, #{updatedAt})</insert>
+    <update id="update">UPDATE software_types SET category=#{category}, name=#{name}, description=#{description}, active=#{active}, updated_at=#{updatedAt} WHERE id=#{id}</update>
+    <delete id="deleteById">DELETE FROM software_types WHERE id=#{id}</delete>
+</mapper>

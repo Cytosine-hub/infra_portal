@@ -2,9 +2,9 @@ package com.middleware.manager.service;
 
 import com.middleware.manager.domain.SoftwareCategory;
 import com.middleware.manager.domain.SoftwareType;
-import com.middleware.manager.repository.ReleaseAssetRepository;
-import com.middleware.manager.repository.SoftwareCategoryRepository;
-import com.middleware.manager.repository.SoftwareTypeRepository;
+import com.middleware.manager.repository.ReleaseAssetMapper;
+import com.middleware.manager.repository.SoftwareCategoryMapper;
+import com.middleware.manager.repository.SoftwareTypeMapper;
 import com.middleware.manager.web.api.dto.SoftwareTypeRequest;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -20,16 +20,16 @@ import java.util.stream.Collectors;
 
 @Service
 public class SoftwareTypeService implements ApplicationRunner {
-    private final SoftwareTypeRepository softwareTypeRepository;
-    private final SoftwareCategoryRepository softwareCategoryRepository;
-    private final ReleaseAssetRepository releaseAssetRepository;
+    private final SoftwareTypeMapper softwareTypeMapper;
+    private final SoftwareCategoryMapper softwareCategoryMapper;
+    private final ReleaseAssetMapper releaseAssetMapper;
 
-    public SoftwareTypeService(SoftwareTypeRepository softwareTypeRepository,
-                               SoftwareCategoryRepository softwareCategoryRepository,
-                               ReleaseAssetRepository releaseAssetRepository) {
-        this.softwareTypeRepository = softwareTypeRepository;
-        this.softwareCategoryRepository = softwareCategoryRepository;
-        this.releaseAssetRepository = releaseAssetRepository;
+    public SoftwareTypeService(SoftwareTypeMapper softwareTypeMapper,
+                               SoftwareCategoryMapper softwareCategoryMapper,
+                               ReleaseAssetMapper releaseAssetMapper) {
+        this.softwareTypeMapper = softwareTypeMapper;
+        this.softwareCategoryMapper = softwareCategoryMapper;
+        this.releaseAssetMapper = releaseAssetMapper;
     }
 
     @Override
@@ -58,14 +58,14 @@ public class SoftwareTypeService implements ApplicationRunner {
 
     public List<SoftwareType> list(boolean activeOnly) {
         return activeOnly
-                ? softwareTypeRepository.findByActiveTrueOrderByCategoryAscNameAsc()
-                : softwareTypeRepository.findAllByOrderByCategoryAscNameAsc();
+                ? softwareTypeMapper.findByActiveTrueOrderByCategoryAscNameAsc()
+                : softwareTypeMapper.findAllByOrderByCategoryAscNameAsc();
     }
 
     public List<String> listCategories() {
         Set<String> names = new LinkedHashSet<>();
-        softwareCategoryRepository.findAllByOrderByNameAsc().forEach(category -> names.add(category.getName()));
-        names.addAll(softwareTypeRepository.findDistinctCategories().stream()
+        softwareCategoryMapper.findAllByOrderByNameAsc().forEach(category -> names.add(category.getName()));
+        names.addAll(softwareTypeMapper.findDistinctCategories().stream()
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toList()));
         return new ArrayList<>(names);
@@ -77,15 +77,18 @@ public class SoftwareTypeService implements ApplicationRunner {
     }
 
     public SoftwareType get(Long id) {
-        return softwareTypeRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("软件类型不存在"));
+        SoftwareType type = softwareTypeMapper.findById(id);
+        if (type == null) {
+            throw new IllegalArgumentException("软件类型不存在");
+        }
+        return type;
     }
 
     @Transactional
     public SoftwareType create(SoftwareTypeRequest request) {
         String category = normalizeCategory(request.getCategory());
         String name = normalizeName(request.getName());
-        if (softwareTypeRepository.existsByCategoryIgnoreCaseAndNameIgnoreCase(category, name)) {
+        if (softwareTypeMapper.existsByCategoryIgnoreCaseAndNameIgnoreCase(category, name)) {
             throw new IllegalArgumentException("同分类下的软件类型已存在");
         }
 
@@ -95,7 +98,8 @@ public class SoftwareTypeService implements ApplicationRunner {
         type.setName(name);
         type.setDescription(trimToNull(request.getDescription()));
         type.setActive(request.isActive());
-        return softwareTypeRepository.save(type);
+        softwareTypeMapper.insert(type);
+        return type;
     }
 
     @Transactional
@@ -103,58 +107,58 @@ public class SoftwareTypeService implements ApplicationRunner {
         SoftwareType type = get(id);
         String category = normalizeCategory(request.getCategory());
         String name = normalizeName(request.getName());
-        softwareTypeRepository.findByCategoryIgnoreCaseAndNameIgnoreCase(category, name)
-                .filter(existing -> !existing.getId().equals(id))
-                .ifPresent(existing -> {
-                    throw new IllegalArgumentException("同分类下的软件类型已存在");
-                });
+        SoftwareType existing = softwareTypeMapper.findByCategoryIgnoreCaseAndNameIgnoreCase(category, name);
+        if (existing != null && !existing.getId().equals(id)) {
+            throw new IllegalArgumentException("同分类下的软件类型已存在");
+        }
 
         type.setCategory(category);
         ensureCategory(category);
         type.setName(name);
         type.setDescription(trimToNull(request.getDescription()));
         type.setActive(request.isActive());
-        return softwareTypeRepository.save(type);
+        softwareTypeMapper.update(type);
+        return type;
     }
 
     @Transactional
     public void delete(Long id) {
         get(id);
-        if (releaseAssetRepository.existsBySoftwareTypeId(id)) {
+        if (releaseAssetMapper.existsBySoftwareTypeId(id)) {
             throw new IllegalStateException("该类型已被资源引用，不能删除，可改为停用");
         }
-        softwareTypeRepository.deleteById(id);
+        softwareTypeMapper.deleteById(id);
     }
 
     private void seed(String category, String name) {
         seedCategory(category);
-        if (softwareTypeRepository.existsByCategoryIgnoreCaseAndNameIgnoreCase(category, name)) {
+        if (softwareTypeMapper.existsByCategoryIgnoreCaseAndNameIgnoreCase(category, name)) {
             return;
         }
         SoftwareType type = new SoftwareType();
         type.setCategory(category);
         type.setName(name);
         type.setActive(true);
-        softwareTypeRepository.save(type);
+        softwareTypeMapper.insert(type);
     }
 
     private void seedCategory(String category) {
         String name = normalizeCategory(category);
-        if (softwareCategoryRepository.existsByNameIgnoreCase(name)) {
+        if (softwareCategoryMapper.existsByNameIgnoreCase(name)) {
             return;
         }
         SoftwareCategory softwareCategory = new SoftwareCategory();
         softwareCategory.setName(name);
-        softwareCategoryRepository.save(softwareCategory);
+        softwareCategoryMapper.insert(softwareCategory);
     }
 
     private void ensureCategory(String category) {
-        if (softwareCategoryRepository.existsByNameIgnoreCase(category)) {
+        if (softwareCategoryMapper.existsByNameIgnoreCase(category)) {
             return;
         }
         SoftwareCategory softwareCategory = new SoftwareCategory();
         softwareCategory.setName(category);
-        softwareCategoryRepository.save(softwareCategory);
+        softwareCategoryMapper.insert(softwareCategory);
     }
 
     private String normalizeCategory(String category) {

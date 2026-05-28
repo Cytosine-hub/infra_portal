@@ -38,6 +38,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/forum/**").authenticated()
                         // 公开接口
                         .requestMatchers("/api/public/**").permitAll()
+                        // 常用命令：读公开，写需登录
+                        .requestMatchers(HttpMethod.GET, "/api/middleware-commands/**").permitAll()
+                        .requestMatchers("/api/middleware-commands/**").authenticated()
                         // 登录
                         .requestMatchers("/api/auth/**").authenticated()
                         // 用户管理：仅系统管理员
@@ -55,7 +58,7 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(Arrays.asList("*"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setExposedHeaders(Arrays.asList("Content-Disposition"));
         configuration.setAllowCredentials(true);

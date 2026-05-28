@@ -3,8 +3,9 @@ package com.middleware.manager.web.api;
 import com.middleware.manager.domain.ForumComment;
 import com.middleware.manager.domain.ForumPost;
 import com.middleware.manager.domain.ForumTag;
+import com.middleware.manager.repository.ForumTagMapper;
 import com.middleware.manager.service.ForumService;
-import org.springframework.data.domain.Page;
+import com.middleware.manager.web.api.dto.PageResult;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -17,23 +18,27 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/forum")
 public class ForumController {
     private final ForumService forumService;
+    private final ForumTagMapper tagMapper;
 
-    public ForumController(ForumService forumService) {
+    public ForumController(ForumService forumService, ForumTagMapper tagMapper) {
         this.forumService = forumService;
+        this.tagMapper = tagMapper;
     }
 
     @GetMapping("/posts")
-    public Map<String, Object> list(@RequestParam(defaultValue = "") String keyword,
+    public PageResult<Map<String, Object>> list(@RequestParam(defaultValue = "") String keyword,
                                      @RequestParam(defaultValue = "") String tag,
                                      @RequestParam(defaultValue = "0") int page,
                                      @RequestParam(defaultValue = "12") int size) {
-        Page<ForumPost> p = forumService.listPosts(keyword, tag, page, size);
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("content", p.getContent().stream().map(this::toSummary).collect(Collectors.toList()));
-        result.put("page", p.getNumber());
-        result.put("size", p.getSize());
-        result.put("totalElements", p.getTotalElements());
-        result.put("totalPages", p.getTotalPages());
+        var p = forumService.listPosts(keyword, tag, page, size);
+        PageResult<Map<String, Object>> result = new PageResult<>();
+        result.setContent(p.getList().stream().map(this::toSummary).collect(Collectors.toList()));
+        result.setPage(p.getPageNum() - 1);
+        result.setSize(p.getPageSize());
+        result.setTotalElements(p.getTotal());
+        result.setTotalPages(p.getPages());
+        result.setFirst(p.isIsFirstPage());
+        result.setLast(p.isIsLastPage());
         return result;
     }
 
@@ -102,7 +107,7 @@ public class ForumController {
         m.put("authorDisplayName", p.getAuthorDisplayName());
         m.put("viewCount", p.getViewCount()); m.put("likeCount", p.getLikeCount());
         m.put("commentCount", p.getCommentCount());
-        m.put("tags", p.getTags().stream().map(ForumTag::getName).collect(Collectors.toList()));
+        m.put("tags", tagMapper.findByPostId(p.getId()).stream().map(ForumTag::getName).collect(Collectors.toList()));
         String content = p.getContent();
         m.put("summary", content != null && content.length() > 200 ? content.substring(0, 200) + "..." : content);
         m.put("createdAt", p.getCreatedAt());

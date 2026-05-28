@@ -1,288 +1,38 @@
 package com.middleware.manager.domain;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "standard_documents")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class StandardDocument {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+
     private Long id;
-
-    @Column(nullable = false, length = 160)
     private String title;
-
-    @Column(nullable = false, length = 40)
     private String documentType = "MANUAL";
-
-    @Column(nullable = false, length = 40)
     private String status = "DRAFT";
-
-    @Column(length = 20)
     private String version;
-
-    @Column(name = "pending_review_record_id")
     private Long pendingReviewRecordId;
-
-    @Column(length = 500)
     private String summary;
-
-    @Column(name = "related_standard_document_id")
     private Long relatedStandardDocumentId;
-
     private Long softwareTypeId;
-
-    @Column(length = 60)
     private String category;
-
-    @Column(length = 120)
     private String software;
-
-    @Column(length = 80)
     private String softwareVersion;
-
-    @Column(length = 80)
     private String standardVersion;
-
-    @Column(length = 20)
     private String code;
-
-    @Lob
-    @Column(nullable = false)
     private String content;
-
-    @Lob
-    @Column(name = "rendered_content")
     private String renderedContent;
-
-    @Lob
-    @Column(name = "previous_content")
     private String previousContent;
-
-    @Column(length = 1000)
     private String reviewComment;
-
     private LocalDateTime submittedAt;
-
     private LocalDateTime reviewedAt;
-
-    @Column(length = 80)
     private String reviewedBy;
-
     private LocalDateTime publishedAt;
-
-    @Column(nullable = false)
     private LocalDateTime createdAt;
-
-    @Column(nullable = false)
     private LocalDateTime updatedAt;
-
-    @PrePersist
-    void prePersist() {
-        LocalDateTime now = LocalDateTime.now();
-        createdAt = now;
-        updatedAt = now;
-    }
-
-    @PreUpdate
-    void preUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public void setTitle(String title) {
-        this.title = title;
-    }
-
-    public String getDocumentType() {
-        return documentType;
-    }
-
-    public void setDocumentType(String documentType) {
-        this.documentType = documentType;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public String getVersion() {
-        return version;
-    }
-
-    public void setVersion(String version) {
-        this.version = version;
-    }
-
-    public Long getPendingReviewRecordId() {
-        return pendingReviewRecordId;
-    }
-
-    public void setPendingReviewRecordId(Long pendingReviewRecordId) {
-        this.pendingReviewRecordId = pendingReviewRecordId;
-    }
-
-    public String getSummary() {
-        return summary;
-    }
-
-    public void setSummary(String summary) {
-        this.summary = summary;
-    }
-
-    public Long getRelatedStandardDocumentId() {
-        return relatedStandardDocumentId;
-    }
-
-    public void setRelatedStandardDocumentId(Long relatedStandardDocumentId) {
-        this.relatedStandardDocumentId = relatedStandardDocumentId;
-    }
-
-    public Long getSoftwareTypeId() {
-        return softwareTypeId;
-    }
-
-    public void setSoftwareTypeId(Long softwareTypeId) {
-        this.softwareTypeId = softwareTypeId;
-    }
-
-    public String getCategory() {
-        return category;
-    }
-
-    public void setCategory(String category) {
-        this.category = category;
-    }
-
-    public String getSoftware() {
-        return software;
-    }
-
-    public void setSoftware(String software) {
-        this.software = software;
-    }
-
-    public String getSoftwareVersion() {
-        return softwareVersion;
-    }
-
-    public void setSoftwareVersion(String softwareVersion) {
-        this.softwareVersion = softwareVersion;
-    }
-
-    public String getStandardVersion() {
-        return standardVersion;
-    }
-
-    public void setStandardVersion(String standardVersion) {
-        this.standardVersion = standardVersion;
-    }
-
-    public String getCode() { return code; }
-    public void setCode(String code) { this.code = code; }
-
-    public String getContent() {
-        return content;
-    }
-
-    public void setContent(String content) {
-        this.content = content;
-    }
-
-    public String getRenderedContent() {
-        return renderedContent;
-    }
-
-    public void setRenderedContent(String renderedContent) {
-        this.renderedContent = renderedContent;
-    }
-
-    public LocalDateTime getPublishedAt() {
-        return publishedAt;
-    }
-
-    public void setPublishedAt(LocalDateTime publishedAt) {
-        this.publishedAt = publishedAt;
-    }
-
-    public String getPreviousContent() {
-        return previousContent;
-    }
-
-    public void setPreviousContent(String previousContent) {
-        this.previousContent = previousContent;
-    }
-
-    public String getReviewComment() {
-        return reviewComment;
-    }
-
-    public void setReviewComment(String reviewComment) {
-        this.reviewComment = reviewComment;
-    }
-
-    public LocalDateTime getSubmittedAt() {
-        return submittedAt;
-    }
-
-    public void setSubmittedAt(LocalDateTime submittedAt) {
-        this.submittedAt = submittedAt;
-    }
-
-    public LocalDateTime getReviewedAt() {
-        return reviewedAt;
-    }
-
-    public void setReviewedAt(LocalDateTime reviewedAt) {
-        this.reviewedAt = reviewedAt;
-    }
-
-    public String getReviewedBy() {
-        return reviewedBy;
-    }
-
-    public void setReviewedBy(String reviewedBy) {
-        this.reviewedBy = reviewedBy;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
 }

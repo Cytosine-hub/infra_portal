@@ -1,15 +1,14 @@
 package com.middleware.manager.service;
 
+import com.github.pagehelper.PageHelper;
+import com.github.pagehelper.PageInfo;
 import com.middleware.manager.domain.ParameterStandard;
 import com.middleware.manager.domain.ReviewRecord;
 import com.middleware.manager.domain.StandardParameter;
-import com.middleware.manager.repository.ParameterStandardRepository;
-import com.middleware.manager.repository.ReviewRecordRepository;
-import com.middleware.manager.repository.StandardParameterRepository;
+import com.middleware.manager.repository.ParameterStandardMapper;
+import com.middleware.manager.repository.ReviewRecordMapper;
+import com.middleware.manager.repository.StandardParameterMapper;
 import com.middleware.manager.web.api.dto.ParameterStandardRequest;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -20,32 +19,35 @@ import java.util.List;
 
 @Service
 public class ParameterStandardService {
-    private final ParameterStandardRepository repository;
-    private final StandardParameterRepository standardParameterRepository;
-    private final ReviewRecordRepository reviewRecordRepository;
+    private final ParameterStandardMapper parameterStandardMapper;
+    private final StandardParameterMapper standardParameterMapper;
+    private final ReviewRecordMapper reviewRecordMapper;
     private final SoftwareTypeService softwareTypeService;
 
-    public ParameterStandardService(ParameterStandardRepository repository,
-                                    StandardParameterRepository standardParameterRepository,
-                                    ReviewRecordRepository reviewRecordRepository,
+    public ParameterStandardService(ParameterStandardMapper parameterStandardMapper,
+                                    StandardParameterMapper standardParameterMapper,
+                                    ReviewRecordMapper reviewRecordMapper,
                                     SoftwareTypeService softwareTypeService) {
-        this.repository = repository;
-        this.standardParameterRepository = standardParameterRepository;
-        this.reviewRecordRepository = reviewRecordRepository;
+        this.parameterStandardMapper = parameterStandardMapper;
+        this.standardParameterMapper = standardParameterMapper;
+        this.reviewRecordMapper = reviewRecordMapper;
         this.softwareTypeService = softwareTypeService;
     }
 
-    public Page<ParameterStandard> list(String keyword, String status, String category, Pageable pageable) {
-        Specification<ParameterStandard> spec = specification(keyword, status, category);
-        return repository.findAll(spec, pageable);
+    public PageInfo<ParameterStandard> list(String keyword, String status, String category, int page, int size) {
+        PageHelper.startPage(page + 1, size);
+        List<ParameterStandard> list = parameterStandardMapper.findWithFilter(keyword, status, category);
+        return new PageInfo<>(list);
     }
 
-    public Page<ParameterStandard> listPublished(Pageable pageable) {
-        return repository.findByStatusOrderByCreatedAtDesc("PUBLISHED", pageable);
+    public PageInfo<ParameterStandard> listPublished(int page, int size) {
+        PageHelper.startPage(page + 1, size);
+        List<ParameterStandard> list = parameterStandardMapper.findByStatusOrderByCreatedAtDesc("PUBLISHED");
+        return new PageInfo<>(list);
     }
 
     public List<ParameterStandard> listPublicStandards() {
-        List<ParameterStandard> standards = repository.findByStatusInOrderByPublishedAtDesc(
+        List<ParameterStandard> standards = parameterStandardMapper.findByStatusInOrderByPublishedAtDesc(
                 Arrays.asList("PUBLISHED", "MODIFYING"));
         for (ParameterStandard ps : standards) {
             if ("MODIFYING".equals(ps.getStatus()) && ps.getPreviousContent() != null) {
@@ -57,8 +59,11 @@ public class ParameterStandardService {
     }
 
     public ParameterStandard get(Long id) {
-        return repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("参数标准不存在"));
+        ParameterStandard standard = parameterStandardMapper.findById(id);
+        if (standard == null) {
+            throw new IllegalArgumentException("参数标准不存在");
+        }
+        return standard;
     }
 
     @Transactional
@@ -67,9 +72,11 @@ public class ParameterStandardService {
         apply(standard, request);
         standard.setStatus("DRAFT");
         standard.setVersion(VersionManager.firstDraftVersion());
-        ParameterStandard saved = repository.save(standard);
-        refreshRenderedContent(saved);
-        return saved;
+        standard.setCreatedAt(LocalDateTime.now());
+        standard.setUpdatedAt(LocalDateTime.now());
+        parameterStandardMapper.insert(standard);
+        refreshRenderedContent(standard);
+        return standard;
     }
 
     @Transactional
@@ -84,9 +91,10 @@ public class ParameterStandardService {
         } else {
             standard.setVersion(VersionManager.nextModifyingVersion(standard.getVersion()));
         }
-        ParameterStandard saved = repository.save(standard);
-        refreshRenderedContent(saved);
-        return saved;
+        standard.setUpdatedAt(LocalDateTime.now());
+        parameterStandardMapper.update(standard);
+        refreshRenderedContent(standard);
+        return standard;
     }
 
     @Transactional
@@ -95,7 +103,7 @@ public class ParameterStandardService {
         if ("PUBLISHED".equals(standard.getStatus())) {
             throw new IllegalStateException("已发布的参数标准不能删除");
         }
-        repository.delete(standard);
+        parameterStandardMapper.deleteById(id);
     }
 
     @Transactional
@@ -108,7 +116,9 @@ public class ParameterStandardService {
         standard.setPreviousRenderedContent(buildReviewContent(standard));
         standard.setStatus("MODIFYING");
         standard.setVersion(VersionManager.toModifyingVersion(standard.getVersion()));
-        return repository.save(standard);
+        standard.setUpdatedAt(LocalDateTime.now());
+        parameterStandardMapper.update(standard);
+        return standard;
     }
 
     @Transactional
@@ -124,9 +134,10 @@ public class ParameterStandardService {
             standard.setRenderedContent(null);
         }
         standard.setPreviousRenderedContent(null);
-        ParameterStandard saved = repository.save(standard);
-        refreshRenderedContent(saved);
-        return saved;
+        standard.setUpdatedAt(LocalDateTime.now());
+        parameterStandardMapper.update(standard);
+        refreshRenderedContent(standard);
+        return standard;
     }
 
     @Transactional
@@ -144,7 +155,9 @@ public class ParameterStandardService {
         standard.setPublishedAt(LocalDateTime.now());
         standard.setPreviousContent(null);
         standard.setPreviousRenderedContent(null);
-        return repository.save(standard);
+        standard.setUpdatedAt(LocalDateTime.now());
+        parameterStandardMapper.update(standard);
+        return standard;
     }
 
     @Transactional
@@ -171,14 +184,24 @@ public class ParameterStandardService {
         if ("MODIFYING".equals(standard.getStatus()) && standard.getPreviousRenderedContent() != null) {
             record.setPreviousContent(standard.getPreviousRenderedContent());
         }
-        record = reviewRecordRepository.save(record);
+        record.setSubmittedAt(LocalDateTime.now());
+        reviewRecordMapper.insert(record);
 
         standard.setPendingReviewRecordId(record.getId());
-        return repository.save(standard);
+        standard.setUpdatedAt(LocalDateTime.now());
+        parameterStandardMapper.update(standard);
+        return standard;
     }
 
     public ParameterStandard save(ParameterStandard standard) {
-        return repository.save(standard);
+        standard.setUpdatedAt(LocalDateTime.now());
+        if (standard.getId() == null) {
+            standard.setCreatedAt(LocalDateTime.now());
+            parameterStandardMapper.insert(standard);
+        } else {
+            parameterStandardMapper.update(standard);
+        }
+        return standard;
     }
 
     public String render(ParameterStandard standard) {
@@ -186,7 +209,7 @@ public class ParameterStandardService {
             return standard.getRenderedContent();
         }
         String rendered = standard.getContent();
-        for (StandardParameter parameter : standardParameterRepository
+        for (StandardParameter parameter : standardParameterMapper
                 .findByParameterStandardIdAndActiveTrueOrderByCategoryAscCodeAsc(standard.getId())) {
             rendered = rendered.replace("{{" + parameter.getCode() + "}}", parameter.getValue());
         }
@@ -197,7 +220,7 @@ public class ParameterStandardService {
     private String buildReviewContent(ParameterStandard standard) {
         StringBuilder sb = new StringBuilder();
         sb.append(render(standard));
-        java.util.List<StandardParameter> params = standardParameterRepository
+        java.util.List<StandardParameter> params = standardParameterMapper
                 .findByParameterStandardIdAndActiveTrueOrderByCategoryAscCodeAsc(standard.getId());
         if (!params.isEmpty()) {
             sb.append("\n\n---\n## 标准参数\n\n");
@@ -215,12 +238,13 @@ public class ParameterStandardService {
     @Transactional
     public void refreshRenderedContent(ParameterStandard standard) {
         String rendered = standard.getContent();
-        for (StandardParameter parameter : standardParameterRepository
+        for (StandardParameter parameter : standardParameterMapper
                 .findByParameterStandardIdAndActiveTrueOrderByCategoryAscCodeAsc(standard.getId())) {
             rendered = rendered.replace("{{" + parameter.getCode() + "}}", parameter.getValue());
         }
         standard.setRenderedContent(rendered);
-        repository.save(standard);
+        standard.setUpdatedAt(LocalDateTime.now());
+        parameterStandardMapper.update(standard);
     }
 
     private void apply(ParameterStandard standard, ParameterStandardRequest request) {
@@ -237,27 +261,6 @@ public class ParameterStandardService {
                 .collect(java.util.stream.Collectors.joining(" / ")));
         standard.setCode(trimToNull(request.getCode()));
         standard.setContent(requireText(request.getContent(), "标准内容不能为空"));
-    }
-
-    private Specification<ParameterStandard> specification(String keyword, String status, String category) {
-        Specification<ParameterStandard> specification = Specification.where(null);
-        if (StringUtils.hasText(keyword)) {
-            String pattern = "%" + keyword.trim().toLowerCase() + "%";
-            specification = specification.and((root, query, cb) -> cb.or(
-                    cb.like(cb.lower(root.get("title")), pattern),
-                    cb.like(cb.lower(cb.coalesce(root.get("category"), "")), pattern),
-                    cb.like(cb.lower(cb.coalesce(root.get("software"), "")), pattern),
-                    cb.like(cb.lower(cb.coalesce(root.get("softwareVersion"), "")), pattern),
-                    cb.like(cb.lower(root.get("content")), pattern)
-            ));
-        }
-        if (StringUtils.hasText(status)) {
-            specification = specification.and((root, query, cb) -> cb.equal(root.get("status"), status.trim()));
-        }
-        if (StringUtils.hasText(category)) {
-            specification = specification.and((root, query, cb) -> cb.equal(root.get("category"), category.trim()));
-        }
-        return specification;
     }
 
     private String requireText(String value, String message) {

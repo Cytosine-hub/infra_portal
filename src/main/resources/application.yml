@@ -29,17 +29,6 @@ spring:
       mode: always
       schema-locations: classpath:db/knowledge_ddl.sql
       continue-on-error: true
-  jpa:
-    hibernate:
-      ddl-auto: none
-    open-in-view: false
-    properties:
-      hibernate:
-        format_sql: false
-        query:
-          plan_cache_max_size: 256
-        jdbc:
-          batch_size: 20
   servlet:
     multipart:
       max-file-size: 2048MB
@@ -94,3 +83,17 @@ langchain4j:
 
 skills:
   external-dir: ${SKILLS_DIR:./data/skills}
+
+# MyBatis 配置
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.middleware.manager.domain
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+# PageHelper 分页插件
+pagehelper:
+  helper-dialect: mysql
+  reasonable: true
+  support-methods-arguments: true

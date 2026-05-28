@@ -1,6 +1,7 @@
 package com.middleware.manager.web.api.dto;
 
 import com.middleware.manager.domain.ReleaseAsset;
+import com.middleware.manager.domain.SoftwareType;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -28,12 +29,16 @@ public class ReleaseResponse {
     private String standardDocumentTitle;
 
     public static ReleaseResponse from(ReleaseAsset asset) {
+        return from(asset, null);
+    }
+
+    public static ReleaseResponse from(ReleaseAsset asset, SoftwareType softwareType) {
         ReleaseResponse response = new ReleaseResponse();
         response.setId(asset.getId());
-        if (asset.getSoftwareType() != null) {
-            response.setSoftwareTypeId(asset.getSoftwareType().getId());
-            response.setSoftwareTypeCategory(asset.getSoftwareType().getCategory());
-            response.setSoftwareTypeName(asset.getSoftwareType().getName());
+        response.setSoftwareTypeId(asset.getSoftwareTypeId());
+        if (softwareType != null) {
+            response.setSoftwareTypeCategory(softwareType.getCategory());
+            response.setSoftwareTypeName(softwareType.getName());
         }
         response.setMiddlewareName(asset.getMiddlewareName());
         response.setVersion(asset.getVersion());

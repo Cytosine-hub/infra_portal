@@ -1,13 +1,14 @@
 package com.middleware.manager.web.api;
 
 import com.middleware.manager.domain.ReleaseAsset;
+import com.middleware.manager.domain.SoftwareType;
+import com.middleware.manager.repository.SoftwareTypeMapper;
 import com.middleware.manager.security.PermissionService;
 import com.middleware.manager.service.ReleaseService;
-import com.middleware.manager.web.api.dto.PageResponse;
+import com.middleware.manager.web.api.dto.PageResult;
 import com.middleware.manager.web.api.dto.ReleaseResponse;
 import com.middleware.manager.web.form.BatchImportForm;
 import com.middleware.manager.web.form.ReleaseForm;
-import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.BindException;
@@ -25,7 +26,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
@@ -36,30 +36,41 @@ public class AdminReleaseApiController {
 
     private final ReleaseService releaseService;
     private final PermissionService permissionService;
+    private final SoftwareTypeMapper softwareTypeMapper;
 
-    public AdminReleaseApiController(ReleaseService releaseService, PermissionService permissionService) {
+    public AdminReleaseApiController(ReleaseService releaseService, PermissionService permissionService,
+                                     SoftwareTypeMapper softwareTypeMapper) {
         this.releaseService = releaseService;
         this.permissionService = permissionService;
+        this.softwareTypeMapper = softwareTypeMapper;
     }
 
     @GetMapping
-    public PageResponse<ReleaseResponse> list(@RequestParam(defaultValue = "") String keyword,
+    public PageResult<ReleaseResponse> list(@RequestParam(defaultValue = "") String keyword,
                                               @RequestParam(defaultValue = "") String platform,
                                               @RequestParam(required = false) Boolean published,
                                               @RequestParam(defaultValue = "0") int page,
                                               @RequestParam(defaultValue = "10") int size,
                                               Authentication authentication) {
         String category = permissionService.getManagedCategory(authentication);
-        Page<ReleaseAsset> releasesPage = releaseService.listAdminReleases(keyword, platform, published, category, page, normalizeSize(size));
-        List<ReleaseResponse> content = releasesPage.getContent().stream()
-                .map(ReleaseResponse::from)
-                .collect(Collectors.toList());
-        return PageResponse.from(releasesPage, content);
+        var pageInfo = releaseService.listAdminReleases(keyword, platform, published, category, page, normalizeSize(size));
+        PageResult<ReleaseResponse> result = new PageResult<>();
+        result.setContent(pageInfo.getList().stream()
+                .map(a -> ReleaseResponse.from(a, loadSoftwareType(a)))
+                .collect(Collectors.toList()));
+        result.setPage(pageInfo.getPageNum() - 1);
+        result.setSize(pageInfo.getPageSize());
+        result.setTotalElements(pageInfo.getTotal());
+        result.setTotalPages(pageInfo.getPages());
+        result.setFirst(pageInfo.isIsFirstPage());
+        result.setLast(pageInfo.isIsLastPage());
+        return result;
     }
 
     @GetMapping("/{id}")
     public ReleaseResponse detail(@PathVariable Long id, Authentication authentication) {
-        return ReleaseResponse.from(checkAccess(id, authentication));
+        ReleaseAsset asset = checkAccess(id, authentication);
+        return ReleaseResponse.from(asset, loadSoftwareType(asset));
     }
 
     @PostMapping
@@ -76,7 +87,8 @@ public class AdminReleaseApiController {
             // 管理岗只能创建自己分类的资源
             // 由前端控制器分类选择，此处不再强制校验以保证系统管理员可跨分类
         }
-        return ReleaseResponse.from(releaseService.create(form));
+        ReleaseAsset created = releaseService.create(form);
+        return ReleaseResponse.from(created, loadSoftwareType(created));
     }
 
     @PutMapping("/{id}")
@@ -88,7 +100,8 @@ public class AdminReleaseApiController {
         if (bindingResult.hasErrors()) {
             throw new BindException(bindingResult);
         }
-        return ReleaseResponse.from(releaseService.update(id, form));
+        ReleaseAsset updated = releaseService.update(id, form);
+        return ReleaseResponse.from(updated, loadSoftwareType(updated));
     }
 
     @PostMapping("/import")
@@ -100,14 +113,16 @@ public class AdminReleaseApiController {
     public ReleaseResponse publish(@PathVariable Long id, Authentication authentication) {
         checkAccess(id, authentication);
         releaseService.publish(id);
-        return ReleaseResponse.from(releaseService.getAdminRelease(id));
+        ReleaseAsset asset = releaseService.getAdminRelease(id);
+        return ReleaseResponse.from(asset, loadSoftwareType(asset));
     }
 
     @PostMapping("/{id}/unpublish")
     public ReleaseResponse unpublish(@PathVariable Long id, Authentication authentication) {
         checkAccess(id, authentication);
         releaseService.unpublish(id);
-        return ReleaseResponse.from(releaseService.getAdminRelease(id));
+        ReleaseAsset asset = releaseService.getAdminRelease(id);
+        return ReleaseResponse.from(asset, loadSoftwareType(asset));
     }
 
     @DeleteMapping("/{id}")
@@ -133,7 +148,14 @@ public class AdminReleaseApiController {
     }
 
     private String releaseCategory(ReleaseAsset release) {
-        return release.getSoftwareType() != null ? release.getSoftwareType().getCategory() : null;
+        if (release.getSoftwareTypeId() == null) return null;
+        SoftwareType type = softwareTypeMapper.findById(release.getSoftwareTypeId());
+        return type != null ? type.getCategory() : null;
+    }
+
+    private SoftwareType loadSoftwareType(ReleaseAsset asset) {
+        if (asset.getSoftwareTypeId() == null) return null;
+        return softwareTypeMapper.findById(asset.getSoftwareTypeId());
     }
 
     private int normalizeSize(int size) {

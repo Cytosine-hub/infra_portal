@@ -1,7 +1,7 @@
 package com.middleware.manager.service;
 
 import com.middleware.manager.domain.AdminAccount;
-import com.middleware.manager.repository.AdminAccountRepository;
+import com.middleware.manager.repository.AdminAccountMapper;
 import com.middleware.manager.security.Role;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,21 +19,20 @@ import org.springframework.util.StringUtils;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.LinkedHashMap;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 @Service
 public class AdminAccountService implements UserDetailsService, ApplicationRunner {
 
-    private final AdminAccountRepository repository;
+    private final AdminAccountMapper mapper;
     private final PasswordEncoder passwordEncoder;
     private final String defaultPassword;
 
-    public AdminAccountService(AdminAccountRepository repository,
+    public AdminAccountService(AdminAccountMapper mapper,
                                PasswordEncoder passwordEncoder,
                                @Value("${app.security.admin.default-password:admin123}") String defaultPassword) {
-        this.repository = repository;
+        this.mapper = mapper;
         this.passwordEncoder = passwordEncoder;
         this.defaultPassword = defaultPassword;
     }
@@ -46,8 +45,10 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        AdminAccount account = repository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("账号不存在"));
+        AdminAccount account = mapper.findByUsername(username);
+        if (account == null) {
+            throw new UsernameNotFoundException("账号不存在");
+        }
 
         Role role = Role.fromDisplayName(account.getRole());
         return new User(account.getUsername(), account.getPasswordHash(),
@@ -56,39 +57,44 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
 
     @Transactional
     public void changePassword(String username, String currentPassword, String newPassword) {
-        AdminAccount account = repository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("账号不存在"));
+        AdminAccount account = mapper.findByUsername(username);
+        if (account == null) {
+            throw new IllegalArgumentException("账号不存在");
+        }
         if (!passwordEncoder.matches(currentPassword, account.getPasswordHash())) {
             throw new IllegalArgumentException("当前密码不正确");
         }
         account.setPasswordHash(passwordEncoder.encode(newPassword));
-        repository.save(account);
+        account.setUpdatedAt(LocalDateTime.now());
+        mapper.update(account);
     }
 
     @Transactional
     public void resetPassword(Long userId, String newPassword) {
-        AdminAccount account = repository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        AdminAccount account = mapper.findById(userId);
+        if (account == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
         if (!StringUtils.hasText(newPassword) || newPassword.trim().length() < 6) {
             throw new IllegalArgumentException("密码至少6位");
         }
         account.setPasswordHash(passwordEncoder.encode(newPassword.trim()));
-        repository.save(account);
+        account.setUpdatedAt(LocalDateTime.now());
+        mapper.update(account);
     }
 
     public String getDisplayNameByUsername(String username) {
-        return repository.findByUsername(username)
-                .map(AdminAccount::getDisplayName)
-                .orElse(username);
+        AdminAccount account = mapper.findByUsername(username);
+        return account != null ? account.getDisplayName() : username;
     }
 
     public List<AdminAccount> listUsers() {
-        return repository.findAllByOrderByCreatedAtAsc();
+        return mapper.findAllByOrderByCreatedAtAsc();
     }
 
     @Transactional
     public AdminAccount createUser(String username, String displayName, String password, String role) {
-        if (repository.findByUsername(username).isPresent()) {
+        if (mapper.findByUsername(username) != null) {
             throw new IllegalArgumentException("账号已存在");
         }
         Role.fromDisplayName(role);
@@ -97,7 +103,10 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
         account.setDisplayName(displayName != null ? displayName : username);
         account.setPasswordHash(encodePassword(password));
         account.setRole(role);
-        return repository.save(account);
+        account.setCreatedAt(LocalDateTime.now());
+        account.setUpdatedAt(LocalDateTime.now());
+        mapper.insert(account);
+        return account;
     }
 
     private String encodePassword(String raw) {
@@ -119,24 +128,30 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
     @Transactional
     public AdminAccount updateUserRole(Long userId, String newRole) {
         Role.fromDisplayName(newRole);
-        AdminAccount account = repository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
+        AdminAccount account = mapper.findById(userId);
+        if (account == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
         account.setRole(newRole);
-        return repository.save(account);
+        account.setUpdatedAt(LocalDateTime.now());
+        mapper.update(account);
+        return account;
     }
 
     @Transactional
     public void deleteUser(Long userId) {
-        AdminAccount account = repository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("用户不存在"));
-        if ("系统管理员".equals(account.getRole()) && repository.countByRole("系统管理员") <= 1) {
+        AdminAccount account = mapper.findById(userId);
+        if (account == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        if ("系统管理员".equals(account.getRole()) && mapper.countByRole("系统管理员") <= 1) {
             throw new IllegalArgumentException("不能删除最后一个系统管理员");
         }
-        repository.delete(account);
+        mapper.deleteById(userId);
     }
 
     private void seedDefaultAccounts() {
-        if (repository.count() > 0) return;
+        if (mapper.count() > 0) return;
 
         String[][] defaultAccounts = {
             {"系统管理员", "sysadmin", "系统管理员"},
@@ -155,7 +170,9 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
             account.setUsername(entry[1]);
             account.setDisplayName(entry[2]);
             account.setPasswordHash(encodePassword(sha256Hex(defaultPassword)));
-            repository.save(account);
+            account.setCreatedAt(LocalDateTime.now());
+            account.setUpdatedAt(LocalDateTime.now());
+            mapper.insert(account);
         }
     }
 }

@@ -13,7 +13,7 @@ mvn spring-boot:run                  # run (starts on :8080)
 cd frontend && npm install && npm run dev   # starts on :5173, proxies /api and /files to :8080
 ```
 
-Database: MySQL 8.0 at `127.0.0.1:3306/middleware_resource_manager`, user `root`. Credentials in `~/.my.cnf`. Hibernate `ddl-auto: update` creates/alters tables automatically.
+Database: MySQL 8.0 at `127.0.0.1:3306/middleware_resource_manager`, user `root`. Credentials in `~/.my.cnf`.
 
 **Knowledge module** (`knowledge/`) — 独立的知识库和 AI 排查模块，使用 JdbcTemplate（非 JPA）：
 - `config/` — AiConfig（AI 模型和向量数据库配置）
@@ -35,8 +35,8 @@ DDL 脚本：`src/main/resources/db/knowledge_ddl.sql`
 ## Architecture
 
 **Backend** — standard Spring Boot layered architecture:
-- `domain/` — JPA entities mapped to MySQL tables
-- `repository/` — Spring Data JPA interfaces
+- `domain/` — Lombok POJOs mapped to MySQL tables
+- `repository/` — MyBatis Mapper interfaces + XML mapping files (`resources/mapper/`)
 - `service/` — business logic
 - `web/api/` — REST controllers (`/api/admin/**`, `/api/public/**`, `/api/auth/**`, `/api/forum/**`)
 - `web/controller/` — Spring MVC view controllers (Thymeleaf SSR pages like `/login`, `/admin/releases`)
@@ -91,3 +91,40 @@ Managers are scoped to their category — they can only manage releases/types/st
 ## Configuration
 
 `src/main/resources/application.yml` — single config file. DB connection defaults can be overridden via env vars: `APP_DB_HOST`, `APP_DB_PORT`, `APP_DB_NAME`, `APP_DB_USERNAME`, `APP_DB_PASSWORD`.
+
+**External Service Configuration:**
+
+All external service addresses must be configurable via environment variables:
+
+| Service | Env Var | Default | Description |
+|---------|---------|---------|-------------|
+| Zabbix | `ZABBIX_URL` | `http://localhost:8080/api_jsonrpc.php` | Zabbix API URL |
+| Zabbix | `ZABBIX_USERNAME` | `Admin` | Zabbix username |
+| Zabbix | `ZABBIX_PASSWORD` | `zabbix` | Zabbix password |
+| Zabbix | `ZABBIX_TIMEOUT` | `30` | Connection timeout (seconds) |
+| AI Model | `AI_BASE_URL` | `https://token-plan-cn.xiaomimimo.com/v1` | LLM API URL |
+| AI Model | `AI_API_KEY` | (configured) | LLM API key |
+| Vector DB | `VECTOR_HOST` | `localhost` | Milvus host |
+| Vector DB | `VECTOR_PORT` | `19530` | Milvus port |
+
+## Zabbix Integration
+
+**Module**: `agent/zabbix/` — Zabbix monitoring data integration
+
+- `ZabbixConfig` — Configuration properties for Zabbix connection
+- `ZabbixClient` — Zabbix API client (JSON-RPC 2.0)
+- `ZabbixTool` — Agent tool for querying Zabbix data
+- `ZabbixExportTool` — Agent tool for exporting data to Excel
+- `ExcelExportService` — Excel file generation service
+
+**API Endpoints:**
+
+- `POST /api/ops-agent/chat` — Agent conversation (includes Zabbix queries)
+- `GET /api/ops-agent/export/zabbix` — Export Zabbix data to Excel
+- `POST /api/ops-agent/export/zabbix/batch` — Batch export multiple hosts
+
+**Skill**: `zabbix-monitor.yaml` — Auto-triggered by keywords: zabbix, 监控, 监控数据, 主机监控, 性能监控, 导出监控
+
+**Documentation:**
+- `docs/zabbix-integration-guide.md` — Complete integration guide
+- `docs/zabbix-implementation-summary.md` — Implementation summary

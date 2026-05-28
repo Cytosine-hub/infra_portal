@@ -1,224 +1,322 @@
-# 知识库 & 智能排查模块投产手册
+# 生产环境部署手册
 
-## 一、环境要求
-
-| 组件 | 版本要求 | 说明 |
-|------|---------|------|
-| JDK | 17+ | Temurin 17 推荐 |
-| MySQL | 8.0+ | 现有数据库，复用 |
-| Milvus | 2.4+ | 向量数据库，可选（不部署则使用内存向量库） |
-| LLM API | OpenAI 兼容格式 | 需要 API Key（当前使用 mimo-v2.5-pro） |
-| Embedding 模型 | OpenAI 兼容格式 | 本地 Ollama BGE-large（localhost:11434）或远程 API |
-
-## 二、部署架构
+## 1. 架构概览
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   前端 Nginx  │────▶│  Spring Boot │────▶│    MySQL    │
-│   Vue 3 SPA  │     │  Java 17     │     │             │
-└─────────────┘     └──────┬──────┘     └─────────────┘
+                    ┌─────────────┐
+  用户 ────────────►│   Nginx:80  │
+                    └──────┬──────┘
+                           │
+              ┌────────────┼────────────┐
+              │ 静态文件    │ /api/      │ /files/
+              ▼            ▼            ▼
+         frontend/dist  Spring Boot   Spring Boot
+                        :8080         :8080
                            │
                     ┌──────┴──────┐
-                    │             │
-              ┌─────▼─────┐ ┌────▼─────┐
-              │  LLM API   │ │  Milvus   │
-              │ 对话+嵌入   │ │  向量库    │
-              └───────────┘ └──────────┘
+                    │  MySQL:3306 │
+                    └─────────────┘
 ```
 
-## 三、部署步骤
+- 前端：Vue 3 构建产物，Nginx 托管静态文件
+- 后端：Spring Boot JAR，Nginx 反向代理 `/api/` 和 `/files/`
+- 数据库：MySQL 8.0
 
-### 3.1 部署 Milvus
+## 2. 环境要求
+
+| 组件 | 版本 | 说明 |
+|------|------|------|
+| JDK | 17 | Spring Boot 3.x 必须 |
+| MySQL | 8.0+ | |
+| Nginx | 1.18+ | |
+| Maven | 3.8+ | 构建后端用 |
+| Node.js | 18+ | 构建前端用 |
+
+## 3. 构建
+
+### 3.1 构建后端
 
 ```bash
-# Docker 部署（推荐）
-docker run -d --name milvus \
-  -p 19530:19530 \
-  -p 9091:9091 \
-  -v /data/milvus:/var/lib/milvus \
-  --restart always \
-  milvusdb/milvus:v2.4-latest \
-  milvus run standalone
-
-# 验证
-curl http://localhost:9091/healthz
-# 返回 {"status":"healthy"} 即成功
+cd /path/to/middleware_resource_manager
+mvn clean package -DskipTests
+# 产物：target/middleware-resource-manager-0.0.1-SNAPSHOT.jar
 ```
 
-### 3.2 获取 LLM API Key 与 Embedding 模型
-
-当前项目使用 OpenAI 兼容格式的 LLM API。对话模型和 Embedding 模型可分开配置。
-
-**本地开发（local profile）**：Embedding 使用本地 Ollama BGE-large 模型：
-
-```yaml
-# application-local.yml
-langchain4j:
-  open-ai:
-    embedding-model:
-      base-url: http://localhost:11434/v1
-      api-key: ollama
-      model-name: bge-large
-```
-
-前置条件：安装 Ollama 并下载 bge-large 模型：
-```bash
-ollama pull bge-large
-```
-
-**生产环境**：在 `application.yml` 或环境变量中配置：
-
-```yaml
-langchain4j:
-  open-ai:
-    chat-model:
-      base-url: https://your-llm-api/v1
-      api-key: your-api-key
-      model-name: your-model-name
-    embedding-model:
-      base-url: https://your-embedding-api/v1
-      api-key: your-api-key
-      model-name: bge-large   # 或其他 embedding 模型，维度需匹配 VECTOR_DIM=1024
-```
-
-也可通过环境变量覆盖（见 3.4 节）。
-
-### 3.3 配置数据库
-
-```sql
--- 创建知识库表（首次部署执行）
-CREATE TABLE IF NOT EXISTS knowledge_chunks (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    content TEXT NOT NULL COMMENT '切片文本内容',
-    source_title VARCHAR(500) COMMENT '来源文档标题',
-    source_type VARCHAR(50) COMMENT '来源类型：STANDARD_DOC / UPLOAD',
-    source_id BIGINT COMMENT '来源文档ID',
-    category VARCHAR(80) COMMENT '分类',
-    software VARCHAR(120) COMMENT '软件名称',
-    chunk_index INT DEFAULT 0 COMMENT '切片在文档中的序号',
-    vector_id VARCHAR(100) COMMENT '向量存储ID',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_source (source_type, source_id),
-    INDEX idx_category (category),
-    INDEX idx_software (software)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库文本切片';
-
-CREATE TABLE IF NOT EXISTS chat_sessions (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(200) COMMENT '会话标题',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI对话会话';
-
-CREATE TABLE IF NOT EXISTS chat_messages (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    session_id BIGINT NOT NULL COMMENT '会话ID',
-    role VARCHAR(20) NOT NULL COMMENT '角色：user / assistant / system',
-    content TEXT NOT NULL COMMENT '消息内容',
-    references_text TEXT COMMENT '引用的知识来源JSON',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_session (session_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI对话消息';
-```
-
-### 3.4 配置应用
-
-创建 `application-prod.yml`（已有），设置环境变量：
-
-```bash
-# LLM API（在 application.yml 中配置，或通过环境变量覆盖）
-# LangChain4j 配置见 application.yml 的 langchain4j 节点
-
-# 向量数据库（可选，不设置则使用内存向量库）
-export VECTOR_TYPE=milvus
-export VECTOR_HOST=milvus-server-ip
-export VECTOR_PORT=19530
-
-# 数据库连接
-export APP_DB_HOST=mysql-server-ip
-export APP_DB_PORT=3306
-export APP_DB_NAME=middleware_resource_manager
-export APP_DB_USERNAME=app_user
-export APP_DB_PASSWORD=app_password
-```
-
-### 3.5 编译打包
-
-```bash
-JAVA_HOME=/path/to/jdk17 mvn clean package -DskipTests -Pprod
-```
-
-### 3.6 启动应用
-
-```bash
-java -jar target/middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar \
-  --spring.profiles.active=prod \
-  --server.port=8080
-```
-
-### 3.7 部署前端
+### 3.2 构建前端
 
 ```bash
 cd frontend
 npm install
 npm run build
-# dist/ 目录部署到 Nginx
+# 产物：frontend/dist/
 ```
 
-Nginx 配置参考现有 `release/nginx.conf`，确保 `/api` 代理到后端 8080 端口。
+## 4. 服务器部署
 
-## 四、投产后操作
+### 4.1 目录结构
 
-### 4.1 导入知识库文档
+```
+/opt/middleware-resource-manager/
+├── backend/
+│   ├── middleware-resource-manager-0.0.1-SNAPSHOT.jar
+│   ├── data/skills/          # 经验 Skill YAML（运行时生成）
+│   └── storage/              # 上传文件存储
+├── frontend/
+│   └── dist/                 # Vue 构建产物
+└── logs/                     # 应用日志（可选）
+```
 
-1. 登录系统 → 知识库管理
-2. 批量上传技术文档（PDF/Word/Markdown）
-3. 或从已有标准文档导入
-
-### 4.2 验证搜索
-
-在检索测试页面输入关键词，确认能搜到相关文档。
-
-### 4.3 验证对话
-
-在智能排查页面新建会话，提问测试。
-
-## 五、监控与运维
-
-### 5.1 关键指标
-
-| 指标 | 监控方式 | 告警阈值 |
-|------|---------|---------|
-| GLM API 响应时间 | 应用日志 | > 30s |
-| Milvus 连接状态 | /healthz | 非 healthy |
-| 知识库文档数量 | 数据库查询 | 异常下降 |
-| 对话失败率 | 应用日志 | > 5% |
-
-### 5.2 常见问题
-
-**Q: 搜索返回空结果？**
-A: 检查 Milvus 是否运行，检查 embedding 模型是否可用。
-
-**Q: 对话响应慢？**
-A: 检查 GLM API 是否正常，检查网络连接。
-
-**Q: 知识库文档丢失？**
-A: 检查 Milvus 数据卷是否持久化，检查 MySQL 数据。
-
-### 5.3 数据备份
+### 4.2 数据库初始化
 
 ```bash
-# 备份 Milvus 数据
-docker exec milvus tar czf /tmp/milvus_backup.tar.gz /var/lib/milvus
-docker cp milvus:/tmp/milvus_backup.tar.gz /backup/
-
-# 备份 MySQL 知识库表
-mysqldump -u root middleware_resource_manager \
-  knowledge_chunks chat_sessions chat_messages > /backup/knowledge_db.sql
+mysql -u root -p < src/main/resources/db/knowledge_ddl.sql
 ```
 
-## 六、版本变更记录
+Hibernate `ddl-auto: update` 会自动创建/更新业务表。
 
-| 日期 | 版本 | 内容 |
-|------|------|------|
-| 2026-05-23 | v1.0 | 初始版本：知识库管理、智能排查、知识图谱 |
+### 4.3 启动后端
+
+```bash
+cd /opt/middleware-resource-manager/backend
+
+# 生产环境推荐配置
+java -jar middleware-resource-manager-0.0.1-SNAPSHOT.jar \
+  --server.port=8080 \
+  --spring.jpa.open-in-view=false \
+  --app.modules.knowledge-enabled=false \
+  --app.modules.diagnostics-enabled=false
+```
+
+**隐藏知识库和智能排查菜单**：设置 `app.modules.knowledge-enabled=false` 和 `app.modules.diagnostics-enabled=false`。
+
+也可以通过环境变量：
+
+```bash
+export APP_MODULES_KNOWLEDGE_ENABLED=false
+export APP_MODULES_DIAGNOSTICS_ENABLED=false
+java -jar middleware-resource-manager-0.0.1-SNAPSHOT.jar
+```
+
+### 4.4 systemd 服务（推荐）
+
+```bash
+sudo vi /etc/systemd/system/middleware-resource-manager.service
+```
+
+```ini
+[Unit]
+Description=Middleware Resource Manager
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=appuser
+WorkingDirectory=/opt/middleware-resource-manager/backend
+ExecStart=/usr/bin/java -jar middleware-resource-manager-0.0.1-SNAPSHOT.jar \
+  --server.port=8080 \
+  --app.modules.knowledge-enabled=false \
+  --app.modules.diagnostics-enabled=false
+Environment=APP_DB_HOST=127.0.0.1
+Environment=APP_DB_PASSWORD=your_db_password
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable middleware-resource-manager
+sudo systemctl start middleware-resource-manager
+```
+
+## 5. Nginx 配置
+
+```bash
+sudo vi /etc/nginx/conf.d/middleware-resource-manager.conf
+```
+
+```nginx
+# 后端 upstream（可配置多个实现负载均衡）
+upstream backend {
+    server 127.0.0.1:8080;
+    # 多实例时添加更多 server：
+    # server 127.0.0.1:8081;
+    # server 127.0.0.1:8082;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    root /opt/middleware-resource-manager/frontend/dist;
+    index index.html;
+
+    # 文件上传大小限制
+    client_max_body_size 2048m;
+
+    # ===== 静态资源（前端） =====
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 静态资源缓存
+    location ~* \.(js|css|png|jpg|jpeg|gif|svg|ico|woff2?)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # ===== API 代理 =====
+    location /api/ {
+        proxy_pass http://backend/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+
+        # 超时设置（Agent 排查可能耗时较长）
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+
+        # 连接复用
+        proxy_buffering on;
+        proxy_buffer_size 8k;
+        proxy_buffers 8 8k;
+    }
+
+    # ===== 文件下载代理 =====
+    location /files/ {
+        proxy_pass http://backend/files/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+
+        # 大文件下载：关闭缓冲，支持断点续传
+        proxy_buffering off;
+        proxy_request_buffering off;
+
+        # 下载超时
+        proxy_read_timeout 600s;
+
+        # 支持 Range 请求（断点续传）
+        proxy_set_header Range $http_range;
+        proxy_set_header If-Range $http_if_range;
+    }
+}
+```
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+## 6. 并发下载性能优化
+
+### 6.1 Nginx 层优化
+
+- **`proxy_buffering off`**（文件下载）：Nginx 不缓存响应体，直接流式转发，减少内存占用
+- **`keepalive 32`**：复用后端连接，减少 TCP 握手开销
+- **静态资源缓存**：`expires 30d` + `Cache-Control: immutable`，减少重复请求
+- **多 upstream**：高并发时可启动多个后端实例，Nginx 轮询分发
+
+### 6.2 Spring Boot 层优化
+
+在 `application.yml` 中调整 Tomcat 参数：
+
+```yaml
+server:
+  tomcat:
+    max-threads: 200          # 最大工作线程数（默认 200）
+    min-spare-threads: 20     # 最小空闲线程
+    max-connections: 8192     # 最大连接数
+    accept-count: 100         # 等待队列长度
+```
+
+### 6.3 MySQL 连接池
+
+```yaml
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+```
+
+### 6.4 文件下载优化（已实现）
+
+项目已支持：
+- 断点续传（Range 请求）
+- 流式下载（不加载整个文件到内存）
+- 下载进度显示
+
+## 7. 环境变量清单
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `APP_DB_HOST` | MySQL 地址 | 127.0.0.1 |
+| `APP_DB_PORT` | MySQL 端口 | 3306 |
+| `APP_DB_NAME` | 数据库名 | middleware_resource_manager |
+| `APP_DB_USERNAME` | 数据库用户 | root |
+| `APP_DB_PASSWORD` | 数据库密码 | （配置文件默认值） |
+| `APP_MODULES_KNOWLEDGE_ENABLED` | 知识库模块开关 | true |
+| `APP_MODULES_DIAGNOSTICS_ENABLED` | 智能排查模块开关 | true |
+| `AI_BASE_URL` | AI 模型地址 | xiaomimimo |
+| `AI_API_KEY` | AI 模型密钥 | （配置文件默认值） |
+| `VECTOR_HOST` | Milvus 地址 | localhost |
+| `VECTOR_PORT` | Milvus 端口 | 19530 |
+| `ZABBIX_URL` | Zabbix 地址 | localhost:8080 |
+| `ZABBIX_USERNAME` | Zabbix 用户 | Admin |
+| `ZABBIX_PASSWORD` | Zabbix 密码 | zabbix |
+
+## 8. 验证
+
+```bash
+# 后端健康检查
+curl http://127.0.0.1:8080/api/public/releases
+
+# 前端页面
+curl -I http://your-domain.com/
+
+# 模块开关验证（应返回 knowledgeEnabled: false）
+curl http://your-domain.com/api/public/config
+
+# 文件下载
+curl -I http://your-domain.com/files/{token}
+```
+
+## 9. 日志
+
+```bash
+# systemd 日志
+sudo journalctl -u middleware-resource-manager -f
+
+# 应用日志（如果配置了文件输出）
+tail -f /opt/middleware-resource-manager/backend/logs/middleware-resource-manager.log
+```
+
+## 10. 更新部署
+
+```bash
+# 构建新版本
+mvn clean package -DskipTests
+cd frontend && npm run build && cd ..
+
+# 替换后端 JAR
+sudo systemctl stop middleware-resource-manager
+cp target/middleware-resource-manager-0.0.1-SNAPSHOT.jar /opt/middleware-resource-manager/backend/
+sudo systemctl start middleware-resource-manager
+
+# 替换前端
+rm -rf /opt/middleware-resource-manager/frontend/dist
+cp -r frontend/dist /opt/middleware-resource-manager/frontend/
+sudo systemctl reload nginx
+```

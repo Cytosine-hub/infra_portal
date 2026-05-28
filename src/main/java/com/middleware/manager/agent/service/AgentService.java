@@ -50,11 +50,12 @@ public class AgentService {
         Skill skill = skillLoader.match(userMessage);
         String response;
         String skillName = null;
+        List<String> toolsUsed = new ArrayList<>();
 
         if (skill != null) {
             log.info("[Agent] Matched skill: {}", skill.getName());
             skillName = skill.getName();
-            response = executeSkill(skill, context != null ? context : new HashMap<>());
+            response = executeSkill(skill, context != null ? context : new HashMap<>(), toolsUsed);
         } else {
             // 2. General reasoning with tool awareness
             response = generalChat(userMessage);
@@ -63,11 +64,11 @@ public class AgentService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("response", response);
         result.put("skill", skillName);
-        result.put("availableTools", toolMap.keySet());
+        result.put("toolsUsed", toolsUsed);
         return result;
     }
 
-    private String executeSkill(Skill skill, Map<String, String> context) {
+    private String executeSkill(Skill skill, Map<String, String> context, List<String> toolsUsed) {
         StringBuilder accumulated = new StringBuilder();
         accumulated.append("正在执行排查流程：").append(skill.getName()).append("\n\n");
 
@@ -82,6 +83,7 @@ public class AgentService {
                 log.info("[Agent] Calling tool: {} with args: {}", step.getTool(), args);
                 try {
                     String result = tool.call(args);
+                    toolsUsed.add(step.getTool());
                     accumulated.append("[").append(step.getDescription()).append("]\n").append(result).append("\n\n");
                 } catch (Exception e) {
                     accumulated.append("[").append(step.getDescription()).append("] 调用失败: ").append(e.getMessage()).append("\n\n");

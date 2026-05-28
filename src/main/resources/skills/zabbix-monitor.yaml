@@ -1,0 +1,14 @@
+name: zabbix-monitor
+description: "查询 Zabbix 监控数据并支持导出"
+trigger:
+  keywords: ["zabbix", "监控", "监控数据", "主机监控", "性能监控", "导出监控"]
+steps:
+  - tool: zabbix_query
+    args:
+      host: "{{host}}"
+      metric: "{{metric}}"
+      timeRange: "{{timeRange}}"
+      limit: 100
+    description: "查询 Zabbix 监控数据"
+
+  - prompt: "根据以上监控数据分析系统状态，识别异常指标和潜在问题"
