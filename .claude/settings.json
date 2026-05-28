@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/Users/zhushihao/Projects/middleware_resource_manager/.claude/restart-backend.sh \"$FILE_PATH\""
+          }
+        ]
+      }
+    ]
+  }
+}
