@@ -243,6 +243,7 @@
             <div v-if="selectedPublicStandard.documentType !== 'MANUAL' && selectedPublicStandard.documentType !== 'ARTICLE' && relatedDocsForStandard.length === 0 && publicStandardParams.length === 0 && !standardsLoading" class="muted" style="padding:16px 0">暂无相关手册和参数标准！</div>
 
             <div v-if="standardsLoading" class="loading-panel"><div class="spinner"></div><p>加载中...</p></div>
+            <div v-else class="markdown-preview public-document" v-html="publicStandardHtml"></div>
 
             <div v-if="publicStandardParams.length > 0" class="public-params-section">
               <div class="public-params-header">
