@@ -1,5 +1,5 @@
 ---
-name: release
+allowed-tools: Bash(mvn *), Bash(npm *), Bash(mysqldump *), Bash(tar *), Bash(cp *), Bash(mkdir *), Bash(rm *), Bash(ls *), Bash(du *), Bash(git *), Bash(cat *), Bash(date *), Read, Write, Edit
 description: 版本发布 - 构建前后端、导出DB、生成nginx配置、打包tar
 ---
 
@@ -7,9 +7,17 @@ description: 版本发布 - 构建前后端、导出DB、生成nginx配置、打
 
 执行版本发布，构建完整的 release 部署包。
 
+## 当前状态
+
+- 项目根目录: /Users/zhushihao/Projects/middleware_resource_manager
+- 当前日期: !`date +%Y-%m-%d`
+- 当前分支: !`git branch --show-current`
+- 最近 commits: !`git log --oneline -5`
+- release.md 是否存在: !`ls release/release.md 2>/dev/null && echo "存在" || echo "不存在"`
+
 ## 版本号格式
 
-`v<major>.<minor>.<patch>-YYYYMMDD`
+`v<major>.<minor>.<patch>-YYYYMMDD`（例如 v1.0.0-20260528）
 
 用户可以指定版本号，也可以自动推导（上次 patch+1）。
 
@@ -120,8 +128,10 @@ server {
 ### 第六步：导出数据库
 
 ```bash
+mkdir -p /Users/zhushihao/Projects/middleware_resource_manager/release/db
+
 # 导出完整 DDL（不含数据）
-mysqldump -u root --no-data --skip-triggers --routines=false --events=false middleware_resource_manager > release/db/full_schema.sql
+mysqldump -u root --no-data --skip-triggers --routines=false --events=false middleware_resource_manager > /Users/zhushihao/Projects/middleware_resource_manager/release/db/full_schema.sql
 
 # 导出种子数据（排除用户生成数据的表）
 mysqldump -u root --no-create-info --skip-triggers --complete-insert \
@@ -132,14 +142,15 @@ mysqldump -u root --no-create-info --skip-triggers --complete-insert \
   --ignore-table=middleware_resource_manager.chat_sessions \
   --ignore-table=middleware_resource_manager.chat_messages \
   --ignore-table=middleware_resource_manager.knowledge_chunks \
-  middleware_resource_manager > release/db/seed_data.sql
+  middleware_resource_manager > /Users/zhushihao/Projects/middleware_resource_manager/release/db/seed_data.sql
 ```
 
 ### 第七步：复制文档
 
 ```bash
-cp docs/startup-manual.md release/docs/
-cp docs/production-deploy.md release/docs/
+mkdir -p /Users/zhushihao/Projects/middleware_resource_manager/release/docs
+cp /Users/zhushihao/Projects/middleware_resource_manager/docs/startup-manual.md /Users/zhushihao/Projects/middleware_resource_manager/release/docs/
+cp /Users/zhushihao/Projects/middleware_resource_manager/docs/production-deploy.md /Users/zhushihao/Projects/middleware_resource_manager/release/docs/
 ```
 
 ### 第八步：生成/更新 release.md
