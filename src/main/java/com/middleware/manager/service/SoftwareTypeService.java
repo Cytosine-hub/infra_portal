@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -142,6 +143,8 @@ public class SoftwareTypeService implements ApplicationRunner {
         type.setCategory(category);
         type.setName(name);
         type.setActive(true);
+        type.setCreatedAt(LocalDateTime.now());
+        type.setUpdatedAt(LocalDateTime.now());
         softwareTypeMapper.insert(type);
     }
 
@@ -152,6 +155,8 @@ public class SoftwareTypeService implements ApplicationRunner {
         }
         SoftwareCategory softwareCategory = new SoftwareCategory();
         softwareCategory.setName(name);
+        softwareCategory.setCreatedAt(LocalDateTime.now());
+        softwareCategory.setUpdatedAt(LocalDateTime.now());
         softwareCategoryMapper.insert(softwareCategory);
     }
 
