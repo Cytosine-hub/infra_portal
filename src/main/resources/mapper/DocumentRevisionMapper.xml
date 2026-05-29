@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.middleware.manager.repository.DocumentRevisionMapper">
+
+    <resultMap id="revisionMap" type="com.middleware.manager.domain.DocumentRevision">
+        <id property="id" column="id"/>
+        <result property="documentId" column="document_id"/>
+        <result property="documentType" column="document_type"/>
+        <result property="version" column="version"/>
+        <result property="content" column="content"/>
+        <result property="renderedContent" column="rendered_content"/>
+        <result property="revisionComment" column="revision_comment"/>
+        <result property="revisedBy" column="revised_by"/>
+        <result property="revisedAt" column="revised_at"/>
+        <result property="category" column="category"/>
+        <result property="software" column="software"/>
+    </resultMap>
+
+    <select id="findByDocumentIdAndType" resultMap="revisionMap">
+        SELECT * FROM document_revisions
+        WHERE document_id = #{documentId} AND document_type = #{documentType}
+        ORDER BY revised_at DESC
+    </select>
+
+    <insert id="insert" parameterType="com.middleware.manager.domain.DocumentRevision" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO document_revisions (document_id, document_type, version, content, rendered_content,
+                                        revision_comment, revised_by, revised_at, category, software)
+        VALUES (#{documentId}, #{documentType}, #{version}, #{content}, #{renderedContent},
+                #{revisionComment}, #{revisedBy}, #{revisedAt}, #{category}, #{software})
+    </insert>
+
+</mapper>

@@ -648,6 +648,7 @@
                             <button v-if="doc.availableActions?.includes('submit-review')" class="ghost" @click="submitForReview(doc)">提交审核</button>
                             <button v-if="doc.availableActions?.includes('start-modify')" class="ghost" @click="startModify(doc)">开始修改</button>
                             <button v-if="doc.availableActions?.includes('cancel-modify')" class="ghost" @click="cancelModify(doc)">取消修改</button>
+                            <button v-if="doc.status === 'PUBLISHED'" class="ghost" @click="openRevisionHistory(doc, 'PARAMETER_STANDARD')">修订历史</button>
                             <button v-if="doc.availableActions?.includes('delete')" class="ghost danger" @click="confirmDeleteDoc(doc)">删除</button>
                           </td>
                         </tr>
@@ -769,6 +770,7 @@
                       <button v-if="doc.availableActions?.includes('submit-review')" class="ghost" @click="submitForReview(doc)">提交审核</button>
                       <button v-if="doc.availableActions?.includes('start-modify')" class="ghost" @click="startModify(doc)">开始修改</button>
                       <button v-if="doc.availableActions?.includes('cancel-modify')" class="ghost" @click="cancelModify(doc)">取消修改</button>
+                      <button v-if="doc.status === 'PUBLISHED'" class="ghost" @click="openRevisionHistory(doc, doc.documentType || 'MANUAL')">修订历史</button>
                       <button v-if="doc.availableActions?.includes('delete')" class="ghost danger" @click="confirmDeleteDoc(doc)">删除</button>
                     </article>
                     <p v-if="pagedMaintenanceDocuments.length === 0" class="empty-state">暂无文档，点击"新增文档"创建手册或文章。</p>
@@ -1131,6 +1133,30 @@
       </article>
     </div>
 
+    <div v-if="showRevisionModal" class="modal-backdrop" @click.self="closeRevisionModal()">
+      <article class="modal-panel review-detail-modal">
+        <div class="panel-title">
+          <h3>{{ revisionDocTitle }} - 修订历史</h3>
+          <button type="button" class="ghost" @click="closeRevisionModal()">关闭</button>
+        </div>
+        <div v-if="revisionList.length === 0" class="empty-state" style="padding:40px 0">暂无修订记录</div>
+        <div v-else class="revision-list">
+          <div v-for="rev in revisionList" :key="rev.id" class="revision-item">
+            <div class="revision-header">
+              <span class="revision-version">V{{ rev.version }}</span>
+              <span class="revision-time">{{ formatTime(rev.revisedAt) }}</span>
+              <span class="revision-author">审核人：{{ rev.revisedBy || '-' }}</span>
+            </div>
+            <p v-if="rev.revisionComment" class="revision-comment">审核意见：{{ rev.revisionComment }}</p>
+            <details class="revision-content-detail">
+              <summary>查看内容</summary>
+              <pre class="revision-content">{{ rev.content }}</pre>
+            </details>
+          </div>
+        </div>
+      </article>
+    </div>
+
     <div v-if="selectedReview" class="modal-backdrop" @click.self="closeReviewDetail()">
       <article class="modal-panel review-detail-modal">
         <div class="panel-title">
@@ -1267,6 +1293,11 @@ const selectedReviewDiff = ref('')
 const diffLines = computed(() => selectedReviewDiff.value ? selectedReviewDiff.value.split('\n') : [])
 const reviewFilters = reactive({ status: '' })
 const reviewPage = reactive({ page: 0, size: 10 })
+
+// ── 修订历史 ──
+const revisionList = ref([])
+const showRevisionModal = ref(false)
+const revisionDocTitle = ref('')
 
 // ── 系统设置 ──
 const systemSettings = reactive({ 'knowledge-enabled': 'true', 'diagnostics-enabled': 'true' })
@@ -2841,6 +2872,22 @@ async function openReviewDetail(record) {
 function closeReviewDetail() {
   selectedReview.value = null
   selectedReviewDiff.value = ''
+}
+
+async function openRevisionHistory(doc, documentType) {
+  revisionDocTitle.value = doc.title || doc.software || '文档'
+  try {
+    const list = await request(`/api/admin/revisions?documentId=${doc.id}&documentType=${encodeURIComponent(documentType)}`)
+    revisionList.value = Array.isArray(list) ? list : []
+    showRevisionModal.value = true
+  } catch (error) {
+    notify(error.message || '加载修订历史失败', 'error')
+  }
+}
+
+function closeRevisionModal() {
+  showRevisionModal.value = false
+  revisionList.value = []
 }
 
 async function reviewApprove(record) {

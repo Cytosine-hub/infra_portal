@@ -2507,3 +2507,61 @@ td.row-actions {
   font-size: 12px;
   color: #9ca3af;
 }
+
+/* 修订历史 */
+.revision-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.revision-item {
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e3e9f1;
+  border-radius: 8px;
+}
+.revision-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+.revision-version {
+  font-weight: 600;
+  color: #1a56db;
+  font-size: 14px;
+}
+.revision-time {
+  font-size: 13px;
+  color: #656d76;
+}
+.revision-author {
+  font-size: 13px;
+  color: #656d76;
+}
+.revision-comment {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #475569;
+}
+.revision-content-detail {
+  margin-top: 8px;
+}
+.revision-content-detail summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: #1a56db;
+  user-select: none;
+}
+.revision-content {
+  margin-top: 8px;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e3e9f1;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+}

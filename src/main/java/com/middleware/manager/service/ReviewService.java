@@ -1,8 +1,10 @@
 package com.middleware.manager.service;
 
+import com.middleware.manager.domain.DocumentRevision;
 import com.middleware.manager.domain.ParameterStandard;
 import com.middleware.manager.domain.ReviewRecord;
 import com.middleware.manager.domain.StandardDocument;
+import com.middleware.manager.repository.DocumentRevisionMapper;
 import com.middleware.manager.repository.ReviewRecordMapper;
 import com.middleware.manager.security.PermissionService;
 import com.middleware.manager.web.api.dto.ReviewResponse;
@@ -21,15 +23,18 @@ public class ReviewService {
     private final StandardDocumentService documentService;
     private final ParameterStandardService parameterStandardService;
     private final PermissionService permissionService;
+    private final DocumentRevisionMapper revisionMapper;
 
     public ReviewService(ReviewRecordMapper mapper,
                          StandardDocumentService documentService,
                          ParameterStandardService parameterStandardService,
-                         PermissionService permissionService) {
+                         PermissionService permissionService,
+                         DocumentRevisionMapper revisionMapper) {
         this.mapper = mapper;
         this.documentService = documentService;
         this.parameterStandardService = parameterStandardService;
         this.permissionService = permissionService;
+        this.revisionMapper = revisionMapper;
     }
 
     public List<ReviewResponse> listReviews(Authentication authentication) {
@@ -63,6 +68,9 @@ public class ReviewService {
         record.setReviewedAt(LocalDateTime.now());
         record.setReviewComment(comment);
 
+        String publishedVersion;
+        String content;
+        String renderedContent;
         if ("PARAMETER_STANDARD".equals(record.getDocumentType())) {
             ParameterStandard ps = parameterStandardService.get(record.getDocumentId());
             ps.setPendingReviewRecordId(null);
@@ -73,6 +81,9 @@ public class ReviewService {
             } else {
                 ps.setVersion(VersionManager.toPublishedVersion(ps.getVersion()));
             }
+            publishedVersion = ps.getVersion();
+            content = ps.getContent();
+            renderedContent = ps.getRenderedContent();
             ps.setPreviousContent(null);
             parameterStandardService.save(ps);
         } else {
@@ -83,6 +94,9 @@ public class ReviewService {
             } else {
                 doc.setVersion(VersionManager.toPublishedVersion(doc.getVersion()));
             }
+            publishedVersion = doc.getVersion();
+            content = doc.getContent();
+            renderedContent = doc.getRenderedContent();
             doc.setStatus("PUBLISHED");
             doc.setPublishedAt(LocalDateTime.now());
             doc.setPreviousContent(record.getCurrentContent());
@@ -91,6 +105,20 @@ public class ReviewService {
             doc.setReviewComment(comment);
             documentService.save(doc);
         }
+
+        // 创建修订记录
+        DocumentRevision revision = new DocumentRevision();
+        revision.setDocumentId(record.getDocumentId());
+        revision.setDocumentType(record.getDocumentType());
+        revision.setVersion(publishedVersion);
+        revision.setContent(content);
+        revision.setRenderedContent(renderedContent);
+        revision.setRevisionComment(comment);
+        revision.setRevisedBy(reviewer);
+        revision.setRevisedAt(LocalDateTime.now());
+        revision.setCategory(record.getCategory());
+        revision.setSoftware(record.getSoftware());
+        revisionMapper.insert(revision);
 
         mapper.update(record);
         return ReviewResponse.from(record);

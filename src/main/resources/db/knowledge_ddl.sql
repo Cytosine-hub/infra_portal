@@ -89,3 +89,19 @@ CREATE TABLE IF NOT EXISTS system_settings (
 INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES
 ('knowledge-enabled', 'true', '知识库模块开关'),
 ('diagnostics-enabled', 'true', '智能排查模块开关');
+
+-- 文档修订记录表
+CREATE TABLE IF NOT EXISTS document_revisions (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    document_id BIGINT NOT NULL COMMENT '文档ID',
+    document_type VARCHAR(40) NOT NULL COMMENT 'PARAMETER_STANDARD 或文档类型(MANUAL/ARTICLE)',
+    version VARCHAR(20) NOT NULL COMMENT '发布版本号',
+    content TEXT COMMENT '修订时的完整内容',
+    rendered_content TEXT COMMENT '渲染后内容',
+    revision_comment VARCHAR(1000) COMMENT '修订说明/审核意见',
+    revised_by VARCHAR(80) COMMENT '审核人',
+    revised_at DATETIME NOT NULL COMMENT '修订（发布）时间',
+    category VARCHAR(60),
+    software VARCHAR(120),
+    INDEX idx_doc (document_id, document_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档修订记录';
