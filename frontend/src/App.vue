@@ -1145,13 +1145,16 @@
             <div class="revision-header">
               <span class="revision-version">V{{ rev.version }}</span>
               <span class="revision-time">{{ formatTime(rev.revisedAt) }}</span>
-              <span class="revision-author">审核人：{{ rev.revisedBy || '-' }}</span>
+              <span class="revision-author">修订人：{{ rev.revisedBy || '-' }}</span>
             </div>
             <p v-if="rev.revisionComment" class="revision-comment">审核意见：{{ rev.revisionComment }}</p>
-            <div class="revision-content-block">
-              <div v-if="rev.content" class="revision-rendered" v-html="renderMarkdown(rev.content)"></div>
-              <div v-else class="empty-state" style="padding:12px 0;font-size:13px">无内容快照</div>
-            </div>
+            <details class="revision-content-detail">
+              <summary>查看修订详情</summary>
+              <div class="revision-content-block">
+                <div v-if="rev.content" class="revision-rendered" v-html="renderMarkdown(rev.content)"></div>
+                <div v-else class="empty-state" style="padding:12px 0;font-size:13px">无内容快照</div>
+              </div>
+            </details>
           </div>
         </div>
       </article>
