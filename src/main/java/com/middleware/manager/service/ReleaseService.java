@@ -75,6 +75,14 @@ public class ReleaseService {
         return asset;
     }
 
+    public ReleaseAsset getPublishedReleaseByNameAndFile(String middlewareName, String fileName) {
+        ReleaseAsset asset = releaseAssetMapper.findByMiddlewareNameAndOriginalFileNameAndPublishedTrue(middlewareName, fileName);
+        if (asset == null) {
+            throw new IllegalArgumentException("资源不存在或未发布");
+        }
+        return asset;
+    }
+
     public ReleaseAsset getPublishedRelease(String token) {
         ReleaseAsset asset = releaseAssetMapper.findByDownloadTokenAndPublishedTrue(token);
         if (asset == null) {

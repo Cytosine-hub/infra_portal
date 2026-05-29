@@ -36,4 +36,7 @@ public interface ReleaseAssetMapper {
     int incrementDownloadCount(@Param("id") Long id);
 
     List<ReleaseAsset> findByParameterStandardId(@Param("parameterStandardId") Long parameterStandardId);
+
+    ReleaseAsset findByMiddlewareNameAndOriginalFileNameAndPublishedTrue(@Param("middlewareName") String middlewareName,
+                                                                        @Param("originalFileName") String originalFileName);
 }

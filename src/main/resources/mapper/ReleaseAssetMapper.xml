@@ -35,6 +35,9 @@
     <select id="findByParameterStandardId" resultType="ReleaseAsset">
         SELECT * FROM release_assets WHERE parameter_standard_id = #{parameterStandardId} AND standard_package = true
     </select>
+    <select id="findByMiddlewareNameAndOriginalFileNameAndPublishedTrue" resultType="ReleaseAsset">
+        SELECT * FROM release_assets WHERE LOWER(middleware_name) = LOWER(#{middlewareName}) AND LOWER(original_file_name) = LOWER(#{originalFileName}) AND published = true LIMIT 1
+    </select>
     <delete id="deleteById">DELETE FROM release_assets WHERE id=#{id}</delete>
     <update id="incrementDownloadCount">UPDATE release_assets SET download_count = download_count + 1 WHERE id = #{id}</update>
 </mapper>
