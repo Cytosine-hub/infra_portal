@@ -66,3 +66,26 @@ DELETE FROM standard_documents WHERE document_type = 'STANDARD';
 -- ALTER TABLE parameter_standards ADD COLUMN pending_review_record_id BIGINT COMMENT '待审核记录ID';
 -- ALTER TABLE parameter_standards ADD COLUMN previous_content TEXT COMMENT '修改前内容备份';
 -- ALTER TABLE parameter_standards ADD COLUMN version VARCHAR(20) COMMENT '版本号';
+
+-- 角色表
+CREATE TABLE IF NOT EXISTS roles (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    display_name VARCHAR(50) NOT NULL UNIQUE COMMENT '角色显示名称',
+    authority VARCHAR(80) NOT NULL UNIQUE COMMENT 'Spring Security authority',
+    managed_category VARCHAR(60) COMMENT '管理的分类',
+    category_admin BOOLEAN NOT NULL DEFAULT false COMMENT '是否为专业管理员（有审批权）',
+    system_role BOOLEAN NOT NULL DEFAULT false COMMENT '是否为系统内置角色',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='角色';
+
+-- 系统设置表
+CREATE TABLE IF NOT EXISTS system_settings (
+    setting_key VARCHAR(100) PRIMARY KEY COMMENT '设置键',
+    setting_value VARCHAR(500) NOT NULL COMMENT '设置值',
+    description VARCHAR(200) COMMENT '说明',
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统设置';
+
+INSERT IGNORE INTO system_settings (setting_key, setting_value, description) VALUES
+('knowledge-enabled', 'true', '知识库模块开关'),
+('diagnostics-enabled', 'true', '智能排查模块开关');

@@ -3,6 +3,7 @@
 <mapper namespace="com.middleware.manager.repository.ForumPostMapper">
     <select id="findById" resultType="ForumPost">SELECT * FROM forum_posts WHERE id = #{id}</select>
     <select id="findByStatusOrderByCreatedAtDesc" resultType="ForumPost">SELECT * FROM forum_posts WHERE status = #{status} ORDER BY created_at DESC</select>
+    <select id="findByAuthorUsernameOrderByCreatedAtDesc" resultType="ForumPost">SELECT * FROM forum_posts WHERE author_username = #{authorUsername} ORDER BY created_at DESC</select>
     <select id="search" resultType="ForumPost">
         SELECT DISTINCT p.* FROM forum_posts p
         LEFT JOIN forum_post_tags fpt ON p.id = fpt.post_id

@@ -6,6 +6,7 @@
         <input v-model.trim="keyword" placeholder="搜索文章标题或内容..." @keyup.enter="search" />
         <button @click="search">搜索</button>
         <button v-if="auth.token" class="primary-btn" @click="$emit('newPost')">发表文章</button>
+        <button v-if="auth.token" class="ghost" @click="$emit('goMine')">个人中心</button>
       </div>
     </div>
 
@@ -58,7 +59,7 @@ import { onMounted, ref, watch } from 'vue'
 import { request } from '../api'
 
 const props = defineProps({ auth: Object })
-const emit = defineEmits(['openPost', 'newPost'])
+const emit = defineEmits(['openPost', 'newPost', 'goMine'])
 
 const posts = ref([])
 const tags = ref([])

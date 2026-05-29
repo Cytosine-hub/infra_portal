@@ -11,6 +11,8 @@ public interface ForumPostMapper {
 
     List<ForumPost> findByStatusOrderByCreatedAtDesc(String status);
 
+    List<ForumPost> findByAuthorUsernameOrderByCreatedAtDesc(String authorUsername);
+
     /**
      * Fulltext search with optional tag filter.
      * Uses MATCH(...) AGAINST(...) IN BOOLEAN MODE for keyword search.

@@ -54,20 +54,28 @@ DDL 脚本：`src/main/resources/db/knowledge_ddl.sql`
 
 HTTP Basic Auth. Password stored as `{bcrypt}...` in `admin_accounts` table. Frontend SHA-256 hashes the password before base64-encoding for the Authorization header.
 
-**8 roles** (from `security/Role.java`):
+**14 roles** (from `security/Role.java`):
 
 | Role | Authority | Managed Category | Capabilities |
 |------|-----------|-----------------|--------------|
-| 系统管理员 | `ROLE_SYS_ADMIN` | * (all) | Full access, user management |
-| 中间件管理岗 | `ROLE_MIDDLEWARE_MGR` | 中间件 | Admin CRUD for middleware category |
-| 数据库管理岗 | `ROLE_DATABASE_MGR` | 数据库 | Admin CRUD for database category |
-| 主机管理岗 | `ROLE_HOST_MGR` | 主机 | Admin CRUD for host category |
-| 网络管理岗 | `ROLE_NETWORK_MGR` | 网络 | Admin CRUD for network category |
-| 网络安全岗 | `ROLE_SECURITY_MGR` | 安全 | Admin CRUD for security category |
+| 系统管理员 | `ROLE_SYS_ADMIN` | * (all) | Full access, user management, system settings |
+| 中间件管理员 | `ROLE_MIDDLEWARE_ADMIN` | 中间件 | CRUD + review for middleware category |
+| 数据库管理员 | `ROLE_DATABASE_ADMIN` | 数据库 | CRUD + review for database category |
+| 主机管理员 | `ROLE_HOST_ADMIN` | 主机 | CRUD + review for host category |
+| 网络管理员 | `ROLE_NETWORK_ADMIN` | 网络 | CRUD + review for network category |
+| 网络安全管理员 | `ROLE_SECURITY_ADMIN` | 安全 | CRUD + review for security category |
+| 中间件管理岗 | `ROLE_MIDDLEWARE_MGR` | 中间件 | CRUD only for middleware category |
+| 数据库管理岗 | `ROLE_DATABASE_MGR` | 数据库 | CRUD only for database category |
+| 主机管理岗 | `ROLE_HOST_MGR` | 主机 | CRUD only for host category |
+| 网络管理岗 | `ROLE_NETWORK_MGR` | 网络 | CRUD only for network category |
+| 网络安全岗 | `ROLE_SECURITY_MGR` | 安全 | CRUD only for security category |
 | 开发经理 | `ROLE_DEV_MGR` | — | Read-only, redirected to home |
 | 运维经理 | `ROLE_OPS_MGR` | — | Read-only, redirected to home |
 
-Managers are scoped to their category — they can only manage releases/types/standards within their category. `PermissionService.getManagedCategory()` enforces this.
+- **管理员** (`isCategoryAdmin`): can modify + approve/reject reviews for their category
+- **管理岗** (`isManagement`): can modify only, no review permission
+- `PermissionService.canReview(auth, category)` enforces category-scoped review
+- `system_settings` table stores module switches (knowledge-enabled, diagnostics-enabled)
 
 ## Key domain model relationships
 

@@ -33,7 +33,8 @@ public class SecurityConfig {
                         .requestMatchers("/files/images/**").permitAll()
                         // 文件下载：需登录
                         .requestMatchers("/files/**").authenticated()
-                        // 论坛：读公开，写需登录
+                        // 论坛：个人中心需认证，其余读公开，写需登录
+                        .requestMatchers("/api/forum/my-posts").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/forum/**").permitAll()
                         .requestMatchers("/api/forum/**").authenticated()
                         // 公开接口
@@ -45,8 +46,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").authenticated()
                         // 用户管理：仅系统管理员
                         .requestMatchers("/api/admin/users/**").hasRole("SYS_ADMIN")
-                        // 管理后台：管理员+管理岗
-                        .requestMatchers("/api/admin/**").hasAnyRole("SYS_ADMIN", "MIDDLEWARE_MGR", "DATABASE_MGR", "HOST_MGR", "NETWORK_MGR", "SECURITY_MGR")
+                        // 管理后台：系统管理员+专业管理员+管理岗
+                        .requestMatchers("/api/admin/**").hasAnyRole("SYS_ADMIN",
+                                "MIDDLEWARE_ADMIN", "DATABASE_ADMIN", "HOST_ADMIN", "NETWORK_ADMIN", "SECURITY_ADMIN",
+                                "MIDDLEWARE_MGR", "DATABASE_MGR", "HOST_MGR", "NETWORK_MGR", "SECURITY_MGR")
                         .anyRequest().authenticated())
                 .httpBasic(basic -> basic
                         .authenticationEntryPoint((request, response, authException) ->

@@ -1,37 +1,44 @@
 package com.middleware.manager.security;
 
+import com.middleware.manager.domain.RoleEntity;
+import com.middleware.manager.service.RoleService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 
 @Service
 public class PermissionService {
+    private final RoleService roleService;
 
-    public Role getCurrentRole(Authentication authentication) {
+    public PermissionService(RoleService roleService) {
+        this.roleService = roleService;
+    }
+
+    public RoleEntity getCurrentRole(Authentication authentication) {
         if (authentication == null || authentication.getAuthorities() == null) {
             return null;
         }
         for (GrantedAuthority authority : authentication.getAuthorities()) {
-            try {
-                return Role.fromAuthority(authority.getAuthority());
-            } catch (IllegalArgumentException ignored) {
-            }
+            RoleEntity role = roleService.getByAuthority(authority.getAuthority());
+            if (role != null) return role;
         }
         return null;
     }
 
     public boolean isAdmin(Authentication authentication) {
-        Role role = getCurrentRole(authentication);
-        return role != null && role.isAdmin();
+        return roleService.isAdmin(getCurrentRole(authentication));
+    }
+
+    public boolean isCategoryAdmin(Authentication authentication) {
+        return roleService.isCategoryAdmin(getCurrentRole(authentication));
     }
 
     public boolean canManageCategory(Authentication authentication, String category) {
-        Role role = getCurrentRole(authentication);
-        return role != null && role.canManageCategory(category);
+        return roleService.canManageCategory(getCurrentRole(authentication), category);
     }
 
     public String getManagedCategory(Authentication authentication) {
-        Role role = getCurrentRole(authentication);
+        RoleEntity role = getCurrentRole(authentication);
         return role != null ? role.getManagedCategory() : null;
     }
 
@@ -43,7 +50,12 @@ public class PermissionService {
         return category;
     }
 
-    public boolean canReview(Authentication authentication) {
-        return isAdmin(authentication);
+    public boolean canReview(Authentication authentication, String category) {
+        return roleService.canReviewCategory(getCurrentRole(authentication), category);
+    }
+
+    public boolean canReviewAny(Authentication authentication) {
+        RoleEntity role = getCurrentRole(authentication);
+        return role != null && (roleService.isAdmin(role) || roleService.isCategoryAdmin(role));
     }
 }

@@ -13,6 +13,8 @@ public interface ReviewRecordMapper {
 
     List<ReviewRecord> findAllByOrderBySubmittedAtDesc();
 
+    List<ReviewRecord> findByCategoryOrderBySubmittedAtDesc(String category);
+
     List<ReviewRecord> findByDocumentIdAndStatus(@Param("documentId") Long documentId, @Param("status") String status);
 
     ReviewRecord findById(Long id);

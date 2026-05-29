@@ -1,12 +1,13 @@
 package com.middleware.manager.service;
 
 import com.middleware.manager.domain.AdminAccount;
+import com.middleware.manager.domain.RoleEntity;
 import com.middleware.manager.repository.AdminAccountMapper;
-import com.middleware.manager.security.Role;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -23,16 +24,20 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
+@Order(1)
 public class AdminAccountService implements UserDetailsService, ApplicationRunner {
 
     private final AdminAccountMapper mapper;
+    private final RoleService roleService;
     private final PasswordEncoder passwordEncoder;
     private final String defaultPassword;
 
     public AdminAccountService(AdminAccountMapper mapper,
+                               RoleService roleService,
                                PasswordEncoder passwordEncoder,
                                @Value("${app.security.admin.default-password:admin123}") String defaultPassword) {
         this.mapper = mapper;
+        this.roleService = roleService;
         this.passwordEncoder = passwordEncoder;
         this.defaultPassword = defaultPassword;
     }
@@ -50,9 +55,10 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
             throw new UsernameNotFoundException("账号不存在");
         }
 
-        Role role = Role.fromDisplayName(account.getRole());
+        RoleEntity role = roleService.getByDisplayName(account.getRole());
+        String authority = role != null ? role.getAuthority() : "ROLE_DEV_MGR";
         return new User(account.getUsername(), account.getPasswordHash(),
-                AuthorityUtils.createAuthorityList(role.getAuthority()));
+                AuthorityUtils.createAuthorityList(authority));
     }
 
     @Transactional
@@ -97,7 +103,9 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
         if (mapper.findByUsername(username) != null) {
             throw new IllegalArgumentException("账号已存在");
         }
-        Role.fromDisplayName(role);
+        if (roleService.getByDisplayName(role) == null) {
+            throw new IllegalArgumentException("未知角色: " + role);
+        }
         AdminAccount account = new AdminAccount();
         account.setUsername(username);
         account.setDisplayName(displayName != null ? displayName : username);
@@ -127,7 +135,9 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
 
     @Transactional
     public AdminAccount updateUserRole(Long userId, String newRole) {
-        Role.fromDisplayName(newRole);
+        if (roleService.getByDisplayName(newRole) == null) {
+            throw new IllegalArgumentException("未知角色: " + newRole);
+        }
         AdminAccount account = mapper.findById(userId);
         if (account == null) {
             throw new IllegalArgumentException("用户不存在");
@@ -155,11 +165,16 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
 
         String[][] defaultAccounts = {
             {"系统管理员", "sysadmin", "系统管理员"},
-            {"中间件管理岗", "mwadmin", "中间件管理员"},
-            {"数据库管理岗", "dbadmin", "数据库管理员"},
-            {"主机管理岗", "hostadmin", "主机管理员"},
-            {"网络管理岗", "netadmin", "网络管理员"},
-            {"网络安全岗", "secadmin", "安全管理员"},
+            {"中间件管理员", "mwadmin", "中间件管理员"},
+            {"数据库管理员", "dbadmin", "数据库管理员"},
+            {"主机管理员", "hostadmin", "主机管理员"},
+            {"网络管理员", "netadmin", "网络管理员"},
+            {"网络安全管理员", "secadmin", "安全管理员"},
+            {"中间件管理岗", "mwmgr", "中间件管理岗"},
+            {"数据库管理岗", "dbmgr", "数据库管理岗"},
+            {"主机管理岗", "hostmgr", "主机管理岗"},
+            {"网络管理岗", "netmgr", "网络管理岗"},
+            {"网络安全岗", "secmgr", "网络安全管理岗"},
             {"开发经理", "devmgr", "开发经理"},
             {"运维经理", "opsmgr", "运维经理"},
         };

@@ -33,10 +33,12 @@ public class ReviewService {
     }
 
     public List<ReviewResponse> listReviews(Authentication authentication) {
-        boolean isAdmin = permissionService.isAdmin(authentication);
         List<ReviewRecord> records;
-        if (isAdmin) {
+        if (permissionService.isAdmin(authentication)) {
             records = mapper.findAllByOrderBySubmittedAtDesc();
+        } else if (permissionService.isCategoryAdmin(authentication)) {
+            String category = permissionService.getManagedCategory(authentication);
+            records = mapper.findByCategoryOrderBySubmittedAtDesc(category);
         } else {
             records = mapper.findBySubmitterUsernameOrderBySubmittedAtDesc(authentication.getName());
         }

@@ -101,6 +101,22 @@ public class ForumController {
         return forumService.getAllTags().stream().map(this::toTagMap).collect(Collectors.toList());
     }
 
+    @GetMapping("/my-posts")
+    public PageResult<Map<String, Object>> myPosts(@RequestParam(defaultValue = "0") int page,
+                                                   @RequestParam(defaultValue = "12") int size,
+                                                   Authentication auth) {
+        var p = forumService.listPostsByAuthor(auth.getName(), page, size);
+        PageResult<Map<String, Object>> result = new PageResult<>();
+        result.setContent(p.getList().stream().map(this::toSummary).collect(Collectors.toList()));
+        result.setPage(p.getPageNum() - 1);
+        result.setSize(p.getPageSize());
+        result.setTotalElements(p.getTotal());
+        result.setTotalPages(p.getPages());
+        result.setFirst(p.isIsFirstPage());
+        result.setLast(p.isIsLastPage());
+        return result;
+    }
+
     private Map<String, Object> toSummary(ForumPost p) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", p.getId()); m.put("title", p.getTitle());

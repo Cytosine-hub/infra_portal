@@ -328,6 +328,7 @@
           :auth="auth"
           @open-post="goForumPost"
           @new-post="goForumNew"
+          @go-mine="goForumMine"
         />
       </section>
       <section v-else-if="route.name === 'forumDetail'" class="workspace">
@@ -349,6 +350,15 @@
           :notify="notify"
           @saved="onForumPostSaved"
           @cancel="goForum"
+        />
+      </section>
+      <section v-else-if="route.name === 'forumMine'" class="workspace">
+        <ForumPersonalCenter
+          :auth="auth"
+          :notify="notify"
+          @back="goForum"
+          @open-post="goForumPost"
+          @edit-post="goForumEdit"
         />
       </section>
 
@@ -451,6 +461,7 @@
                 <button :class="{ active: adminSection === 'documentMaintenance' }" @click="switchAdminSection('documentMaintenance')">标准文档</button>
                 <button :class="{ active: adminSection === 'reviews' }" @click="switchAdminSection('reviews')">审核管理</button>
                 <button v-if="isSysAdmin" :class="{ active: adminSection === 'users' }" @click="switchAdminSection('users')">用户管理</button>
+                <button v-if="isSysAdmin" :class="{ active: adminSection === 'settings' }" @click="switchAdminSection('settings')">系统设置</button>
               </nav>
               <div class="sidebar-actions">
                 <button class="ghost" @click="showPassword = !showPassword">修改密码</button>
@@ -699,7 +710,7 @@
                         <p>提交人：{{ record.submitterDisplayName || record.submitterUsername }} · {{ formatTime(record.submittedAt) }}</p>
                       </div>
                       <button class="ghost" @click="openReviewDetail(record)">查看</button>
-                      <button v-if="record.status === 'PENDING' && isSysAdmin" class="ghost" @click="openReviewDetail(record)">审核</button>
+                      <button v-if="record.status === 'PENDING' && (isSysAdmin || (isCategoryAdmin && managedCategory === record.category))" class="ghost" @click="openReviewDetail(record)">审核</button>
                     </article>
                     <p v-if="pagedReviews.length === 0" class="empty-state">暂无审核记录。</p>
                   </div>
@@ -763,6 +774,28 @@
                     <p v-if="pagedMaintenanceDocuments.length === 0" class="empty-state">暂无文档，点击"新增文档"创建手册或文章。</p>
                   </div>
                   <Pagination :page="maintenanceDocumentPage" @change="changeMaintenanceDocumentPage" />
+                </div>
+              </section>
+              <section v-else-if="adminSection === 'settings'" class="utility-panel type-panel">
+                <div class="settings-panel">
+                  <h3>模块开关</h3>
+                  <div class="setting-item">
+                    <label class="setting-label">
+                      <input type="checkbox" v-model="systemSettings['knowledge-enabled']" true-value="true" false-value="false" />
+                      <span>知识库模块</span>
+                    </label>
+                    <p class="setting-desc">开启后用户可使用知识库上传文档、语义检索等功能</p>
+                  </div>
+                  <div class="setting-item">
+                    <label class="setting-label">
+                      <input type="checkbox" v-model="systemSettings['diagnostics-enabled']" true-value="true" false-value="false" />
+                      <span>智能排查模块</span>
+                    </label>
+                    <p class="setting-desc">开启后用户可使用 AI 智能排查和运维助手功能</p>
+                  </div>
+                  <div class="form-actions" style="margin-top:20px">
+                    <button @click="saveSystemSettings()">保存设置</button>
+                  </div>
                 </div>
               </section>
             </section>
@@ -1118,7 +1151,7 @@
           <pre class="diff-content"><template v-for="(line, idx) in diffLines" :key="idx"><span :class="['diff-line', line.startsWith('+') ? 'diff-line-add' : line.startsWith('-') ? 'diff-line-del' : line.startsWith('@@') ? 'diff-line-info' : '' ]">{{ line }}</span>
 </template></pre>
         </div>
-        <div v-if="selectedReview.status === 'PENDING' && isSysAdmin" class="review-actions-panel">
+        <div v-if="selectedReview.status === 'PENDING' && (isSysAdmin || (isCategoryAdmin && managedCategory === selectedReview.category))" class="review-actions-panel">
           <div class="form-grid single">
             <label>审核意见<textarea v-model.trim="reviewComment" maxlength="1000" placeholder="请输入审核意见（可选）" /></label>
           </div>
@@ -1155,6 +1188,7 @@ import DocumentEditor from './components/DocumentEditor.vue'
 import ForumPostList from './components/ForumPostList.vue'
 import ForumPostDetail from './components/ForumPostDetail.vue'
 import ForumPostEditor from './components/ForumPostEditor.vue'
+import ForumPersonalCenter from './components/ForumPersonalCenter.vue'
 import KnowledgePanel from './components/KnowledgePanel.vue'
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue'
 
@@ -1234,6 +1268,9 @@ const diffLines = computed(() => selectedReviewDiff.value ? selectedReviewDiff.v
 const reviewFilters = reactive({ status: '' })
 const reviewPage = reactive({ page: 0, size: 10 })
 
+// ── 系统设置 ──
+const systemSettings = reactive({ 'knowledge-enabled': 'true', 'diagnostics-enabled': 'true' })
+
 const publicFilters = reactive({ keyword: '', platform: '', page: 0, size: 12 })
 const adminFilters = reactive({ keyword: '', platform: '', published: '', page: 0, size: 10 })
 const typeFilters = reactive({ category: '', name: '', page: 0, size: 10 })
@@ -1274,11 +1311,18 @@ const cmdForm = reactive(defaultCommandForm())
 // ── RBAC helpers ──
 const currentUserRole = computed(() => auth.user?.role || '')
 const isSysAdmin = computed(() => currentUserRole.value === '系统管理员')
+const isCategoryAdmin = computed(() => ['中间件管理员', '数据库管理员', '网络管理员', '主机管理员', '网络安全管理员'].includes(currentUserRole.value))
 const isManager = computed(() => ['中间件管理岗', '数据库管理岗', '主机管理岗', '网络管理岗', '网络安全岗'].includes(currentUserRole.value))
 const isReadOnly = computed(() => currentUserRole.value === '开发经理' || currentUserRole.value === '运维经理')
-const canAccessAdmin = computed(() => isSysAdmin.value || isManager.value)
+const canAccessAdmin = computed(() => isSysAdmin.value || isCategoryAdmin.value || isManager.value)
 const managedCategory = computed(() => {
-  const map = { '中间件管理岗': '中间件', '数据库管理岗': '数据库', '主机管理岗': '主机', '网络管理岗': '网络', '网络安全岗': '安全' }
+  const map = {
+    '中间件管理岗': '中间件', '中间件管理员': '中间件',
+    '数据库管理岗': '数据库', '数据库管理员': '数据库',
+    '主机管理岗': '主机', '主机管理员': '主机',
+    '网络管理岗': '网络', '网络管理员': '网络',
+    '网络安全岗': '安全', '网络安全管理员': '安全'
+  }
   return map[currentUserRole.value] || ''
 })
 
@@ -1289,6 +1333,7 @@ const adminSectionLabel = computed(() => {
   if (adminSection.value === 'standardPublish') return { eyebrow: 'Standards', title: '参数标准' }
   if (adminSection.value === 'documentMaintenance') return { eyebrow: 'Documents', title: '标准文档' }
   if (adminSection.value === 'reviews') return { eyebrow: 'Reviews', title: '审核管理' }
+  if (adminSection.value === 'settings') return { eyebrow: 'Settings', title: '系统设置' }
   return { eyebrow: 'Admin', title: '用户管理' }
 })
 const pageTitle = computed(() => {
@@ -1707,6 +1752,7 @@ function parseRoute() {
     return { name: 'documentEditor', documentId: editorMatch ? editorMatch[1] : null }
   }
   if (hash.startsWith('/admin')) return { name: 'admin', token: null }
+  if (hash === '/forum/mine') return { name: 'forumMine', postId: null }
   if (hash.startsWith('/forum/new')) return { name: 'forumEditor', postId: null }
   const forumEditMatch = hash.match(/^\/forum\/edit\/(\d+)$/)
   if (forumEditMatch) return { name: 'forumEditor', postId: forumEditMatch[1] }
@@ -2020,6 +2066,7 @@ function goForumNew() {
   window.location.hash = '#/forum/new'
 }
 function goForumEdit(id) { window.location.hash = `#/forum/edit/${id}` }
+function goForumMine() { window.location.hash = '#/forum/mine' }
 function goKnowledge() { window.location.hash = '#/knowledge' }
 function goDiagnostics() { window.location.hash = '#/diagnostics' }
 function goCommands() { window.location.hash = '#/commands' }
@@ -2199,6 +2246,8 @@ function switchAdminSection(section) {
     loadUsers()
   } else if (section === 'reviews') {
     loadReviews()
+  } else if (section === 'settings') {
+    loadSystemSettings()
   } else {
     loadAdmin()
     loadSoftwareTypes()
@@ -2759,6 +2808,23 @@ async function loadReviews() {
 
 function applyReviewFilters() {
   reviewPage.page = 0
+}
+
+async function loadSystemSettings() {
+  try {
+    const data = await request('/api/admin/settings')
+    Object.assign(systemSettings, data)
+  } catch {}
+}
+
+async function saveSystemSettings() {
+  try {
+    await request('/api/admin/settings', { method: 'PUT', body: systemSettings })
+    notify('系统设置已保存', 'success')
+    loadSiteConfig()
+  } catch (e) {
+    notify(e.message || '保存失败', 'error')
+  }
 }
 
 async function openReviewDetail(record) {

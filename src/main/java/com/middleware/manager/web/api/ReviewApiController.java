@@ -41,8 +41,9 @@ public class ReviewApiController {
     public ReviewResponse approve(@PathVariable Long id,
                                   @RequestBody(required = false) ReviewRequest request,
                                   Authentication authentication) {
-        if (!permissionService.canReview(authentication)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅系统管理员可审核");
+        ReviewResponse detail = reviewService.getReviewDetail(id);
+        if (!permissionService.canReview(authentication, detail.getCategory())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权审核此分类文档");
         }
         String reviewer = authentication.getName();
         String comment = request != null ? request.getComment() : null;
@@ -53,8 +54,9 @@ public class ReviewApiController {
     public ReviewResponse reject(@PathVariable Long id,
                                  @RequestBody(required = false) ReviewRequest request,
                                  Authentication authentication) {
-        if (!permissionService.canReview(authentication)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "仅系统管理员可审核");
+        ReviewResponse detail = reviewService.getReviewDetail(id);
+        if (!permissionService.canReview(authentication, detail.getCategory())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "无权审核此分类文档");
         }
         String reviewer = authentication.getName();
         String comment = request != null ? request.getComment() : null;

@@ -1,8 +1,9 @@
 package com.middleware.manager.web.api;
 
+import com.middleware.manager.domain.RoleEntity;
 import com.middleware.manager.security.PermissionService;
-import com.middleware.manager.security.Role;
 import com.middleware.manager.service.AdminAccountService;
+import com.middleware.manager.service.RoleService;
 import com.middleware.manager.web.api.dto.AuthResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,12 +29,14 @@ public class AuthApiController {
     private final AdminAccountService adminAccountService;
     private final PasswordEncoder passwordEncoder;
     private final PermissionService permissionService;
+    private final RoleService roleService;
 
     public AuthApiController(AdminAccountService adminAccountService, PasswordEncoder passwordEncoder,
-                             PermissionService permissionService) {
+                             PermissionService permissionService, RoleService roleService) {
         this.adminAccountService = adminAccountService;
         this.passwordEncoder = passwordEncoder;
         this.permissionService = permissionService;
+        this.roleService = roleService;
     }
 
     @GetMapping("/login")
@@ -53,15 +56,16 @@ public class AuthApiController {
         }
         String authority = user.getAuthorities().stream().findFirst()
                 .map(a -> a.getAuthority()).orElse("ROLE_SYS_ADMIN");
-        Role role = Role.fromAuthority(authority);
-        LOG.info("login success: username={} role={}", credentials.username, role.name());
-        return new AuthResponse(user.getUsername(), adminAccountService.getDisplayNameByUsername(user.getUsername()), role.name());
+        RoleEntity role = roleService.getByAuthority(authority);
+        String roleName = role != null ? role.getDisplayName() : "系统管理员";
+        LOG.info("login success: username={} role={}", credentials.username, roleName);
+        return new AuthResponse(user.getUsername(), adminAccountService.getDisplayNameByUsername(user.getUsername()), roleName);
     }
 
     @GetMapping("/me")
     public AuthResponse currentUser(Authentication authentication) {
-        Role role = permissionService.getCurrentRole(authentication);
-        return new AuthResponse(authentication.getName(), adminAccountService.getDisplayNameByUsername(authentication.getName()), role != null ? role.name() : "系统管理员");
+        RoleEntity role = permissionService.getCurrentRole(authentication);
+        return new AuthResponse(authentication.getName(), adminAccountService.getDisplayNameByUsername(authentication.getName()), role != null ? role.getDisplayName() : "系统管理员");
     }
 
     private Credentials parseBasicCredentials(String authorization) {

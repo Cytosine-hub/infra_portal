@@ -43,6 +43,13 @@ public class ForumService {
         return new PageInfo<>(posts);
     }
 
+    public PageInfo<ForumPost> listPostsByAuthor(String authorUsername, int page, int size) {
+        int s = Math.min(Math.max(size, 1), 50);
+        PageHelper.startPage(page + 1, s);
+        List<ForumPost> posts = postMapper.findByAuthorUsernameOrderByCreatedAtDesc(authorUsername);
+        return new PageInfo<>(posts);
+    }
+
     public ForumPost getPost(Long id) {
         ForumPost post = postMapper.findById(id);
         if (post == null) {

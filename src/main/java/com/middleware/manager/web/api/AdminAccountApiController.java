@@ -1,7 +1,7 @@
 package com.middleware.manager.web.api;
 
+import com.middleware.manager.domain.RoleEntity;
 import com.middleware.manager.security.PermissionService;
-import com.middleware.manager.security.Role;
 import com.middleware.manager.service.AdminAccountService;
 import com.middleware.manager.web.api.dto.AuthResponse;
 import com.middleware.manager.web.api.dto.PasswordRequest;
@@ -32,7 +32,7 @@ public class AdminAccountApiController {
         }
 
         adminAccountService.changePassword(authentication.getName(), request.getCurrentPassword(), request.getNewPassword());
-        Role role = permissionService.getCurrentRole(authentication);
-        return new AuthResponse(authentication.getName(), adminAccountService.getDisplayNameByUsername(authentication.getName()), role != null ? role.name() : "系统管理员");
+        RoleEntity role = permissionService.getCurrentRole(authentication);
+        return new AuthResponse(authentication.getName(), adminAccountService.getDisplayNameByUsername(authentication.getName()), role != null ? role.getDisplayName() : "系统管理员");
     }
 }
