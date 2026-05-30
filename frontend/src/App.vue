@@ -676,6 +676,8 @@
                     </div>
                     <div class="admin-actions">
                       <button type="button" class="ghost" @click="backToStandardList()">返回列表</button>
+                      <button type="button" class="ghost" @click="downloadParameterTemplate()">下载模板</button>
+                      <button v-if="selectedStandard.status !== 'PUBLISHED'" type="button" class="ghost" @click="showParamImportDialog = true">批量导入</button>
                       <button v-if="selectedStandard.status !== 'PUBLISHED'" type="button" @click="openCreateParameterDialog()">新增参数</button>
                     </div>
                   </div>
@@ -1014,6 +1016,36 @@
         <div class="form-actions">
           <button type="submit">保存</button>
           <button type="button" class="ghost" @click="closeParameterDialog()">取消</button>
+        </div>
+      </form>
+    </div>
+
+    <div v-if="showParamImportDialog" class="modal-backdrop" @click.self="showParamImportDialog = false">
+      <form class="modal-panel" @submit.prevent="importParameters">
+        <div class="panel-title">
+          <h3>批量导入参数</h3>
+          <button type="button" class="ghost" @click="showParamImportDialog = false">关闭</button>
+        </div>
+        <div class="form-grid single">
+          <p class="muted" style="margin:0 0 12px">请先下载模板，按格式填写后上传 Excel 文件。支持的列：参数编码、参数名称、参数值、分类、说明、是否启用（是/否）、是否部署标准（是/否）。</p>
+          <label class="file-field">选择 Excel 文件
+            <span class="file-control">
+              <input type="file" accept=".xlsx,.xls" @change="handleParamImportFileChange" required />
+              <span class="file-button">选择文件</span>
+              <span class="file-name">{{ paramImportFile?.name || '未选择文件' }}</span>
+            </span>
+          </label>
+        </div>
+        <div v-if="paramImportResult" class="import-result">
+          <p>导入完成：成功 <strong>{{ paramImportResult.imported }}</strong> 条，跳过 <strong>{{ paramImportResult.skipped }}</strong> 条</p>
+          <ul v-if="paramImportResult.errors.length > 0">
+            <li v-for="(err, idx) in paramImportResult.errors" :key="idx" class="import-error">{{ err }}</li>
+          </ul>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="ghost" @click="downloadParameterTemplate()">下载模板</button>
+          <button type="submit" :disabled="paramImporting">{{ paramImporting ? '导入中...' : '开始导入' }}</button>
+          <button type="button" class="ghost" @click="showParamImportDialog = false; paramImportResult = null">关闭</button>
         </div>
       </form>
     </div>
@@ -3071,6 +3103,70 @@ async function copyParameter(parameter) {
   const text = `{{${parameter.code}}}`
   await navigator.clipboard.writeText(text)
   notify(`已复制 ${text}`, 'success')
+}
+
+const showParamImportDialog = ref(false)
+const paramImportFile = ref(null)
+const paramImporting = ref(false)
+const paramImportResult = ref(null)
+
+function handleParamImportFileChange(e) {
+  paramImportFile.value = e.target.files[0] || null
+}
+
+function downloadParameterTemplate() {
+  fetch('/api/admin/standard-parameters/template', {
+    headers: { 'Authorization': `Basic ${auth.token}` }
+  }).then(res => res.blob()).then(blob => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'parameter-template.xlsx'
+    a.click()
+    URL.revokeObjectURL(url)
+  }).catch(() => notify('模板下载失败', 'error'))
+}
+
+async function importParameters() {
+  if (!paramImportFile.value) {
+    notify('请选择 Excel 文件', 'error')
+    return
+  }
+  const psId = selectedStandard.value?.id
+  if (!psId) {
+    notify('请先选择参数标准', 'error')
+    return
+  }
+  paramImporting.value = true
+  paramImportResult.value = null
+  try {
+    const formData = new FormData()
+    formData.append('file', paramImportFile.value)
+    formData.append('parameterStandardId', psId)
+    const res = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(JSON.parse(xhr.responseText))
+        } else {
+          reject(new Error('导入失败'))
+        }
+      }
+      xhr.onerror = () => reject(new Error('网络错误'))
+      xhr.open('POST', '/api/admin/standard-parameters/import')
+      xhr.setRequestHeader('Authorization', 'Basic ' + auth.token)
+      xhr.send(formData)
+    })
+    paramImportResult.value = res
+    await loadStandardParameters(psId)
+    if (res.skipped === 0) {
+      notify(`成功导入 ${res.imported} 条参数`, 'success')
+    }
+  } catch (error) {
+    notify(error.message || '导入失败', 'error')
+  } finally {
+    paramImporting.value = false
+  }
 }
 
 async function changePassword() {
