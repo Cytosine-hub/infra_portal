@@ -162,6 +162,14 @@ public class KnowledgeChunkRepository {
         );
     }
 
+    public List<KnowledgeChunk> findBySourceTitleAndSourceType(String sourceTitle, String sourceType) {
+        return jdbcTemplate.query(
+                "SELECT * FROM knowledge_chunks WHERE source_title = ? AND source_type = ? ORDER BY chunk_index",
+                rowMapper,
+                sourceTitle, sourceType
+        );
+    }
+
     public List<Map<String, Object>> findDistinctSources() {
         return jdbcTemplate.queryForList(
             "SELECT source_type, source_title, source_id, COUNT(*) as chunk_count, " +

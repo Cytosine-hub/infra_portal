@@ -27,13 +27,13 @@
           </div>
         </div>
         <div class="docs-list" v-if="kbDocs.length > 0">
-          <div v-for="(doc, idx) in kbDocs" :key="idx" class="doc-item">
+          <div v-for="(doc, idx) in kbDocs" :key="idx" class="doc-item" @click="handlePreviewDoc(doc)">
             <span class="doc-icon">{{ getDocIcon(doc.source_type) }}</span>
             <div class="doc-info">
               <span class="doc-title">{{ doc.source_title || '未知' }}</span>
               <span class="doc-meta">{{ doc.chunk_count }} 个切片 · {{ doc.source_type }}</span>
             </div>
-            <button class="danger ghost" @click="handleDeleteDoc(doc)">删除</button>
+            <button class="danger ghost" @click.stop="handleDeleteDoc(doc)">删除</button>
           </div>
         </div>
         <p v-else class="empty-state">暂无文档，请上传或导入。</p>
@@ -129,6 +129,24 @@
           </div>
         </div>
       </div>
+
+      <!-- 文档预览弹窗 -->
+      <div v-if="showPreviewModal" class="modal-backdrop" @click.self="showPreviewModal = false">
+        <div class="modal-panel preview-modal">
+          <h3>{{ previewDoc.title || '文档预览' }}</h3>
+          <p>{{ previewDoc.sourceType }} · {{ previewDoc.totalChunks }} 个切片</p>
+          <div v-if="previewLoading" class="empty-state">加载中...</div>
+          <div v-else class="preview-chunks">
+            <div v-for="(chunk, i) in previewDoc.chunks" :key="i" class="preview-chunk">
+              <div class="chunk-header">切片 #{{ chunk.chunkIndex + 1 }}</div>
+              <pre class="chunk-content">{{ chunk.content }}</pre>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button class="ghost" @click="showPreviewModal = false">关闭</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -172,6 +190,11 @@ const searched = ref(false)
 const kbDocs = ref([])
 const deleting = ref(false)
 
+// 文档预览
+const showPreviewModal = ref(false)
+const previewLoading = ref(false)
+const previewDoc = ref({ title: '', sourceType: '', chunks: [], totalChunks: 0 })
+
 // 知识图谱
 const graphContainer = ref(null)
 let graph = null
@@ -210,6 +233,22 @@ function getDocIcon(sourceType) {
   if (sourceType === 'UPLOAD') return '📄'
   if (sourceType === 'STANDARD_DOC') return '📋'
   return '📁'
+}
+
+async function handlePreviewDoc(doc) {
+  showPreviewModal.value = true
+  previewLoading.value = true
+  previewDoc.value = { title: doc.source_title, sourceType: doc.source_type, chunks: [], totalChunks: 0 }
+  try {
+    const q = `title=${encodeURIComponent(doc.source_title)}&sourceType=${encodeURIComponent(doc.source_type)}`
+    const data = await request(`/api/knowledge/docs/preview?${q}`)
+    previewDoc.value = data
+  } catch (e) {
+    props.notify('预览失败：' + (e.message || '未知错误'), 'error')
+    showPreviewModal.value = false
+  } finally {
+    previewLoading.value = false
+  }
 }
 
 function onFileChange(event) {
@@ -330,12 +369,12 @@ async function initGraph() {
       .backgroundColor('#1a2744')
       .nodeLabel(n => `${n.name} (${n.val}次)`)
       .nodeColor(n => n.group === 'keyword' ? '#4a9eff' : '#4aff8e')
-      .nodeVal(n => Math.max(n.val * 2, 3))
+      .nodeVal(n => Math.max(n.val * 0.6, 1.5))
       .nodeResolution(8)
-      .linkColor(() => 'rgba(255,255,255,0.15)')
-      .linkWidth(l => Math.max(l.value * 0.5, 0.3))
+      .linkColor(() => 'rgba(255,255,255,0.4)')
+      .linkWidth(l => Math.max(l.value * 1.5, 1))
       .linkDirectionalParticles(1)
-      .linkDirectionalParticleWidth(1)
+      .linkDirectionalParticleWidth(2)
       .linkDirectionalParticleColor(() => '#4a9eff')
       .onNodeClick(n => {
         if (n && n.x != null) {
@@ -453,7 +492,7 @@ async function initGraph() {
   transition: all 0.15s;
 }
 
-.doc-item:hover { background: #eef2f7; border-color: #c8d5e2; }
+.doc-item:hover { background: #eef2f7; border-color: #c8d5e2; cursor: pointer; }
 .doc-icon { font-size: 20px; }
 .doc-info { flex: 1; }
 .doc-title { display: block; font-size: 14px; font-weight: 500; color: #1e293b; }
@@ -700,6 +739,45 @@ async function initGraph() {
 
 .upload-results .success { color: #16a34a; margin-right: 12px; font-weight: 500; }
 .upload-results .error { color: #dc2626; font-weight: 500; }
+
+/* 文档预览 */
+.preview-modal {
+  min-width: 600px;
+  max-width: 800px;
+  max-height: 85vh;
+}
+
+.preview-chunks {
+  max-height: 55vh;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.preview-chunk {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.preview-chunk:last-child { border-bottom: none; }
+
+.chunk-header {
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.chunk-content {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-family: inherit;
+}
 
 /* 按钮复用全局样式 */
 .empty-state { color: #94a3b8; text-align: center; padding: 60px 0; font-size: 14px; }

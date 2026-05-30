@@ -1,5 +1,6 @@
 package com.middleware.manager.knowledge.web;
 
+import com.middleware.manager.knowledge.entity.KnowledgeChunk;
 import com.middleware.manager.knowledge.repository.KnowledgeChunkRepository;
 import com.middleware.manager.knowledge.service.KnowledgeService;
 import com.middleware.manager.knowledge.service.KnowledgeService.ImportResult;
@@ -18,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/knowledge")
@@ -118,6 +120,27 @@ public class KnowledgeController {
     @GetMapping("/docs")
     public ResponseEntity<List<Map<String, Object>>> listDocs() {
         return ResponseEntity.ok(chunkRepository.findDistinctSources());
+    }
+
+    /**
+     * GET /api/knowledge/docs/preview?title=xxx&sourceType=xxx
+     * Get all chunks of a document for preview.
+     */
+    @GetMapping("/docs/preview")
+    public ResponseEntity<?> previewDoc(@RequestParam String title, @RequestParam String sourceType) {
+        List<KnowledgeChunk> chunks = chunkRepository.findBySourceTitleAndSourceType(title, sourceType);
+        List<Map<String, Object>> result = chunks.stream().map(c -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("chunkIndex", c.getChunkIndex());
+            m.put("content", c.getContent());
+            return m;
+        }).collect(Collectors.toList());
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("title", title);
+        resp.put("sourceType", sourceType);
+        resp.put("chunks", result);
+        resp.put("totalChunks", result.size());
+        return ResponseEntity.ok(resp);
     }
 
     /**
