@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 public class MiddlewareCommand {
 
     private Long id;
-    private Long middlewareTypeId;
+    private Long softwareTypeId;
     private String commandFormat;
     private String briefDescription;
     private String detailedDescription;

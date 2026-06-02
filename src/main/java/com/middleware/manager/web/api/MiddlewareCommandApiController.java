@@ -1,7 +1,9 @@
 package com.middleware.manager.web.api;
 
 import com.middleware.manager.domain.MiddlewareCommand;
-import com.middleware.manager.domain.MiddlewareType;
+import com.middleware.manager.domain.SoftwareType;
+import com.middleware.manager.repository.SoftwareTypeMapper;
+import com.middleware.manager.security.PermissionService;
 import com.middleware.manager.service.MiddlewareCommandService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,34 +19,49 @@ import java.util.Map;
 public class MiddlewareCommandApiController {
 
     private final MiddlewareCommandService service;
+    private final PermissionService permissionService;
+    private final SoftwareTypeMapper softwareTypeMapper;
 
-    public MiddlewareCommandApiController(MiddlewareCommandService service) {
+    public MiddlewareCommandApiController(MiddlewareCommandService service,
+                                          PermissionService permissionService,
+                                          SoftwareTypeMapper softwareTypeMapper) {
         this.service = service;
+        this.permissionService = permissionService;
+        this.softwareTypeMapper = softwareTypeMapper;
     }
 
     @GetMapping("/types")
-    public List<MiddlewareType> listTypes() {
+    public List<SoftwareType> listTypes() {
         return service.listTypes();
     }
 
     @GetMapping
-    public List<MiddlewareCommand> listCommands(@RequestParam(required = false) Long typeId) {
+    public List<MiddlewareCommand> listCommands(@RequestParam(required = false) Long typeId,
+                                                 @RequestParam(required = false) String category) {
+        if (category != null && !category.isBlank()) {
+            return service.listCommandsByCategory(category);
+        }
         return service.listCommands(typeId);
     }
 
     @PostMapping
     public ResponseEntity<MiddlewareCommand> create(@RequestBody Map<String, Object> body, Authentication auth) {
         requireAuth(auth);
-        Long typeId = toLong(body.get("middlewareTypeId"));
+        Long softwareTypeId = toLong(body.get("softwareTypeId"));
         String commandFormat = (String) body.get("commandFormat");
         String briefDesc = (String) body.get("briefDescription");
         String detailDesc = (String) body.get("detailedDescription");
         String categories = (String) body.get("categories");
         int sortOrder = body.get("sortOrder") != null ? ((Number) body.get("sortOrder")).intValue() : 0;
-        if (typeId == null || commandFormat == null || commandFormat.isBlank()) {
+        if (softwareTypeId == null || commandFormat == null || commandFormat.isBlank()) {
             throw new IllegalArgumentException("类型和命令格式不能为空");
         }
-        MiddlewareCommand cmd = service.create(typeId, commandFormat, briefDesc, detailDesc, categories, sortOrder);
+        SoftwareType type = softwareTypeMapper.findById(softwareTypeId);
+        if (type == null) {
+            throw new IllegalArgumentException("类型不存在: " + softwareTypeId);
+        }
+        checkCategoryAccess(auth, type.getCategory());
+        MiddlewareCommand cmd = service.create(softwareTypeId, commandFormat, briefDesc, detailDesc, categories, sortOrder);
         return ResponseEntity.ok(cmd);
     }
 
@@ -52,21 +69,45 @@ public class MiddlewareCommandApiController {
     public ResponseEntity<MiddlewareCommand> update(@PathVariable Long id, @RequestBody Map<String, Object> body,
                                                     Authentication auth) {
         requireAuth(auth);
-        Long typeId = toLong(body.get("middlewareTypeId"));
+        MiddlewareCommand existing = service.findById(id);
+        if (existing == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "命令不存在");
+        }
+        SoftwareType existingType = softwareTypeMapper.findById(existing.getSoftwareTypeId());
+        if (existingType != null) {
+            checkCategoryAccess(auth, existingType.getCategory());
+        }
+
+        Long softwareTypeId = toLong(body.get("softwareTypeId"));
         String commandFormat = (String) body.get("commandFormat");
         String briefDesc = (String) body.get("briefDescription");
         String detailDesc = (String) body.get("detailedDescription");
         String categories = (String) body.get("categories");
         int sortOrder = body.get("sortOrder") != null ? ((Number) body.get("sortOrder")).intValue() : 0;
-        MiddlewareCommand cmd = service.update(id, typeId, commandFormat, briefDesc, detailDesc, categories, sortOrder);
+        MiddlewareCommand cmd = service.update(id, softwareTypeId, commandFormat, briefDesc, detailDesc, categories, sortOrder);
         return ResponseEntity.ok(cmd);
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id, Authentication auth) {
         requireAuth(auth);
+        MiddlewareCommand existing = service.findById(id);
+        if (existing == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "命令不存在");
+        }
+        SoftwareType type = softwareTypeMapper.findById(existing.getSoftwareTypeId());
+        if (type != null) {
+            checkCategoryAccess(auth, type.getCategory());
+        }
         service.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    private void checkCategoryAccess(Authentication auth, String category) {
+        if (permissionService.isAdmin(auth)) return;
+        if (!permissionService.canManageCategory(auth, category)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "只能操作本岗位分类的资源");
+        }
     }
 
     private void requireAuth(Authentication auth) {

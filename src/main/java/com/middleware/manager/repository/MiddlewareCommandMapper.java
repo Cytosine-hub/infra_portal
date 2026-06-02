@@ -9,9 +9,13 @@ import java.util.List;
 @Mapper
 public interface MiddlewareCommandMapper {
 
-    List<MiddlewareCommand> findByMiddlewareTypeIdOrderBySortOrderAsc(@Param("middlewareTypeId") Long middlewareTypeId);
+    List<MiddlewareCommand> findBySoftwareTypeIdOrderBySortOrderAsc(@Param("softwareTypeId") Long softwareTypeId);
 
-    List<MiddlewareCommand> findAllByOrderByMiddlewareTypeIdAscSortOrderAsc();
+    List<MiddlewareCommand> findAllByOrderBySoftwareTypeIdAscSortOrderAsc();
+
+    List<MiddlewareCommand> findByCategory(@Param("category") String category);
+
+    List<Long> findDistinctSoftwareTypeIds();
 
     MiddlewareCommand findById(@Param("id") Long id);
 

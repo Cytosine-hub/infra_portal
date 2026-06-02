@@ -1,415 +1,531 @@
-[ {
-  "id" : 7,
-  "middlewareTypeId" : 2,
-  "middlewareTypeName" : "Kafka",
-  "commandFormat" : "kafka-topics.sh --list --bootstrap-server localhost:9092",
-  "briefDescription" : "查看所有主题",
-  "detailedDescription" : "列出Kafka集群中的所有topic",
-  "categories" : [ "查询" ],
-  "sortOrder" : 0
-}, {
-  "id" : 8,
-  "middlewareTypeId" : 2,
-  "middlewareTypeName" : "Kafka",
-  "commandFormat" : "kafka-topics.sh --create --topic test --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1",
-  "briefDescription" : "创建主题",
-  "detailedDescription" : "创建一个名为test的topic，包含3个分区",
-  "categories" : [ "操作", "创建" ],
-  "sortOrder" : 1
-}, {
-  "id" : 9,
-  "middlewareTypeId" : 2,
-  "middlewareTypeName" : "Kafka",
-  "commandFormat" : "kafka-console-producer.sh --bootstrap-server localhost:9092 --topic test",
-  "briefDescription" : "生产消息",
-  "detailedDescription" : "启动生产者，向test topic发送消息",
-  "categories" : [ "生产" ],
-  "sortOrder" : 2
-}, {
-  "id" : 10,
-  "middlewareTypeId" : 2,
-  "middlewareTypeName" : "Kafka",
-  "commandFormat" : "kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test --from-beginning",
-  "briefDescription" : "消费消息",
-  "detailedDescription" : "启动消费者，从test topic消费消息",
-  "categories" : [ "消费" ],
-  "sortOrder" : 3
-}, {
-  "id" : 11,
-  "middlewareTypeId" : 3,
-  "middlewareTypeName" : "Zookeeper",
-  "commandFormat" : "echo stat | nc localhost 2181",
-  "briefDescription" : "查看Zookeeper状态",
-  "detailedDescription" : "通过netcat连接Zookeeper并查看状态",
-  "categories" : [ "基础", "常用", "监控" ],
-  "sortOrder" : 0
-}, {
-  "id" : 12,
-  "middlewareTypeId" : 3,
-  "middlewareTypeName" : "Zookeeper",
-  "commandFormat" : "zkCli.sh -server localhost:2181",
-  "briefDescription" : "连接Zookeeper客户端",
-  "detailedDescription" : "启动Zookeeper命令行客户端",
-  "categories" : [ "基础", "常用" ],
-  "sortOrder" : 1
-}, {
-  "id" : 13,
-  "middlewareTypeId" : 3,
-  "middlewareTypeName" : "Zookeeper",
-  "commandFormat" : "ls /",
-  "briefDescription" : "查看根节点",
-  "detailedDescription" : "列出根目录下的所有子节点",
-  "categories" : [ "查询" ],
-  "sortOrder" : 2
-}, {
-  "id" : 14,
-  "middlewareTypeId" : 3,
-  "middlewareTypeName" : "Zookeeper",
-  "commandFormat" : "get /path",
-  "briefDescription" : "获取节点数据",
-  "detailedDescription" : "获取指定路径节点的数据和状态",
-  "categories" : [ "查询" ],
-  "sortOrder" : 3
-}, {
-  "id" : 15,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmqctl list_queues",
-  "briefDescription" : "查看所有队列",
-  "detailedDescription" : "列出RabbitMQ中所有的队列及其消息数量",
-  "categories" : [ "查询" ],
-  "sortOrder" : 0
-}, {
-  "id" : 16,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmqctl list_exchanges",
-  "briefDescription" : "查看所有交换机",
-  "detailedDescription" : "列出RabbitMQ中所有的交换机",
-  "categories" : [ "查询" ],
-  "sortOrder" : 1
-}, {
-  "id" : 17,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmqctl list_connections",
-  "briefDescription" : "查看所有连接",
-  "detailedDescription" : "列出当前所有的客户端连接",
-  "categories" : [ "查询" ],
-  "sortOrder" : 2
-}, {
-  "id" : 18,
-  "middlewareTypeId" : 5,
-  "middlewareTypeName" : "RocketMQ",
-  "commandFormat" : "mqadmin clusterList -n localhost:9876",
-  "briefDescription" : "查看集群信息",
-  "detailedDescription" : "查看RocketMQ集群的详细信息",
-  "categories" : [ "查询" ],
-  "sortOrder" : 0
-}, {
-  "id" : 19,
-  "middlewareTypeId" : 5,
-  "middlewareTypeName" : "RocketMQ",
-  "commandFormat" : "mqadmin topicList -n localhost:9876",
-  "briefDescription" : "查看所有主题",
-  "detailedDescription" : "列出RocketMQ中的所有topic",
-  "categories" : [ "查询" ],
-  "sortOrder" : 1
-}, {
-  "id" : 20,
-  "middlewareTypeId" : 5,
-  "middlewareTypeName" : "RocketMQ",
-  "commandFormat" : "sh mqnamesrv",
-  "briefDescription" : "启动NameServer",
-  "detailedDescription" : "启动RocketMQ的NameServer服务",
-  "categories" : [ "启动" ],
-  "sortOrder" : 2
-}, {
-  "id" : 21,
-  "middlewareTypeId" : 6,
-  "middlewareTypeName" : "Java容器",
-  "commandFormat" : "docker ps",
-  "briefDescription" : "查看运行中的容器",
-  "detailedDescription" : "列出当前正在运行的Docker容器",
-  "categories" : [ "基础", "常用", "查询" ],
-  "sortOrder" : 0
-}, {
-  "id" : 22,
-  "middlewareTypeId" : 6,
-  "middlewareTypeName" : "Java容器",
-  "commandFormat" : "docker ps -a",
-  "briefDescription" : "查看所有容器",
-  "detailedDescription" : "列出所有的Docker容器，包括停止的",
-  "categories" : [ "查询" ],
-  "sortOrder" : 1
-}, {
-  "id" : 23,
-  "middlewareTypeId" : 6,
-  "middlewareTypeName" : "Java容器",
-  "commandFormat" : "docker start container_id",
-  "briefDescription" : "启动容器",
-  "detailedDescription" : "启动指定ID的容器",
-  "categories" : [ "基础", "常用", "操作" ],
-  "sortOrder" : 2
-}, {
-  "id" : 24,
-  "middlewareTypeId" : 6,
-  "middlewareTypeName" : "Java容器",
-  "commandFormat" : "docker stop container_id",
-  "briefDescription" : "停止容器",
-  "detailedDescription" : "停止指定ID的容器",
-  "categories" : [ "基础", "常用", "操作" ],
-  "sortOrder" : 3
-}, {
-  "id" : 25,
-  "middlewareTypeId" : 6,
-  "middlewareTypeName" : "Java容器",
-  "commandFormat" : "docker logs container_id",
-  "briefDescription" : "查看容器日志",
-  "detailedDescription" : "查看指定容器的日志输出",
-  "categories" : [ "基础", "常用", "日志" ],
-  "sortOrder" : 4
-}, {
-  "id" : 26,
-  "middlewareTypeId" : 6,
-  "middlewareTypeName" : "Java容器",
-  "commandFormat" : "docker exec -it container_id bash",
-  "briefDescription" : "进入容器",
-  "detailedDescription" : "以交互模式进入容器的bash shell",
-  "categories" : [ "基础", "常用", "操作" ],
-  "sortOrder" : 5
-}, {
-  "id" : 27,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli -a $PASSWORD -h $HOST -p $PORT info",
-  "briefDescription" : "【查看基础信息】redis-cli -a abc@123 -h 127.0.0.1  -p 6379 info",
-  "detailedDescription" : "Redis Info 命令以一种易于理解和阅读的格式，返回关于 Redis 服务器的各种信息和统计数值。\n通过给定可选的参数 section ，可以让命令只返回某一部分的信息：\n1. Server (服务器信息)\n这部分记录了 Redis 守护进程自身的环境信息，通常是静态或变化缓慢的数据。\n\nredis_version: Redis 服务器的版本号。这是判断功能兼容性的重要依据。\n\nredis_git_sha1: 如果是从 Git 源码编译的，这里会显示 Git SHA1。通常为 00000000 表示非 Git 构建。\n\nredis_git_dirty: Git 工作目录是否包含未提交的修改（1 表示有修改）。\n\nos: 宿主操作系统的类型和内核版本。\n\narch_bits: 系统架构，64 位或 32 位。\n\nprocess_id: Redis 服务器进程的 PID。\n\nrun_id: 本次 Redis 启动时生成的随机标识符。它在集群和复制中用于唯一标识一个实例。\n\ntcp_port: Redis 监听的 TCP 端口。\n\nuptime_in_seconds / uptime_in_days: 自服务器启动以来已运行的时间（秒/天）。如果服务器经常重启，这个值会比较小。\n\nconfig_file: 当前使用的配置文件路径。\n\n2. Clients (客户端连接)\n这部分展示了所有连接到 Redis 的客户端信息。\n\nconnected_clients: 当前已连接的客户端数量。不包括通过从服务器（Slave）建立的内部连接。这个值过高可能意味着连接池配置不合理或存在连接泄露。\n\ncluster_connections: 集群总线占用的连接数近似值。\n\nmaxclients: 配置文件中设置的 maxclients 值，即允许同时连接的最大客户端数量。\n\nblocked_clients: 正在等待阻塞命令（如 BLPOP、BRPOP）的客户端数量。如果这个值持续很高，可能意味着有慢消费者或队列堆积。\n\ntracking_clients: 启用了客户端缓存的客户端数量 (Redis 7.0+ 特性)。\n\nclient_recent_max_input_buffer: 当前所有客户端连接中，最大的输入缓冲区大小。过大的输入缓冲区可能意味着有 key 过大或命令不当。\n\n3. Memory (内存信息)\n这是运维监控中最关键的模块，直接关系到 Redis 的稳定性和性能。\n\nused_memory: 由 Redis 内存分配器（如 jemalloc）分配的总字节数。这是 Redis 存储数据实际占用的逻辑内存。\n\nused_memory_human: 上一条数据的可读格式（如 1.8G）。\n\nused_memory_rss: 从操作系统角度看到的、分配给 Redis 的物理内存大小（常驻集大小），也就是 top/ps 命令看到的值。\n\nused_memory_peak: 历史内存消耗峰值（字节）。\n\nmaxmemory: 实例配置的最大可用内存上限。如果为 0，表示在 64 位系统上无限制。\n\nmaxmemory_policy: 当内存达到 maxmemory 上限时的淘汰策略（如 volatile-lru、allkeys-lru）。\n\nmem_fragmentation_ratio: 内存碎片率。计算公式为 used_memory_rss / used_memory。理想情况下在 1.0 - 1.5 之间。如果大于 1.5，说明内存碎片较多；如果远小于 1，说明 Redis 部分内存被交换到 Swap，通常意味着内存压力过大。\n\nmem_allocator: 编译时选用的内存分配器，通常是 jemalloc。\n\nlazyfree_pending_objects: 因执行 UNLINK 或带 ASYNC 选项的 FLUSH 命令而等待被后台线程释放的对象数量。\n\n4. Persistence (持久化信息)\n这部分用于监控 RDB 快照和 AOF 日志的状态。\n\nloading: 标志位，表示服务器是否正在启动时加载持久化文件。\n\nrdb_changes_since_last_save: 距离最后一次成功生成 RDB 后，发生变更的键次数。\n\nrdb_bgsave_in_progress: 标志位，表示当前是否正在执行 RDB 的 bgsave 操作。\n\nrdb_last_save_time: 最后一次成功 RDB 保存的 Unix 时间戳。\n\nrdb_last_bgsave_status: 最后一次 bgsave 的状态（ok 或 err）。\n\naof_enabled: 标志位，表示 AOF 是否已开启。\n\naof_rewrite_in_progress: 标志位，表示 AOF 重写是否正在进行中。重写过程可能会消耗大量磁盘 IO。\n\naof_last_bgrewrite_status: 最后一次 AOF 重写的状态。\n\n5. Stats (通用统计)\n这一块包含了命令执行、命中率、网络流量等核心统计数据。\n\ntotal_connections_received: 服务器启动以来接受的连接总数。\n\ntotal_commands_processed: 服务器启动以来处理的命令总数。\n\ninstantaneous_ops_per_sec: 每秒实时执行的命令数（QPS）。这是衡量当前负载的核心指标。\n\ntotal_net_input_bytes / total_net_output_bytes: 网络总输入/输出字节数。\n\ninstantaneous_input_kbps / instantaneous_output_kbps: 实时的网络输入/输出流量（KB/秒）。\n\nrejected_connections: 因超过 maxclients 限制而被拒绝的连接数。如果该值不为 0，说明连接数已达上限。\n\nkeyspace_hits / keyspace_misses: 查找键命中的次数和未命中的次数。结合两者可以算出缓存命中率（hits / (hits + misses)），这是衡量缓存效率的重要依据。\n\nexpired_keys: 被主动或被动过期机制清理掉的键总数。\n\nevicted_keys: 因 maxmemory 限制而被强制驱逐的键总数。如果这个值持续增长，说明内存压力极大。\n\n6. Replication (主从复制信息)\n对于使用主从架构的环境，这部分至关重要。\n\nrole: 当前实例的角色，是 master 还是 slave。\n\nconnected_slaves: 对于主节点，表示已连接的从节点数量。\n\nmaster_link_down_since: 对于从节点，如果与主节点的连接断开，这里记录断开持续的秒数。\n\nmaster_last_io_seconds_ago: 从节点距离上一次与主节点交互的秒数。用于判断主从复制是否存在延迟。\n\nslave_repl_offset: 从节点的复制偏移量。与主节点的 master_repl_offset 比较，可以精确计算复制延迟。\n\nrepl_backlog_active / repl_backlog_size: 复制积压缓冲区的状态和大小。缓冲区用于部分同步，如果太小可能导致网络抖动后触发全量同步。\n\n7. CPU (CPU 消耗统计)\nused_cpu_sys / used_cpu_user: Redis 服务器进程消耗的系统态 CPU 和用户态 CPU 总秒数（包括子进程）。\n\nused_cpu_sys_children / used_cpu_user_children: 后台进程（如 bgsave、aof rewrite）消耗的 CPU 秒数。\n\n8. Cluster (集群信息)\n仅当 Redis 运行在集群模式时才有意义。\n\ncluster_enabled: 标志位，指示集群模式是否已启用。\n\n如果启用了集群，执行 INFO cluster 或 CLUSTER INFO 可以看到更详细的信息，如 cluster_state（集群状态是否 ok）、cluster_slots_assigned（已分配的槽位数，正常应为 16384）等。\n\n9. Keyspace (数据库统计)\n这部分统计了每个逻辑数据库（DB 0-15）的键数量情况。\n\ndb0:keys=xxx,expires=yyy,avg_ttl=zzz: 表示数据库 0 中，一共有 keys 个键，其中 expires 个设置了过期时间，平均存活时间（TTL）为 avg_ttl。",
-  "categories" : [ "基础", "常用", "查询" ],
-  "sortOrder" : 0
-}, {
-  "id" : 28,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli -a $PASSWORD -h $HOST -p $PORT  client list",
-  "briefDescription" : "【查看有哪些客户端连接】redis-cli -a abc@123 -h 127.0.0.1 -p 6379 client list",
-  "detailedDescription" : "CLIENT LIST 命令的输出是每行一个客户端，包含多个字段。以下是几个关键字段：\nid=123456 addr=127.0.0.1:54321 laddr=127.0.0.1:6379 fd=8 name= age=185 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=0 argv-mem=0 multi-mem=0 obl=0 oll=0 omem=0 tot-mem=2064 events=r cmd=client|info user=default redir=-1 resp=2\n\n【核心字段说明】\n\n字段\t说明\nid\t客户端唯一标识符\naddr\t客户端地址（IP:端口）\nladdr\t服务器端地址（IP:端口）\nname\t客户端名称（通过CLIENT SETNAME设置）\nage\t连接已存在时间（秒）\nidle\t连接空闲时间（秒）\nflags\t客户端状态标志\ndb\t当前选中的数据库ID\nsub\t订阅的频道数量\npsub\t订阅的模式数量\ncmd\t最后执行的命令\nuser\t认证使用的用户名\nresp\tRESP协议版本\n\n【flags 标志说明】\n\n标志\t说明\nN\t普通客户端\nS\t从库连接\nM\t主库连接\nP\t发布/订阅客户端\nB\t阻塞命令等待中\nO\t监视器模式客户端\nx\t正在执行事务\nu\t连接未阻塞\nA\t需要关闭连接",
-  "categories" : [ "基础", "常用", "查询" ],
-  "sortOrder" : 0
-}, {
-  "id" : 29,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli -a $PASSWORD -h $HOST -p $PORT   config get  [参数名称]",
-  "briefDescription" : "【查看配置参数】redis-cli -a abc@123 -h 127.0.0.1  -p 6379 config get  appendonly",
-  "detailedDescription" : "在命令最后部分可以指定要获取的参数：\n参数模式\t           说明\t                               示例\n*\t        获取所有配置（内容很多）               config get \"*\"\nrequirepass     获取认证密码(可能显示为空或 \"\")        config get requirepass\nmaxmemory       获取最大内存限制（字节）               config get maxmemory\nsave\t        获取 RDB 持久化策略\t             config get save\nport\t        获取服务器监听端口\t             config get port\n*max*           获取所有包含 “max” 字样的配置\t     config get *max*    ",
-  "categories" : [ "常用" ],
-  "sortOrder" : 1
-}, {
-  "id" : 30,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli -a $PASSWORD -h $HOST -p $PORT   config set  [参数名字]  [参数值]",
-  "briefDescription" : "【修改配置参数】redis-cli -a abc@123 -h 127.0.0.1  -p 6379 config set  appendonly \tyes\t",
-  "detailedDescription" : "【常用配置参数说明】\t\t\t\t\t\t\t\t\t\t\t\t\n参数名\t\t\t\t\t   说明\t                      示例\nappendonly\t\t\t是否开启 AOF 持久化\t\tconfig set appendonly yes\nmaxmemory\t\t\t设置最大内存限制（字节）\t\tconfig set maxmemory 1073741824（1GB）\nrequirepass\t\t\t设置认证密码\t\t\tconfig set requirepass myNewPass123\ntimeout\t\t\t\t客户端空闲关闭超时（秒）\t\tconfig set timeout 300\ndatabases\t\t\t设置数据库总数（需重启生效）\tconfig set databases 16\nslowlog-max-len\t\t\t设置慢查询最大记录条数\t\tconfig set slowlog-max-len 128\nappendfsync\t\t\t设置 AOF 同步策略\t\tconfig set appendfsync everysec\nrepl-timeout\t\t\t主从复制超时时间（秒）\t\tconfig set repl-timeout 60\n",
-  "categories" : [ "常用" ],
-  "sortOrder" : 1
-}, {
-  "id" : 31,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli -a $PASSWORD -h $HOST -p $PORT   rewrite rewrite",
-  "briefDescription" : "【配置参数持久化写入到配置文件】redis-cli -a abc@123 -h 127.0.0.1  -p 6379 config rewrite",
-  "detailedDescription" : "",
-  "categories" : [ "常用" ],
-  "sortOrder" : 1
-}, {
-  "id" : 32,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli -a $PASSWORD -h $HOST -p $PORT    shutdown save",
-  "briefDescription" : "【停止进程前强制执行RDB持久化】redis-cli -a abc@123 -h 127.0.0.1  -p 6379 shutdown save",
-  "detailedDescription" : "\n【SHUTDOWN 所有参数详解】 \n参数\t说明\t                     数据保存\t       阻塞行为\t          适用场景\n无参数\t默认关闭模式\t         根据配置自动保存     等待保存完成\t          常规关闭\nSAVE\t关闭前强制执行RDB持久化      强制保存\t     阻塞直到保存完成\t 确保数据不丢失\nNOSAVE\t关闭前不保存数据\t            不保存\t      立即关闭\t        快速重启（可丢数据）\nABORT\t取消正在进行的关闭\t    —\t                非阻塞\t       取消已触发的 SHUTDOWN",
-  "categories" : [ "基础", "常用" ],
-  "sortOrder" : 1
-}, {
-  "id" : 33,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli  -h $HOST -p $SENTINEL_PORT   SENTINEL FAILOVER mymaster",
-  "briefDescription" : "【手动故障转移】redis-cli -h 127.0.0.1  -p 26379  SENTINEL FAILOVER mymaster",
-  "detailedDescription" : "【命令作用说明】\n说明项\t             详细解释\n核心功能\t         强制对指定主节点执行故障转移（Failover），即使主节点看似正常\n执行者               Redis Sentinel（哨兵）节点，而非 Redis 主从节点\n使用场景\t         手动切换主从、计划内维护、主节点性能问题、强制重置主从关系\n工作方式\t         Sentinel 会忽略主节点的健康状态，直接选举一个新的从库晋升为主库\n\nSENTINEL FAILOVER \t Sentinel 命令：强制执行故障转移\t\nmymaster\t         要执行故障转移的主节点名称（在 sentinel.conf 中配置）\t  \n",
-  "categories" : [ "操作" ],
-  "sortOrder" : 2
-}, {
-  "id" : 34,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli  -h $HOST -p $SENTINEL_PORT   SENTINEL RESET mymaster",
-  "briefDescription" : "【刷新哨兵状态】redis-cli -h 127.0.0.1  -p 26379  SENTINEL RESET mymaster",
-  "detailedDescription" : "执行后哨兵会：\n清除 mymaster 主节点的故障转移历史记录\n清除所有从节点、其他哨兵节点的旧状态、旧地址、旧故障信息\n重新根据配置文件重新发现、重新监控 mymaster 主节点及其从节点、其他哨兵\n重置后哨兵会重新建立拓扑、重新选举、重新判断节点状态\n\nSENTINEL RESET\t哨兵的重置命令\nmymaster\t 主节点名称 (在 sentinel 配置文件中 sentinel monitor mymaster ... 定义的)",
-  "categories" : [ "操作" ],
-  "sortOrder" : 1
-}, {
-  "id" : 35,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli -a $PASSWORD -h $HOST -p $PORT   cluster info",
-  "briefDescription" : "【查看集群状态】 redis-cli -a abc@123 -h 127.0.0.1  -p 6379  cluster info",
-  "detailedDescription" : "CLUSTER INFO 命令输出详解\n执行后会返回集群的关键状态信息，每个字段含义如下：\n\n字段\t                                    说明\t                正常值示例\ncluster_state\t                    集群当前状态          \t     ok (正常) / fail (失败)\ncluster_slots_assigned\t            已分配的槽位总数     \t     16384 (全部槽位)\ncluster_slots_ok\t            正常工作的槽位数\t             16384\ncluster_slots_pfail\t            可能失败（PFAIL）的槽位数          0\ncluster_slots_fail\t            已确认失败（FAIL）的槽位数         0\ncluster_known_nodes\t            集群中已知的节点总数\t   \t     3 / 6 等\ncluster_size\t                    集群主节点数量\t\t     3\ncluster_current_epoch\t            当前集群配置版本号\t\t     6\ncluster_my_epoch\t            当前节点的配置版本号\t\t     3\ncluster_stats_messages_sent\t    发送的集群消息总数\t\t     12345\ncluster_stats_messages_received\t    接收的集群消息总数\t\t     12340\ncluster_stats_messages_ping_sent    发送的 PING 消息数\t             12345\ncluster_stats_messages_pong_sent\t发送的 PONG 消息数\t     12345 \ncluster_stats_messages_ping_received\t接收的 PING 消息数\t     12345\ncluster_stats_messages_pong_received\t接收的 PONG 消息数\t     12345",
-  "categories" : [ "查询", "集群" ],
-  "sortOrder" : 1
-}, {
-  "id" : 36,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli -a $PASSWORD -h $HOST -p $PORT    cluster nodes",
-  "briefDescription" : "【查看集群节点信息】 redis-cli -a abc@123 -h 127.0.0.1  -p 6379   cluster nodes",
-  "detailedDescription" : "字段说明\n字段\t        说明\t                                           示例\nnode-id\t        节点唯一标识符（40位十六进制字符串）\td6b9a7f8e3c2a1b4c5d6e7f8a9b0c1d2e3f4a5b6\nip:port@cport\t节点地址：<IP>:<数据端口>@<集群总线端口>\t 10.0.0.1:6379@16379\nflags\t        节点角色和状态标志\t                   master、slave、myself、fail 等\nmaster-id\t如果是从节点，显示主节点的 ID；主节点则显示 -\t  d6b9a7f8... 或 -\nping-sent\t上次发送 ping 的时间戳（毫秒），0 表示刚启动\t   0、1234567890\npong-recv\t上次收到 pong 的时间戳（毫秒）\t                   1234567890\nconfig-epoch    节点配置版本号（用于故障转移选举）                   \t3、12\nlink-state\t集群总线连接状态\t                           connected、disconnected\nslot-range\t主节点负责的槽位范围（从节点显示为空）\t    0-5460、[5461-10922]\n\n\nFlags       标志详解\n标志\t    含义\nmaster\t    主节点\nslave\t    从节点\nmyself\t    当前连接的节点\nfail\t    节点处于 FAIL 状态\npfail\t    节点处于 PFAIL 状态（疑似下线）\nhandshake   正在进行握手\nnoaddr\t    节点地址未知\nnoflags\t    无特殊标志",
-  "categories" : [ "查询", "集群" ],
-  "sortOrder" : 0
-}, {
-  "id" : 37,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli -a $PASSWORD -h $HOST -p $PORT   slowlog get [N]",
-  "briefDescription" : "【慢日志查询】 redis-cli -a abc@123 -h 127.0.0.1  -p 6379   slowlog get 5",
-  "detailedDescription" : "# 返回最新的N条慢查询记录。如果N省略，返回10条\n#设置慢查询阈值，单位是微秒。如果执行命令的时间超过这个阈值，就会被记录到慢查询日志。默认值是10000微秒（即10毫秒）。如果设置为-1，将禁用慢查询日志.\n#设置慢查询日志的最大长度。如果新的慢查询记录导致日志长度超过这个值，最旧的记录将被删除。默认值是128.\n1) 1) (integer) 1234567        # 日志唯一ID（自增）\n   2) (integer) 1703123456789  # 命令执行时间戳（微秒）\n   3) (integer) 15000          # 命令执行耗时（微秒，1秒=1,000,000微秒）\n   4) 1) \"SET\"                 # 执行的命令及参数\n      2) \"user:1001\"\n      3) \"some_value\"\n   5) \"127.0.0.1:54321\"        # 客户端地址（Redis 4.0+）\n   6) \"myuser\"                 # 用户名（Redis 6.0+，启用ACL时）\n\n\ndate -d @1703123456789   转换为可读时间",
-  "categories" : [ "查询" ],
-  "sortOrder" : 1
-}, {
-  "id" : 38,
-  "middlewareTypeId" : 1,
-  "middlewareTypeName" : "Redis",
-  "commandFormat" : "redis-cli -a $PASSWORD --cluster call    $HOST:$PORT   【命令】",
-  "briefDescription" : "【集群批量执行命令】 redis-cli -a abc@123 --cluster call  127.0.0.1:6379 info ",
-  "detailedDescription" : "参数说明\n参数\t         说明\t                         示例\n-a\t        Redis 认证密码\t               -a abc123\n--cluster call\t集群模式下在所有节点执行命令\t固定参数\n<host>:<port>\t集群中任意一个节点的地址和端口\t127.0.0.1:6379\n<command>\t要执行的 Redis 命令\t       INFO SERVER\n\n",
-  "categories" : [ "集群" ],
-  "sortOrder" : 1
-}, {
-  "id" : 39,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmq-server  -detached",
-  "briefDescription" : "【启动服务】",
-  "detailedDescription" : "",
-  "categories" : [ "重启" ],
-  "sortOrder" : 0
-}, {
-  "id" : 40,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmqctl stop",
-  "briefDescription" : "【停止服务】",
-  "detailedDescription" : "",
-  "categories" : [ "重启" ],
-  "sortOrder" : 0
-}, {
-  "id" : 41,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmqctl start_app",
-  "briefDescription" : "【启动应用】",
-  "detailedDescription" : "",
-  "categories" : [ "重启" ],
-  "sortOrder" : 0
-}, {
-  "id" : 42,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmqctl stop_app",
-  "briefDescription" : "【停止应用】",
-  "detailedDescription" : "",
-  "categories" : [ "重启" ],
-  "sortOrder" : 0
-}, {
-  "id" : 43,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmqctl cluster_status",
-  "briefDescription" : "查看集群状态",
-  "detailedDescription" : "",
-  "categories" : [ "查询" ],
-  "sortOrder" : 0
-}, {
-  "id" : 44,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmqctl list_users",
-  "briefDescription" : "【查看用户列表】",
-  "detailedDescription" : "",
-  "categories" : [ "查询" ],
-  "sortOrder" : 0
-}, {
-  "id" : 45,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmqctl change_password $userName $newPassword",
-  "briefDescription" : "【修改密码】",
-  "detailedDescription" : "",
-  "categories" : [ "操作" ],
-  "sortOrder" : 0
-}, {
-  "id" : 46,
-  "middlewareTypeId" : 4,
-  "middlewareTypeName" : "RabbitMQ",
-  "commandFormat" : "rabbitmqctl delete_user userName",
-  "briefDescription" : "【删除用户(】",
-  "detailedDescription" : "",
-  "categories" : [ "操作" ],
-  "sortOrder" : 0
-}, {
-  "id" : 47,
-  "middlewareTypeId" : 2,
-  "middlewareTypeName" : "Kafka",
-  "commandFormat" : "/app/kafka/kafka_home/bin/kafka-server-start.sh -daemon /app/kafka/kafka_home/config/kafkaserver.properties",
-  "briefDescription" : "【启动服务】",
-  "detailedDescription" : "",
-  "categories" : [ "基础", "操作" ],
-  "sortOrder" : 0
-}, {
-  "id" : 48,
-  "middlewareTypeId" : 2,
-  "middlewareTypeName" : "Kafka",
-  "commandFormat" : "/app/kafka/kafka_home/bin/kafka-server-stop.sh",
-  "briefDescription" : "【停止服务】",
-  "detailedDescription" : "",
-  "categories" : [ "基础", "操作" ],
-  "sortOrder" : 0
-}, {
-  "id" : 49,
-  "middlewareTypeId" : 2,
-  "middlewareTypeName" : "Kafka",
-  "commandFormat" : "/app/kafka/kafka_home/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092     --describe ",
-  "briefDescription" : "【查看top详情】",
-  "detailedDescription" : "",
-  "categories" : [ "查询" ],
-  "sortOrder" : 0
-}, {
-  "id" : 50,
-  "middlewareTypeId" : 2,
-  "middlewareTypeName" : "Kafka",
-  "commandFormat" : "/app/kafka/kafka_home/bin/kafka-leader-election.sh --bootstrap-server 127.0.0.1:9092    --election-type preferred --all-topic-partitions",
-  "briefDescription" : "【Leader重平衡】",
-  "detailedDescription" : "",
-  "categories" : [ "操作" ],
-  "sortOrder" : 0
-}, {
-  "id" : 51,
-  "middlewareTypeId" : 2,
-  "middlewareTypeName" : "Kafka",
-  "commandFormat" : "/app/kafka/kafka_home/bin/kafka-reassign-partitions.sh --bootstrap-server  127.0.0.1:9092  --execute --reassignment-json-file  middletest2.json",
-  "briefDescription" : "【topic 加副本】",
-  "detailedDescription" : "",
-  "categories" : [ "操作" ],
-  "sortOrder" : 0
-}, {
-  "id" : 52,
-  "middlewareTypeId" : 2,
-  "middlewareTypeName" : "Kafka",
-  "commandFormat" : "kafka-consumer-groups.sh   --bootstrap-server 127.0.0.1:9092   --describe   --group my_group",
-  "briefDescription" : "【查看消费者组my_group消费情况】",
-  "detailedDescription" : "",
-  "categories" : [ "查询" ],
-  "sortOrder" : 0
-} ]
+[
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Kafka",
+    "commandFormat": "kafka-topics.sh --list --bootstrap-server localhost:9092",
+    "briefDescription": "查看所有主题",
+    "detailedDescription": "列出Kafka集群中的所有topic",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Kafka",
+    "commandFormat": "kafka-topics.sh --create --topic test --bootstrap-server localhost:9092 --partitions 3 --replication-factor 1",
+    "briefDescription": "创建主题",
+    "detailedDescription": "创建一个名为test的topic，包含3个分区",
+    "categories": [
+      "操作",
+      "创建"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Kafka",
+    "commandFormat": "kafka-console-producer.sh --bootstrap-server localhost:9092 --topic test",
+    "briefDescription": "生产消息",
+    "detailedDescription": "启动生产者，向test topic发送消息",
+    "categories": [
+      "生产"
+    ],
+    "sortOrder": 2
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Kafka",
+    "commandFormat": "kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test --from-beginning",
+    "briefDescription": "消费消息",
+    "detailedDescription": "启动消费者，从test topic消费消息",
+    "categories": [
+      "消费"
+    ],
+    "sortOrder": 3
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Zookeeper",
+    "commandFormat": "echo stat | nc localhost 2181",
+    "briefDescription": "查看Zookeeper状态",
+    "detailedDescription": "通过netcat连接Zookeeper并查看状态",
+    "categories": [
+      "基础",
+      "常用",
+      "监控"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Zookeeper",
+    "commandFormat": "zkCli.sh -server localhost:2181",
+    "briefDescription": "连接Zookeeper客户端",
+    "detailedDescription": "启动Zookeeper命令行客户端",
+    "categories": [
+      "基础",
+      "常用"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Zookeeper",
+    "commandFormat": "ls /",
+    "briefDescription": "查看根节点",
+    "detailedDescription": "列出根目录下的所有子节点",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 2
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Zookeeper",
+    "commandFormat": "get /path",
+    "briefDescription": "获取节点数据",
+    "detailedDescription": "获取指定路径节点的数据和状态",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 3
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmqctl list_queues",
+    "briefDescription": "查看所有队列",
+    "detailedDescription": "列出RabbitMQ中所有的队列及其消息数量",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmqctl list_exchanges",
+    "briefDescription": "查看所有交换机",
+    "detailedDescription": "列出RabbitMQ中所有的交换机",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmqctl list_connections",
+    "briefDescription": "查看所有连接",
+    "detailedDescription": "列出当前所有的客户端连接",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 2
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RocketMQ",
+    "commandFormat": "mqadmin clusterList -n localhost:9876",
+    "briefDescription": "查看集群信息",
+    "detailedDescription": "查看RocketMQ集群的详细信息",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RocketMQ",
+    "commandFormat": "mqadmin topicList -n localhost:9876",
+    "briefDescription": "查看所有主题",
+    "detailedDescription": "列出RocketMQ中的所有topic",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RocketMQ",
+    "commandFormat": "sh mqnamesrv",
+    "briefDescription": "启动NameServer",
+    "detailedDescription": "启动RocketMQ的NameServer服务",
+    "categories": [
+      "启动"
+    ],
+    "sortOrder": 2
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Docker",
+    "commandFormat": "docker ps",
+    "briefDescription": "查看运行中的容器",
+    "detailedDescription": "列出当前正在运行的Docker容器",
+    "categories": [
+      "基础",
+      "常用",
+      "查询"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Docker",
+    "commandFormat": "docker ps -a",
+    "briefDescription": "查看所有容器",
+    "detailedDescription": "列出所有的Docker容器，包括停止的",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Docker",
+    "commandFormat": "docker start container_id",
+    "briefDescription": "启动容器",
+    "detailedDescription": "启动指定ID的容器",
+    "categories": [
+      "基础",
+      "常用",
+      "操作"
+    ],
+    "sortOrder": 2
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Docker",
+    "commandFormat": "docker stop container_id",
+    "briefDescription": "停止容器",
+    "detailedDescription": "停止指定ID的容器",
+    "categories": [
+      "基础",
+      "常用",
+      "操作"
+    ],
+    "sortOrder": 3
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Docker",
+    "commandFormat": "docker logs container_id",
+    "briefDescription": "查看容器日志",
+    "detailedDescription": "查看指定容器的日志输出",
+    "categories": [
+      "基础",
+      "常用",
+      "日志"
+    ],
+    "sortOrder": 4
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Docker",
+    "commandFormat": "docker exec -it container_id bash",
+    "briefDescription": "进入容器",
+    "detailedDescription": "以交互模式进入容器的bash shell",
+    "categories": [
+      "基础",
+      "常用",
+      "操作"
+    ],
+    "sortOrder": 5
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli -a $PASSWORD -h $HOST -p $PORT info",
+    "briefDescription": "【查看基础信息】redis-cli -a abc@123 -h 127.0.0.1  -p 6379 info",
+    "detailedDescription": "Redis Info 命令以一种易于理解和阅读的格式，返回关于 Redis 服务器的各种信息和统计数值。\n通过给定可选的参数 section ，可以让命令只返回某一部分的信息：\n1. Server (服务器信息)\n这部分记录了 Redis 守护进程自身的环境信息，通常是静态或变化缓慢的数据。\n\nredis_version: Redis 服务器的版本号。这是判断功能兼容性的重要依据。\n\nredis_git_sha1: 如果是从 Git 源码编译的，这里会显示 Git SHA1。通常为 00000000 表示非 Git 构建。\n\nredis_git_dirty: Git 工作目录是否包含未提交的修改（1 表示有修改）。\n\nos: 宿主操作系统的类型和内核版本。\n\narch_bits: 系统架构，64 位或 32 位。\n\nprocess_id: Redis 服务器进程的 PID。\n\nrun_id: 本次 Redis 启动时生成的随机标识符。它在集群和复制中用于唯一标识一个实例。\n\ntcp_port: Redis 监听的 TCP 端口。\n\nuptime_in_seconds / uptime_in_days: 自服务器启动以来已运行的时间（秒/天）。如果服务器经常重启，这个值会比较小。\n\nconfig_file: 当前使用的配置文件路径。\n\n2. Clients (客户端连接)\n这部分展示了所有连接到 Redis 的客户端信息。\n\nconnected_clients: 当前已连接的客户端数量。不包括通过从服务器（Slave）建立的内部连接。这个值过高可能意味着连接池配置不合理或存在连接泄露。\n\ncluster_connections: 集群总线占用的连接数近似值。\n\nmaxclients: 配置文件中设置的 maxclients 值，即允许同时连接的最大客户端数量。\n\nblocked_clients: 正在等待阻塞命令（如 BLPOP、BRPOP）的客户端数量。如果这个值持续很高，可能意味着有慢消费者或队列堆积。\n\ntracking_clients: 启用了客户端缓存的客户端数量 (Redis 7.0+ 特性)。\n\nclient_recent_max_input_buffer: 当前所有客户端连接中，最大的输入缓冲区大小。过大的输入缓冲区可能意味着有 key 过大或命令不当。\n\n3. Memory (内存信息)\n这是运维监控中最关键的模块，直接关系到 Redis 的稳定性和性能。\n\nused_memory: 由 Redis 内存分配器（如 jemalloc）分配的总字节数。这是 Redis 存储数据实际占用的逻辑内存。\n\nused_memory_human: 上一条数据的可读格式（如 1.8G）。\n\nused_memory_rss: 从操作系统角度看到的、分配给 Redis 的物理内存大小（常驻集大小），也就是 top/ps 命令看到的值。\n\nused_memory_peak: 历史内存消耗峰值（字节）。\n\nmaxmemory: 实例配置的最大可用内存上限。如果为 0，表示在 64 位系统上无限制。\n\nmaxmemory_policy: 当内存达到 maxmemory 上限时的淘汰策略（如 volatile-lru、allkeys-lru）。\n\nmem_fragmentation_ratio: 内存碎片率。计算公式为 used_memory_rss / used_memory。理想情况下在 1.0 - 1.5 之间。如果大于 1.5，说明内存碎片较多；如果远小于 1，说明 Redis 部分内存被交换到 Swap，通常意味着内存压力过大。\n\nmem_allocator: 编译时选用的内存分配器，通常是 jemalloc。\n\nlazyfree_pending_objects: 因执行 UNLINK 或带 ASYNC 选项的 FLUSH 命令而等待被后台线程释放的对象数量。\n\n4. Persistence (持久化信息)\n这部分用于监控 RDB 快照和 AOF 日志的状态。\n\nloading: 标志位，表示服务器是否正在启动时加载持久化文件。\n\nrdb_changes_since_last_save: 距离最后一次成功生成 RDB 后，发生变更的键次数。\n\nrdb_bgsave_in_progress: 标志位，表示当前是否正在执行 RDB 的 bgsave 操作。\n\nrdb_last_save_time: 最后一次成功 RDB 保存的 Unix 时间戳。\n\nrdb_last_bgsave_status: 最后一次 bgsave 的状态（ok 或 err）。\n\naof_enabled: 标志位，表示 AOF 是否已开启。\n\naof_rewrite_in_progress: 标志位，表示 AOF 重写是否正在进行中。重写过程可能会消耗大量磁盘 IO。\n\naof_last_bgrewrite_status: 最后一次 AOF 重写的状态。\n\n5. Stats (通用统计)\n这一块包含了命令执行、命中率、网络流量等核心统计数据。\n\ntotal_connections_received: 服务器启动以来接受的连接总数。\n\ntotal_commands_processed: 服务器启动以来处理的命令总数。\n\ninstantaneous_ops_per_sec: 每秒实时执行的命令数（QPS）。这是衡量当前负载的核心指标。\n\ntotal_net_input_bytes / total_net_output_bytes: 网络总输入/输出字节数。\n\ninstantaneous_input_kbps / instantaneous_output_kbps: 实时的网络输入/输出流量（KB/秒）。\n\nrejected_connections: 因超过 maxclients 限制而被拒绝的连接数。如果该值不为 0，说明连接数已达上限。\n\nkeyspace_hits / keyspace_misses: 查找键命中的次数和未命中的次数。结合两者可以算出缓存命中率（hits / (hits + misses)），这是衡量缓存效率的重要依据。\n\nexpired_keys: 被主动或被动过期机制清理掉的键总数。\n\nevicted_keys: 因 maxmemory 限制而被强制驱逐的键总数。如果这个值持续增长，说明内存压力极大。\n\n6. Replication (主从复制信息)\n对于使用主从架构的环境，这部分至关重要。\n\nrole: 当前实例的角色，是 master 还是 slave。\n\nconnected_slaves: 对于主节点，表示已连接的从节点数量。\n\nmaster_link_down_since: 对于从节点，如果与主节点的连接断开，这里记录断开持续的秒数。\n\nmaster_last_io_seconds_ago: 从节点距离上一次与主节点交互的秒数。用于判断主从复制是否存在延迟。\n\nslave_repl_offset: 从节点的复制偏移量。与主节点的 master_repl_offset 比较，可以精确计算复制延迟。\n\nrepl_backlog_active / repl_backlog_size: 复制积压缓冲区的状态和大小。缓冲区用于部分同步，如果太小可能导致网络抖动后触发全量同步。\n\n7. CPU (CPU 消耗统计)\nused_cpu_sys / used_cpu_user: Redis 服务器进程消耗的系统态 CPU 和用户态 CPU 总秒数（包括子进程）。\n\nused_cpu_sys_children / used_cpu_user_children: 后台进程（如 bgsave、aof rewrite）消耗的 CPU 秒数。\n\n8. Cluster (集群信息)\n仅当 Redis 运行在集群模式时才有意义。\n\ncluster_enabled: 标志位，指示集群模式是否已启用。\n\n如果启用了集群，执行 INFO cluster 或 CLUSTER INFO 可以看到更详细的信息，如 cluster_state（集群状态是否 ok）、cluster_slots_assigned（已分配的槽位数，正常应为 16384）等。\n\n9. Keyspace (数据库统计)\n这部分统计了每个逻辑数据库（DB 0-15）的键数量情况。\n\ndb0:keys=xxx,expires=yyy,avg_ttl=zzz: 表示数据库 0 中，一共有 keys 个键，其中 expires 个设置了过期时间，平均存活时间（TTL）为 avg_ttl。",
+    "categories": [
+      "基础",
+      "常用",
+      "查询"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli -a $PASSWORD -h $HOST -p $PORT  client list",
+    "briefDescription": "【查看有哪些客户端连接】redis-cli -a abc@123 -h 127.0.0.1 -p 6379 client list",
+    "detailedDescription": "CLIENT LIST 命令的输出是每行一个客户端，包含多个字段。以下是几个关键字段：\nid=123456 addr=127.0.0.1:54321 laddr=127.0.0.1:6379 fd=8 name= age=185 idle=0 flags=N db=0 sub=0 psub=0 multi=-1 qbuf=0 qbuf-free=0 argv-mem=0 multi-mem=0 obl=0 oll=0 omem=0 tot-mem=2064 events=r cmd=client|info user=default redir=-1 resp=2\n\n【核心字段说明】\n\n字段\t说明\nid\t客户端唯一标识符\naddr\t客户端地址（IP:端口）\nladdr\t服务器端地址（IP:端口）\nname\t客户端名称（通过CLIENT SETNAME设置）\nage\t连接已存在时间（秒）\nidle\t连接空闲时间（秒）\nflags\t客户端状态标志\ndb\t当前选中的数据库ID\nsub\t订阅的频道数量\npsub\t订阅的模式数量\ncmd\t最后执行的命令\nuser\t认证使用的用户名\nresp\tRESP协议版本\n\n【flags 标志说明】\n\n标志\t说明\nN\t普通客户端\nS\t从库连接\nM\t主库连接\nP\t发布/订阅客户端\nB\t阻塞命令等待中\nO\t监视器模式客户端\nx\t正在执行事务\nu\t连接未阻塞\nA\t需要关闭连接",
+    "categories": [
+      "基础",
+      "常用",
+      "查询"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli -a $PASSWORD -h $HOST -p $PORT   config get  [参数名称]",
+    "briefDescription": "【查看配置参数】redis-cli -a abc@123 -h 127.0.0.1  -p 6379 config get  appendonly",
+    "detailedDescription": "在命令最后部分可以指定要获取的参数：\n参数模式\t           说明\t                               示例\n*\t        获取所有配置（内容很多）               config get \"*\"\nrequirepass     获取认证密码(可能显示为空或 \"\")        config get requirepass\nmaxmemory       获取最大内存限制（字节）               config get maxmemory\nsave\t        获取 RDB 持久化策略\t             config get save\nport\t        获取服务器监听端口\t             config get port\n*max*           获取所有包含 “max” 字样的配置\t     config get *max*    ",
+    "categories": [
+      "常用"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli -a $PASSWORD -h $HOST -p $PORT   config set  [参数名字]  [参数值]",
+    "briefDescription": "【修改配置参数】redis-cli -a abc@123 -h 127.0.0.1  -p 6379 config set  appendonly \tyes\t",
+    "detailedDescription": "【常用配置参数说明】\t\t\t\t\t\t\t\t\t\t\t\t\n参数名\t\t\t\t\t   说明\t                      示例\nappendonly\t\t\t是否开启 AOF 持久化\t\tconfig set appendonly yes\nmaxmemory\t\t\t设置最大内存限制（字节）\t\tconfig set maxmemory 1073741824（1GB）\nrequirepass\t\t\t设置认证密码\t\t\tconfig set requirepass myNewPass123\ntimeout\t\t\t\t客户端空闲关闭超时（秒）\t\tconfig set timeout 300\ndatabases\t\t\t设置数据库总数（需重启生效）\tconfig set databases 16\nslowlog-max-len\t\t\t设置慢查询最大记录条数\t\tconfig set slowlog-max-len 128\nappendfsync\t\t\t设置 AOF 同步策略\t\tconfig set appendfsync everysec\nrepl-timeout\t\t\t主从复制超时时间（秒）\t\tconfig set repl-timeout 60\n",
+    "categories": [
+      "常用"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli -a $PASSWORD -h $HOST -p $PORT   rewrite rewrite",
+    "briefDescription": "【配置参数持久化写入到配置文件】redis-cli -a abc@123 -h 127.0.0.1  -p 6379 config rewrite",
+    "detailedDescription": "",
+    "categories": [
+      "常用"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli -a $PASSWORD -h $HOST -p $PORT    shutdown save",
+    "briefDescription": "【停止进程前强制执行RDB持久化】redis-cli -a abc@123 -h 127.0.0.1  -p 6379 shutdown save",
+    "detailedDescription": "\n【SHUTDOWN 所有参数详解】 \n参数\t说明\t                     数据保存\t       阻塞行为\t          适用场景\n无参数\t默认关闭模式\t         根据配置自动保存     等待保存完成\t          常规关闭\nSAVE\t关闭前强制执行RDB持久化      强制保存\t     阻塞直到保存完成\t 确保数据不丢失\nNOSAVE\t关闭前不保存数据\t            不保存\t      立即关闭\t        快速重启（可丢数据）\nABORT\t取消正在进行的关闭\t    —\t                非阻塞\t       取消已触发的 SHUTDOWN",
+    "categories": [
+      "基础",
+      "常用"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli  -h $HOST -p $SENTINEL_PORT   SENTINEL FAILOVER mymaster",
+    "briefDescription": "【手动故障转移】redis-cli -h 127.0.0.1  -p 26379  SENTINEL FAILOVER mymaster",
+    "detailedDescription": "【命令作用说明】\n说明项\t             详细解释\n核心功能\t         强制对指定主节点执行故障转移（Failover），即使主节点看似正常\n执行者               Redis Sentinel（哨兵）节点，而非 Redis 主从节点\n使用场景\t         手动切换主从、计划内维护、主节点性能问题、强制重置主从关系\n工作方式\t         Sentinel 会忽略主节点的健康状态，直接选举一个新的从库晋升为主库\n\nSENTINEL FAILOVER \t Sentinel 命令：强制执行故障转移\t\nmymaster\t         要执行故障转移的主节点名称（在 sentinel.conf 中配置）\t  \n",
+    "categories": [
+      "操作"
+    ],
+    "sortOrder": 2
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli  -h $HOST -p $SENTINEL_PORT   SENTINEL RESET mymaster",
+    "briefDescription": "【刷新哨兵状态】redis-cli -h 127.0.0.1  -p 26379  SENTINEL RESET mymaster",
+    "detailedDescription": "执行后哨兵会：\n清除 mymaster 主节点的故障转移历史记录\n清除所有从节点、其他哨兵节点的旧状态、旧地址、旧故障信息\n重新根据配置文件重新发现、重新监控 mymaster 主节点及其从节点、其他哨兵\n重置后哨兵会重新建立拓扑、重新选举、重新判断节点状态\n\nSENTINEL RESET\t哨兵的重置命令\nmymaster\t 主节点名称 (在 sentinel 配置文件中 sentinel monitor mymaster ... 定义的)",
+    "categories": [
+      "操作"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli -a $PASSWORD -h $HOST -p $PORT   cluster info",
+    "briefDescription": "【查看集群状态】 redis-cli -a abc@123 -h 127.0.0.1  -p 6379  cluster info",
+    "detailedDescription": "CLUSTER INFO 命令输出详解\n执行后会返回集群的关键状态信息，每个字段含义如下：\n\n字段\t                                    说明\t                正常值示例\ncluster_state\t                    集群当前状态          \t     ok (正常) / fail (失败)\ncluster_slots_assigned\t            已分配的槽位总数     \t     16384 (全部槽位)\ncluster_slots_ok\t            正常工作的槽位数\t             16384\ncluster_slots_pfail\t            可能失败（PFAIL）的槽位数          0\ncluster_slots_fail\t            已确认失败（FAIL）的槽位数         0\ncluster_known_nodes\t            集群中已知的节点总数\t   \t     3 / 6 等\ncluster_size\t                    集群主节点数量\t\t     3\ncluster_current_epoch\t            当前集群配置版本号\t\t     6\ncluster_my_epoch\t            当前节点的配置版本号\t\t     3\ncluster_stats_messages_sent\t    发送的集群消息总数\t\t     12345\ncluster_stats_messages_received\t    接收的集群消息总数\t\t     12340\ncluster_stats_messages_ping_sent    发送的 PING 消息数\t             12345\ncluster_stats_messages_pong_sent\t发送的 PONG 消息数\t     12345 \ncluster_stats_messages_ping_received\t接收的 PING 消息数\t     12345\ncluster_stats_messages_pong_received\t接收的 PONG 消息数\t     12345",
+    "categories": [
+      "查询",
+      "集群"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli -a $PASSWORD -h $HOST -p $PORT    cluster nodes",
+    "briefDescription": "【查看集群节点信息】 redis-cli -a abc@123 -h 127.0.0.1  -p 6379   cluster nodes",
+    "detailedDescription": "字段说明\n字段\t        说明\t                                           示例\nnode-id\t        节点唯一标识符（40位十六进制字符串）\td6b9a7f8e3c2a1b4c5d6e7f8a9b0c1d2e3f4a5b6\nip:port@cport\t节点地址：<IP>:<数据端口>@<集群总线端口>\t 10.0.0.1:6379@16379\nflags\t        节点角色和状态标志\t                   master、slave、myself、fail 等\nmaster-id\t如果是从节点，显示主节点的 ID；主节点则显示 -\t  d6b9a7f8... 或 -\nping-sent\t上次发送 ping 的时间戳（毫秒），0 表示刚启动\t   0、1234567890\npong-recv\t上次收到 pong 的时间戳（毫秒）\t                   1234567890\nconfig-epoch    节点配置版本号（用于故障转移选举）                   \t3、12\nlink-state\t集群总线连接状态\t                           connected、disconnected\nslot-range\t主节点负责的槽位范围（从节点显示为空）\t    0-5460、[5461-10922]\n\n\nFlags       标志详解\n标志\t    含义\nmaster\t    主节点\nslave\t    从节点\nmyself\t    当前连接的节点\nfail\t    节点处于 FAIL 状态\npfail\t    节点处于 PFAIL 状态（疑似下线）\nhandshake   正在进行握手\nnoaddr\t    节点地址未知\nnoflags\t    无特殊标志",
+    "categories": [
+      "查询",
+      "集群"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli -a $PASSWORD -h $HOST -p $PORT   slowlog get [N]",
+    "briefDescription": "【慢日志查询】 redis-cli -a abc@123 -h 127.0.0.1  -p 6379   slowlog get 5",
+    "detailedDescription": "# 返回最新的N条慢查询记录。如果N省略，返回10条\n#设置慢查询阈值，单位是微秒。如果执行命令的时间超过这个阈值，就会被记录到慢查询日志。默认值是10000微秒（即10毫秒）。如果设置为-1，将禁用慢查询日志.\n#设置慢查询日志的最大长度。如果新的慢查询记录导致日志长度超过这个值，最旧的记录将被删除。默认值是128.\n1) 1) (integer) 1234567        # 日志唯一ID（自增）\n   2) (integer) 1703123456789  # 命令执行时间戳（微秒）\n   3) (integer) 15000          # 命令执行耗时（微秒，1秒=1,000,000微秒）\n   4) 1) \"SET\"                 # 执行的命令及参数\n      2) \"user:1001\"\n      3) \"some_value\"\n   5) \"127.0.0.1:54321\"        # 客户端地址（Redis 4.0+）\n   6) \"myuser\"                 # 用户名（Redis 6.0+，启用ACL时）\n\n\ndate -d @1703123456789   转换为可读时间",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Redis",
+    "commandFormat": "redis-cli -a $PASSWORD --cluster call    $HOST:$PORT   【命令】",
+    "briefDescription": "【集群批量执行命令】 redis-cli -a abc@123 --cluster call  127.0.0.1:6379 info ",
+    "detailedDescription": "参数说明\n参数\t         说明\t                         示例\n-a\t        Redis 认证密码\t               -a abc123\n--cluster call\t集群模式下在所有节点执行命令\t固定参数\n<host>:<port>\t集群中任意一个节点的地址和端口\t127.0.0.1:6379\n<command>\t要执行的 Redis 命令\t       INFO SERVER\n\n",
+    "categories": [
+      "集群"
+    ],
+    "sortOrder": 1
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmq-server  -detached",
+    "briefDescription": "【启动服务】",
+    "detailedDescription": "",
+    "categories": [
+      "重启"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmqctl stop",
+    "briefDescription": "【停止服务】",
+    "detailedDescription": "",
+    "categories": [
+      "重启"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmqctl start_app",
+    "briefDescription": "【启动应用】",
+    "detailedDescription": "",
+    "categories": [
+      "重启"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmqctl stop_app",
+    "briefDescription": "【停止应用】",
+    "detailedDescription": "",
+    "categories": [
+      "重启"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmqctl cluster_status",
+    "briefDescription": "查看集群状态",
+    "detailedDescription": "",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmqctl list_users",
+    "briefDescription": "【查看用户列表】",
+    "detailedDescription": "",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmqctl change_password $userName $newPassword",
+    "briefDescription": "【修改密码】",
+    "detailedDescription": "",
+    "categories": [
+      "操作"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "RabbitMQ",
+    "commandFormat": "rabbitmqctl delete_user userName",
+    "briefDescription": "【删除用户(】",
+    "detailedDescription": "",
+    "categories": [
+      "操作"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Kafka",
+    "commandFormat": "/app/kafka/kafka_home/bin/kafka-server-start.sh -daemon /app/kafka/kafka_home/config/kafkaserver.properties",
+    "briefDescription": "【启动服务】",
+    "detailedDescription": "",
+    "categories": [
+      "基础",
+      "操作"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Kafka",
+    "commandFormat": "/app/kafka/kafka_home/bin/kafka-server-stop.sh",
+    "briefDescription": "【停止服务】",
+    "detailedDescription": "",
+    "categories": [
+      "基础",
+      "操作"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Kafka",
+    "commandFormat": "/app/kafka/kafka_home/bin/kafka-topics.sh --bootstrap-server 127.0.0.1:9092     --describe ",
+    "briefDescription": "【查看top详情】",
+    "detailedDescription": "",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Kafka",
+    "commandFormat": "/app/kafka/kafka_home/bin/kafka-leader-election.sh --bootstrap-server 127.0.0.1:9092    --election-type preferred --all-topic-partitions",
+    "briefDescription": "【Leader重平衡】",
+    "detailedDescription": "",
+    "categories": [
+      "操作"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Kafka",
+    "commandFormat": "/app/kafka/kafka_home/bin/kafka-reassign-partitions.sh --bootstrap-server  127.0.0.1:9092  --execute --reassignment-json-file  middletest2.json",
+    "briefDescription": "【topic 加副本】",
+    "detailedDescription": "",
+    "categories": [
+      "操作"
+    ],
+    "sortOrder": 0
+  },
+  {
+    "softwareTypeCategory": "中间件",
+    "softwareTypeName": "Kafka",
+    "commandFormat": "kafka-consumer-groups.sh   --bootstrap-server 127.0.0.1:9092   --describe   --group my_group",
+    "briefDescription": "【查看消费者组my_group消费情况】",
+    "detailedDescription": "",
+    "categories": [
+      "查询"
+    ],
+    "sortOrder": 0
+  }
+]

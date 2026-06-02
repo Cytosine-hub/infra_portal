@@ -493,12 +493,14 @@ async function sendMessage() {
     const headers = { 'Content-Type': 'application/json' }
     if (auth?.token) headers['Authorization'] = `Bearer ${auth.token}`
 
+    console.log('[SSE] request:', url, 'token:', auth?.token ? 'present' : 'MISSING')
     const response = await fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
       signal: abortController.signal
     })
+    console.log('[SSE] response status:', response.status, 'content-type:', response.headers.get('content-type'))
 
     if (!response.ok) {
       if (response.status === 401) {
@@ -530,6 +532,7 @@ async function sendMessage() {
         } else if (line.startsWith('data:')) {
           currentEvent.data = line.slice(5).trim()
         } else if (line === '' && currentEvent.data) {
+          console.log('[SSE] event:', currentEvent.type, 'data:', currentEvent.data.substring(0, 100))
           const data = JSON.parse(currentEvent.data)
           currentEvent = { type: '', data: '' }
 

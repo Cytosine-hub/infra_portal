@@ -370,13 +370,16 @@
           <button class="ghost" @click="goHome()">← 返回首页</button>
           <h2 style="margin-left:12px;flex:1">常用命令</h2>
           <input v-model.trim="cmdSearch" placeholder="搜索命令..." style="max-width:260px" />
-          <button v-if="auth.token" @click="openCreateCommandDialog()">新增命令</button>
+          <button v-if="isSysAdmin || managedCategory" @click="openCreateCommandDialog()">新增命令</button>
         </div>
         <div class="commands-layout">
           <aside class="commands-sidebar">
             <div class="type-list">
               <button :class="{ active: selectedCmdType === null }" @click="selectedCmdType = null">全部</button>
-              <button v-for="t in cmdTypes" :key="t.id" :class="{ active: selectedCmdType === t.id }" @click="selectedCmdType = t.id">{{ t.name }}</button>
+              <template v-for="cat in cmdTypeCategories" :key="cat">
+                <div class="type-category-label">{{ cat }}</div>
+                <button v-for="t in cmdTypesByCategory(cat)" :key="t.id" :class="{ active: selectedCmdType === t.id }" @click="selectedCmdType = t.id">{{ t.name }}</button>
+              </template>
             </div>
           </aside>
           <main class="commands-main">
@@ -388,8 +391,8 @@
                   <span v-for="cat in parseCategories(cmd.categories)" :key="cat" class="command-cat-tag">{{ cat }}</span>
                   <div style="margin-left:auto;display:flex;gap:6px">
                     <button class="ghost" @click.stop="copyCommand(cmd.commandFormat)">复制</button>
-                    <button v-if="auth.token" class="ghost" @click.stop="openEditCommandDialog(cmd)">编辑</button>
-                    <button v-if="auth.token" class="danger" @click.stop="deleteCommand(cmd)">删除</button>
+                    <button v-if="canManageCommand(cmd)" class="ghost" @click.stop="openEditCommandDialog(cmd)">编辑</button>
+                    <button v-if="canManageCommand(cmd)" class="danger" @click.stop="deleteCommand(cmd)">删除</button>
                   </div>
                 </div>
                 <pre class="command-code">{{ cmd.commandFormat }}</pre>
@@ -410,9 +413,11 @@
             </div>
             <div class="form-grid single">
               <label>所属类型
-                <select v-model="cmdForm.middlewareTypeId" required>
+                <select v-model="cmdForm.softwareTypeId" required>
                   <option value="" disabled>请选择</option>
-                  <option v-for="t in cmdTypes" :key="t.id" :value="t.id">{{ t.name }}</option>
+                  <optgroup v-for="cat in cmdTypeCategories" :key="cat" :label="cat">
+                    <option v-for="t in cmdTypesByCategory(cat)" :key="t.id" :value="t.id">{{ t.name }}</option>
+                  </optgroup>
                 </select>
               </label>
               <label>命令格式<textarea v-model.trim="cmdForm.commandFormat" required rows="4" placeholder="如: redis-cli -h $HOST -p $PORT info"></textarea></label>
@@ -1386,7 +1391,7 @@ const cmdCommands = ref([])
 const selectedCmdType = ref(null)
 const cmdSearch = ref('')
 const showCommandDialog = ref(false)
-function defaultCommandForm() { return { id: null, middlewareTypeId: '', commandFormat: '', briefDescription: '', detailedDescription: '', categories: '' } }
+function defaultCommandForm() { return { id: null, softwareTypeId: '', commandFormat: '', briefDescription: '', detailedDescription: '', categories: '' } }
 const cmdForm = reactive(defaultCommandForm())
 
 // ── RBAC helpers ──
@@ -1454,7 +1459,7 @@ const standardTocItems = computed(() => {
 const filteredCommands = computed(() => {
   let list = cmdCommands.value
   if (selectedCmdType.value != null) {
-    list = list.filter(c => c.middlewareTypeId === selectedCmdType.value)
+    list = list.filter(c => c.softwareTypeId === selectedCmdType.value)
   }
   if (cmdSearch.value) {
     const q = cmdSearch.value.toLowerCase()
@@ -1473,8 +1478,30 @@ function getTypeName(typeId) {
 }
 
 function getCmdTypeName(cmd) {
-  const t = cmdTypes.value.find(x => x.id === cmd.middlewareTypeId)
+  const t = cmdTypes.value.find(x => x.id === cmd.softwareTypeId)
   return t ? t.name : ''
+}
+
+function getCmdTypeCategory(cmd) {
+  const t = cmdTypes.value.find(x => x.id === cmd.softwareTypeId)
+  return t ? t.category : ''
+}
+
+const cmdTypeCategories = computed(() => {
+  const cats = [...new Set(cmdTypes.value.map(t => t.category))]
+  return cats
+})
+
+function cmdTypesByCategory(cat) {
+  return cmdTypes.value.filter(t => t.category === cat)
+}
+
+function canManageCommand(cmd) {
+  if (!auth.token) return false
+  if (isSysAdmin.value) return true
+  if (!managedCategory.value) return false
+  const cat = getCmdTypeCategory(cmd)
+  return cat === managedCategory.value
 }
 
 function parseCategories(cats) {
@@ -1513,7 +1540,7 @@ function openCreateCommandDialog() {
 function openEditCommandDialog(cmd) {
   Object.assign(cmdForm, {
     id: cmd.id,
-    middlewareTypeId: cmd.middlewareTypeId,
+    softwareTypeId: cmd.softwareTypeId,
     commandFormat: cmd.commandFormat || '',
     briefDescription: cmd.briefDescription || '',
     detailedDescription: cmd.detailedDescription || '',
@@ -1530,7 +1557,7 @@ function closeCommandDialog() {
 async function saveCommand() {
   const cats = cmdForm.categories ? JSON.stringify(cmdForm.categories.split(/[,，]/).map(s => s.trim()).filter(Boolean)) : null
   const body = {
-    middlewareTypeId: cmdForm.middlewareTypeId,
+    softwareTypeId: cmdForm.softwareTypeId,
     commandFormat: cmdForm.commandFormat,
     briefDescription: cmdForm.briefDescription,
     detailedDescription: cmdForm.detailedDescription,
