@@ -48,10 +48,10 @@ public class TroubleshootAgent {
     private KnowledgeService knowledgeService;
 
     @Autowired
-    private ChatSessionRepository chatSessionRepository;
+    private ChatSessionMapper chatSessionMapper;
 
     @Autowired
-    private ChatMessageRepository chatMessageRepository;
+    private ChatMessageMapper chatMessageMapper;
 
     private final Gson gson = new Gson();
 
@@ -66,7 +66,8 @@ public class TroubleshootAgent {
         ChatSession session = new ChatSession();
         session.setTitle("新会话");
         session.setMode("rag");
-        return chatSessionRepository.save(session);
+        chatSessionMapper.insert(session);
+        return session;
     }
 
     /**
@@ -82,15 +83,17 @@ public class TroubleshootAgent {
         userMsg.setSessionId(sessionId);
         userMsg.setRole("user");
         userMsg.setContent(userMessage);
-        chatMessageRepository.save(userMsg);
+        chatMessageMapper.insert(userMsg);
 
         // Update session title from first message
-        ChatSession session = chatSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+        ChatSession session = chatSessionMapper.findById(sessionId);
+        if (session == null) {
+            throw new IllegalArgumentException("Session not found: " + sessionId);
+        }
         if ("新会话".equals(session.getTitle())) {
             String title = userMessage.length() > 50 ? userMessage.substring(0, 50) + "..." : userMessage;
             session.setTitle(title);
-            chatSessionRepository.save(session);
+            chatSessionMapper.update(session);
         }
 
         // 2. Retrieve relevant knowledge
@@ -110,7 +113,7 @@ public class TroubleshootAgent {
 
         // History messages (up to MAX_HISTORY_MESSAGES)
         List<com.middleware.manager.knowledge.agent.ChatMessage> history =
-                chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+                chatMessageMapper.findBySessionIdOrderByCreatedAtAsc(sessionId);
         int start = Math.max(0, history.size() - MAX_HISTORY_MESSAGES);
         for (int i = start; i < history.size(); i++) {
             com.middleware.manager.knowledge.agent.ChatMessage h = history.get(i);
@@ -161,7 +164,7 @@ public class TroubleshootAgent {
         assistantMsg.setRole("assistant");
         assistantMsg.setContent(answer);
         assistantMsg.setReferencesText(gson.toJson(references));
-        chatMessageRepository.save(assistantMsg);
+        chatMessageMapper.insert(assistantMsg);
 
         // 6. Return response
         return new AgentResponse(answer, references);
@@ -171,14 +174,14 @@ public class TroubleshootAgent {
      * Get all messages for a session.
      */
     public List<com.middleware.manager.knowledge.agent.ChatMessage> getSessionMessages(Long sessionId) {
-        return chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+        return chatMessageMapper.findBySessionIdOrderByCreatedAtAsc(sessionId);
     }
 
     /**
      * Get all sessions ordered by last update.
      */
     public List<ChatSession> getAllSessions() {
-        return chatSessionRepository.findAllByOrderByUpdatedAtDesc();
+        return chatSessionMapper.findAllByOrderByUpdatedAtDesc();
     }
 
     /**

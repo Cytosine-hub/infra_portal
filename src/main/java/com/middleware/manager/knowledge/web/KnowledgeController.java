@@ -1,7 +1,7 @@
 package com.middleware.manager.knowledge.web;
 
 import com.middleware.manager.knowledge.entity.KnowledgeChunk;
-import com.middleware.manager.knowledge.repository.KnowledgeChunkRepository;
+import com.middleware.manager.knowledge.repository.KnowledgeChunkMapper;
 import com.middleware.manager.knowledge.service.KnowledgeService;
 import com.middleware.manager.knowledge.service.KnowledgeService.ImportResult;
 import com.middleware.manager.knowledge.service.KnowledgeService.SearchResult;
@@ -38,7 +38,7 @@ public class KnowledgeController {
     private KnowledgeService knowledgeService;
 
     @Autowired
-    private KnowledgeChunkRepository chunkRepository;
+    private KnowledgeChunkMapper chunkMapper;
 
     @Autowired
     private StorageService storageService;
@@ -131,7 +131,7 @@ public class KnowledgeController {
      */
     @GetMapping("/docs")
     public ResponseEntity<List<Map<String, Object>>> listDocs() {
-        return ResponseEntity.ok(chunkRepository.findDistinctSources());
+        return ResponseEntity.ok(chunkMapper.findDistinctSources());
     }
 
     /**
@@ -140,7 +140,7 @@ public class KnowledgeController {
      */
     @GetMapping("/docs/preview")
     public ResponseEntity<?> previewDoc(@RequestParam String title, @RequestParam String sourceType) {
-        List<KnowledgeChunk> chunks = chunkRepository.findBySourceTitleAndSourceType(title, sourceType);
+        List<KnowledgeChunk> chunks = chunkMapper.findBySourceTitleAndSourceType(title, sourceType);
         List<Map<String, Object>> result = chunks.stream().map(c -> {
             Map<String, Object> m = new HashMap<>();
             m.put("chunkIndex", c.getChunkIndex());
@@ -162,7 +162,7 @@ public class KnowledgeController {
      */
     @GetMapping("/docs/file")
     public ResponseEntity<?> serveFile(@RequestParam String title, @RequestParam String sourceType) {
-        List<KnowledgeChunk> chunks = chunkRepository.findBySourceTitleAndSourceType(title, sourceType);
+        List<KnowledgeChunk> chunks = chunkMapper.findBySourceTitleAndSourceType(title, sourceType);
         if (chunks.isEmpty() || chunks.get(0).getStoredFileName() == null) {
             Map<String, String> error = new HashMap<>();
             error.put("error", "未找到原文件");
@@ -190,7 +190,7 @@ public class KnowledgeController {
      */
     @GetMapping("/docs/html")
     public ResponseEntity<?> serveHtml(@RequestParam String title, @RequestParam String sourceType) {
-        List<KnowledgeChunk> chunks = chunkRepository.findBySourceTitleAndSourceType(title, sourceType);
+        List<KnowledgeChunk> chunks = chunkMapper.findBySourceTitleAndSourceType(title, sourceType);
         if (chunks.isEmpty() || chunks.get(0).getStoredFileName() == null) {
             return ResponseEntity.notFound().build();
         }

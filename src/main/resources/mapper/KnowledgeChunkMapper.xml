@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.middleware.manager.knowledge.repository.KnowledgeChunkMapper">
+
+    <resultMap id="chunkResultMap" type="KnowledgeChunk">
+        <id property="id" column="id"/>
+        <result property="content" column="content"/>
+        <result property="sourceTitle" column="source_title"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="sourceId" column="source_id"/>
+        <result property="category" column="category"/>
+        <result property="software" column="software"/>
+        <result property="chunkIndex" column="chunk_index"/>
+        <result property="vectorId" column="vector_id"/>
+        <result property="storedFileName" column="stored_file_name"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="chunkResultMap">
+        SELECT * FROM knowledge_chunks WHERE id = #{id}
+    </select>
+
+    <select id="findAll" resultMap="chunkResultMap">
+        SELECT * FROM knowledge_chunks
+    </select>
+
+    <select id="findBySourceTitleContaining" resultMap="chunkResultMap">
+        SELECT * FROM knowledge_chunks WHERE source_title LIKE CONCAT('%', #{keyword}, '%')
+    </select>
+
+    <!-- 带权重的关键词搜索：精确匹配 100 分，双字匹配 10 分，单字匹配 1 分 -->
+    <select id="findByTermsWithScore" resultMap="chunkResultMap">
+        SELECT * FROM knowledge_chunks
+        WHERE
+        <foreach collection="terms" item="term" separator=" OR ">
+            content LIKE CONCAT('%', #{term}, '%')
+        </foreach>
+        ORDER BY
+        (<foreach collection="terms" item="term" index="i" separator=" + ">
+            <choose>
+                <when test="i == 0">(CASE WHEN content LIKE CONCAT('%', #{term}, '%') THEN 100 ELSE 0 END)</when>
+                <when test="i &lt; terms.size() - 1">(CASE WHEN content LIKE CONCAT('%', #{term}, '%') THEN 10 ELSE 0 END)</when>
+                <otherwise>(CASE WHEN content LIKE CONCAT('%', #{term}, '%') THEN 1 ELSE 0 END)</otherwise>
+            </choose>
+        </foreach>)
+        DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findBySourceTitleAndSourceType" resultMap="chunkResultMap">
+        SELECT * FROM knowledge_chunks WHERE source_title = #{sourceTitle} AND source_type = #{sourceType} ORDER BY chunk_index
+    </select>
+
+    <select id="findDistinctSources" resultType="map">
+        SELECT source_type, source_title, source_id, COUNT(*) as chunk_count,
+        GROUP_CONCAT(vector_id) as vector_ids,
+        MIN(stored_file_name) as stored_file_name
+        FROM knowledge_chunks
+        GROUP BY source_type, source_title, source_id
+        ORDER BY MAX(created_at) DESC
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*) FROM knowledge_chunks
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO knowledge_chunks (content, source_title, source_type, source_id, category, software, chunk_index, vector_id, stored_file_name, created_at)
+        VALUES (#{content}, #{sourceTitle}, #{sourceType}, #{sourceId}, #{category}, #{software}, #{chunkIndex}, #{vectorId}, #{storedFileName}, #{createdAt})
+    </insert>
+
+    <delete id="deleteBySourceIdAndSourceType">
+        DELETE FROM knowledge_chunks WHERE source_id = #{sourceId} AND source_type = #{sourceType}
+    </delete>
+
+    <delete id="deleteBySourceTitleAndSourceType">
+        DELETE FROM knowledge_chunks WHERE source_title = #{sourceTitle} AND source_type = #{sourceType}
+    </delete>
+
+    <delete id="deleteBySourceTitleLike">
+        DELETE FROM knowledge_chunks WHERE source_title LIKE #{pattern}
+    </delete>
+
+    <delete id="deleteAll">
+        DELETE FROM knowledge_chunks
+    </delete>
+
+</mapper>

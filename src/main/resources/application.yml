@@ -82,7 +82,7 @@ skills:
 # MyBatis 配置
 mybatis:
   mapper-locations: classpath:mapper/*.xml
-  type-aliases-package: com.middleware.manager.domain,com.middleware.manager.wiki.entity
+  type-aliases-package: com.middleware.manager.domain,com.middleware.manager.wiki.entity,com.middleware.manager.knowledge.entity,com.middleware.manager.knowledge.agent
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl

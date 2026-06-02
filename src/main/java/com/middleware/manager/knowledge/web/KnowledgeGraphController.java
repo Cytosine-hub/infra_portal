@@ -1,7 +1,7 @@
 package com.middleware.manager.knowledge.web;
 
 import com.middleware.manager.knowledge.entity.KnowledgeChunk;
-import com.middleware.manager.knowledge.repository.KnowledgeChunkRepository;
+import com.middleware.manager.knowledge.repository.KnowledgeChunkMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 public class KnowledgeGraphController {
 
     @Autowired
-    private KnowledgeChunkRepository chunkRepository;
+    private KnowledgeChunkMapper chunkMapper;
 
     // 中间件/技术关键词词典
     private static final Set<String> KEYWORDS = Set.of(
@@ -36,7 +36,7 @@ public class KnowledgeGraphController {
 
     @GetMapping("/graph")
     public ResponseEntity<?> getKnowledgeGraph() {
-        List<KnowledgeChunk> chunks = chunkRepository.findAll();
+        List<KnowledgeChunk> chunks = chunkMapper.findAll();
 
         // 1. 统计关键词频率
         Map<String, Integer> keywordCount = new HashMap<>();

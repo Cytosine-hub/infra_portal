@@ -2,7 +2,7 @@ package com.middleware.manager.knowledge.web;
 
 import com.middleware.manager.knowledge.agent.ChatMessage;
 import com.middleware.manager.knowledge.agent.ChatSession;
-import com.middleware.manager.knowledge.agent.ChatSessionRepository;
+import com.middleware.manager.knowledge.agent.ChatSessionMapper;
 import com.middleware.manager.knowledge.agent.TroubleshootAgent;
 import com.middleware.manager.knowledge.agent.TroubleshootAgent.AgentResponse;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +31,7 @@ public class AgentController {
     private TroubleshootAgent agent;
 
     @Autowired
-    private ChatSessionRepository chatSessionRepository;
+    private ChatSessionMapper chatSessionMapper;
 
     private final ExecutorService sseExecutor = Executors.newCachedThreadPool();
 
@@ -95,7 +95,7 @@ public class AgentController {
         session.setTitle("");
         String mode = (body != null && body.get("mode") != null) ? body.get("mode") : "rag";
         session.setMode(mode);
-        chatSessionRepository.save(session);
+        chatSessionMapper.insert(session);
         return session;
     }
 
@@ -105,13 +105,11 @@ public class AgentController {
         if (mode == null || (!mode.equals("rag") && !mode.equals("ops"))) {
             return Map.of("error", "mode must be 'rag' or 'ops'");
         }
-        return chatSessionRepository.findById(id)
-                .map(session -> {
-                    session.setMode(mode);
-                    chatSessionRepository.save(session);
-                    return (Object) session;
-                })
-                .orElse(null);
+        ChatSession session = chatSessionMapper.findById(id);
+        if (session == null) return null;
+        session.setMode(mode);
+        chatSessionMapper.update(session);
+        return session;
     }
 
     public static class ChatRequest {

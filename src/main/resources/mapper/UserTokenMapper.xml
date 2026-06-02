@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.middleware.manager.repository.UserTokenMapper">
+
+    <insert id="insert">
+        INSERT INTO user_tokens (token, username, expires_at) VALUES (#{token}, #{username}, #{expiresAt})
+    </insert>
+
+    <select id="findUsernameByToken" resultType="string">
+        SELECT username FROM user_tokens WHERE token = #{token} AND expires_at >= NOW()
+    </select>
+
+    <update id="updateExpiry">
+        UPDATE user_tokens SET expires_at = #{expiresAt} WHERE token = #{token}
+    </update>
+
+    <delete id="deleteByToken">
+        DELETE FROM user_tokens WHERE token = #{token}
+    </delete>
+
+    <delete id="deleteByUsername">
+        DELETE FROM user_tokens WHERE username = #{username}
+    </delete>
+
+    <delete id="deleteExpired">
+        DELETE FROM user_tokens WHERE expires_at &lt; NOW()
+    </delete>
+
+</mapper>

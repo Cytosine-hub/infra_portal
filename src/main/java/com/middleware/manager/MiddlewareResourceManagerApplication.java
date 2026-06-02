@@ -10,7 +10,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 
 @SpringBootApplication
 @EnableAsync
-@MapperScan({"com.middleware.manager.repository", "com.middleware.manager.wiki.repository"})
+@MapperScan({"com.middleware.manager.repository", "com.middleware.manager.wiki.repository", "com.middleware.manager.knowledge.agent", "com.middleware.manager.knowledge.repository"})
 @EnableConfigurationProperties({StorageProperties.class, ModuleProperties.class})
 public class MiddlewareResourceManagerApplication {
 

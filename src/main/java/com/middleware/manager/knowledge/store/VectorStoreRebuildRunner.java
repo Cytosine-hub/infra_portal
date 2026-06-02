@@ -2,7 +2,7 @@ package com.middleware.manager.knowledge.store;
 
 import com.middleware.manager.knowledge.embedding.EmbeddingService;
 import com.middleware.manager.knowledge.entity.KnowledgeChunk;
-import com.middleware.manager.knowledge.repository.KnowledgeChunkRepository;
+import com.middleware.manager.knowledge.repository.KnowledgeChunkMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -25,14 +25,14 @@ public class VectorStoreRebuildRunner implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(VectorStoreRebuildRunner.class);
 
-    private final KnowledgeChunkRepository chunkRepository;
+    private final KnowledgeChunkMapper chunkMapper;
     private final EmbeddingService embeddingService;
     private final VectorStore vectorStore;
 
-    public VectorStoreRebuildRunner(KnowledgeChunkRepository chunkRepository,
+    public VectorStoreRebuildRunner(KnowledgeChunkMapper chunkMapper,
                                      EmbeddingService embeddingService,
                                      VectorStore vectorStore) {
-        this.chunkRepository = chunkRepository;
+        this.chunkMapper = chunkMapper;
         this.embeddingService = embeddingService;
         this.vectorStore = vectorStore;
     }
@@ -50,7 +50,7 @@ public class VectorStoreRebuildRunner implements ApplicationRunner {
                 return;
             }
 
-            List<KnowledgeChunk> chunks = chunkRepository.findAll();
+            List<KnowledgeChunk> chunks = chunkMapper.findAll();
             if (chunks.isEmpty()) {
                 log.info("[VectorRebuild] No chunks in database, skip.");
                 return;

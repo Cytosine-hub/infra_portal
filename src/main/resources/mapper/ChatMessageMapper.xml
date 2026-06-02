@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.middleware.manager.knowledge.agent.ChatMessageMapper">
+
+    <resultMap id="messageResultMap" type="ChatMessage">
+        <id property="id" column="id"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="role" column="role"/>
+        <result property="content" column="content"/>
+        <result property="referencesText" column="references_text"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <select id="findBySessionIdOrderByCreatedAtAsc" resultMap="messageResultMap">
+        SELECT * FROM chat_messages WHERE session_id = #{sessionId} ORDER BY created_at ASC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO chat_messages (session_id, role, content, references_text, created_at)
+        VALUES (#{sessionId}, #{role}, #{content}, #{referencesText}, #{createdAt})
+    </insert>
+
+</mapper>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.middleware.manager.knowledge.agent.ChatSessionMapper">
+
+    <resultMap id="sessionResultMap" type="ChatSession">
+        <id property="id" column="id"/>
+        <result property="title" column="title"/>
+        <result property="mode" column="mode"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findById" resultMap="sessionResultMap">
+        SELECT * FROM chat_sessions WHERE id = #{id}
+    </select>
+
+    <select id="findAllByOrderByUpdatedAtDesc" resultMap="sessionResultMap">
+        SELECT * FROM chat_sessions ORDER BY updated_at DESC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO chat_sessions (title, mode, created_at, updated_at)
+        VALUES (#{title}, #{mode}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <update id="update">
+        UPDATE chat_sessions SET title=#{title}, mode=#{mode}, updated_at=#{updatedAt} WHERE id=#{id}
+    </update>
+
+</mapper>

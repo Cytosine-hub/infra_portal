@@ -1,32 +1,29 @@
 package com.middleware.manager.service;
 
+import com.middleware.manager.repository.UserTokenMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 @Service
 public class TokenService {
     private static final Logger LOGGER = LoggerFactory.getLogger(TokenService.class);
     private static final long TOKEN_EXPIRY_HOURS = 2;
 
-    private final JdbcTemplate jdbcTemplate;
+    private final UserTokenMapper tokenMapper;
 
-    public TokenService(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public TokenService(UserTokenMapper tokenMapper) {
+        this.tokenMapper = tokenMapper;
     }
 
     public String createToken(String username) {
         String token = UUID.randomUUID().toString().replace("-", "");
         LocalDateTime expiresAt = LocalDateTime.now().plusHours(TOKEN_EXPIRY_HOURS);
 
-        jdbcTemplate.update(
-                "INSERT INTO user_tokens (token, username, expires_at) VALUES (?, ?, ?)",
-                token, username, expiresAt);
+        tokenMapper.insert(token, username, expiresAt);
 
         LOGGER.info("token created for user={} expiresAt={}", username, expiresAt);
         return token;
@@ -38,17 +35,14 @@ public class TokenService {
         }
 
         // 清理过期 token
-        jdbcTemplate.update("DELETE FROM user_tokens WHERE expires_at < NOW()");
+        tokenMapper.deleteExpired();
 
-        String username = jdbcTemplate.queryForObject(
-                "SELECT username FROM user_tokens WHERE token = ? AND expires_at >= NOW()",
-                String.class, token);
+        String username = tokenMapper.findUsernameByToken(token);
 
         if (username != null) {
             // 滑动续期
             LocalDateTime newExpiry = LocalDateTime.now().plusHours(TOKEN_EXPIRY_HOURS);
-            jdbcTemplate.update("UPDATE user_tokens SET expires_at = ? WHERE token = ?",
-                    newExpiry, token);
+            tokenMapper.updateExpiry(token, newExpiry);
         }
 
         return username;
@@ -56,13 +50,13 @@ public class TokenService {
 
     public void deleteToken(String token) {
         if (token != null) {
-            int deleted = jdbcTemplate.update("DELETE FROM user_tokens WHERE token = ?", token);
+            int deleted = tokenMapper.deleteByToken(token);
             LOGGER.info("token deleted rows={}", deleted);
         }
     }
 
     public void deleteAllTokensForUser(String username) {
-        jdbcTemplate.update("DELETE FROM user_tokens WHERE username = ?", username);
+        tokenMapper.deleteByUsername(username);
         LOGGER.info("all tokens deleted for user={}", username);
     }
 }
