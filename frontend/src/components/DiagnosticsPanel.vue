@@ -330,7 +330,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, nextTick } from 'vue'
-import { request, getSavedAuth } from '../api'
+import { request, getSavedAuth, clearAuth } from '../api'
 import MarkdownIt from 'markdown-it'
 
 const props = defineProps({ auth: Object })
@@ -501,6 +501,11 @@ async function sendMessage() {
     })
 
     if (!response.ok) {
+      if (response.status === 401) {
+        clearAuth()
+        window.location.hash = '#/login'
+        return
+      }
       let errMsg = response.statusText
       try { const p = await response.json(); errMsg = p.error || p.message || errMsg } catch {}
       throw Object.assign(new Error(errMsg), { status: response.status })

@@ -5,15 +5,8 @@ const EXPIRES_KEY = 'mrm.expiresAt'
 export function getSavedAuth() {
   const token = localStorage.getItem(TOKEN_KEY)
   const user = localStorage.getItem(USER_KEY)
-  const expiresAt = localStorage.getItem(EXPIRES_KEY)
 
   if (!token || !user) return null
-
-  // 检查本地过期时间
-  if (expiresAt && new Date(expiresAt) < new Date()) {
-    clearAuth()
-    return null
-  }
 
   return { token, user: JSON.parse(user) }
 }
@@ -39,14 +32,6 @@ export async function request(path, options = {}) {
   const token = options.token || localStorage.getItem(TOKEN_KEY)
   const headers = new Headers(options.headers || {})
 
-  // 检查本地过期时间
-  const expiresAt = localStorage.getItem(EXPIRES_KEY)
-  if (expiresAt && new Date(expiresAt) < new Date()) {
-    clearAuth()
-    window.location.hash = '#/login'
-    throw new Error('登录已过期')
-  }
-
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
@@ -69,7 +54,6 @@ export async function request(path, options = {}) {
   const response = await fetch(path, fetchOptions)
 
   if (!response.ok) {
-    // Token 过期或无效，清除登录状态
     if (response.status === 401) {
       clearAuth()
       window.location.hash = '#/login'
