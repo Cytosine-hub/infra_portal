@@ -508,33 +508,30 @@ watch(showImportModal, (val) => {
 watch(currentTab, async (tab) => {
   if (tab === 'graph' && !graphReady.value) {
     await nextTick()
+    await new Promise(r => setTimeout(r, 500))
     initGraph()
   }
 })
 
 async function initGraph() {
-  if (!graphContainer.value) return
+  if (!graphContainer.value || graphReady.value) return
   graphLoading.value = true
   try {
-    await nextTick()
-    await new Promise(r => setTimeout(r, 300))
-
-    const container = graphContainer.value
-    const w = container.clientWidth || 800
-    const h = container.clientHeight || 600
-    console.log('[Graph] container size:', w, 'x', h)
-
     const data = await request('/api/knowledge/graph')
     if (!data || !data.nodes?.length) {
-      console.log('[Graph] no data')
       graphLoading.value = false
       return
     }
-    console.log('[Graph] nodes:', data.nodes.length, 'links:', data.links?.length)
 
-    graph = ForceGraph(container)
-      .width(w)
-      .height(h)
+    const N = data.nodes.length
+    const radius = Math.max(100, N * 3)
+    data.nodes.forEach((n, i) => {
+      const angle = (2 * Math.PI * i) / N
+      n.x = radius * Math.cos(angle)
+      n.y = radius * Math.sin(angle)
+    })
+
+    graph = ForceGraph(graphContainer.value)
       .backgroundColor('#000000')
       .graphData(data)
       .nodeLabel(n => `${n.name} (${n.val}次)`)
@@ -549,12 +546,8 @@ async function initGraph() {
 
     graph.d3Force('charge').strength(-300)
     graph.d3Force('link').distance(80)
-    setTimeout(() => {
-      console.log('[Graph] zoomToFit')
-      graph.zoomToFit(400, 50)
-    }, 1000)
+    setTimeout(() => graph.zoomToFit(400, 50), 1000)
     graphReady.value = true
-    console.log('[Graph] init done')
   } catch (e) {
     console.warn('graph init error:', e)
   } finally {
