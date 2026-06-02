@@ -41,12 +41,10 @@
       </template>
 
       <!-- 知识图谱 -->
-      <template v-if="currentTab === 'graph'">
-        <div class="graph-wrapper">
-          <div v-if="graphLoading" class="graph-loading">加载知识图谱中...</div>
-          <div ref="graphContainer" class="graph-container"></div>
-        </div>
-      </template>
+      <div v-show="currentTab === 'graph'" class="graph-wrapper">
+        <div v-if="graphLoading" class="graph-loading">加载知识图谱中...</div>
+        <div ref="graphContainer" class="graph-container"></div>
+      </div>
 
       <!-- 检索测试 -->
       <template v-if="currentTab === 'search'">
@@ -508,17 +506,9 @@ watch(showImportModal, (val) => {
 // ── 知识图谱 ──
 
 watch(currentTab, async (tab) => {
-  if (tab === 'graph') {
-    if (graphReady.value && graph) return // 已初始化，复用
+  if (tab === 'graph' && !graphReady.value) {
     await nextTick()
     initGraph()
-  } else {
-    // 离开图谱 tab 时销毁实例释放 WebGL 资源
-    if (graph) {
-      graph._destructor?.()
-      graph = null
-      graphReady.value = false
-    }
   }
 })
 
@@ -526,65 +516,45 @@ async function initGraph() {
   if (!graphContainer.value) return
   graphLoading.value = true
   try {
-    // 等待 DOM 渲染完成，确保容器有尺寸
     await nextTick()
-    await new Promise(r => setTimeout(r, 100))
+    await new Promise(r => setTimeout(r, 300))
 
     const container = graphContainer.value
     const w = container.clientWidth || 800
     const h = container.clientHeight || 600
+    console.log('[Graph] container size:', w, 'x', h)
 
     const data = await request('/api/knowledge/graph')
     if (!data || !data.nodes?.length) {
+      console.log('[Graph] no data')
       graphLoading.value = false
       return
     }
-
-    const N = data.nodes.length
-
-    // 2D 圆形初始布局
-    const radius = Math.max(100, N * 3)
-    data.nodes.forEach((n, i) => {
-      const angle = (2 * Math.PI * i) / N
-      n.x = radius * Math.cos(angle)
-      n.y = radius * Math.sin(angle)
-    })
+    console.log('[Graph] nodes:', data.nodes.length, 'links:', data.links?.length)
 
     graph = ForceGraph(container)
       .width(w)
       .height(h)
       .backgroundColor('#000000')
+      .graphData(data)
       .nodeLabel(n => `${n.name} (${n.val}次)`)
       .nodeColor(() => '#ffffff')
       .nodeVal(n => n.group === 'keyword' ? Math.max(n.val * 0.5, 1.5) : Math.max(n.val * 2, 5))
       .linkColor(() => 'rgba(255,255,255,0.6)')
       .linkWidth(l => Math.max(l.value * 0.5, 0.3))
-      .nodeCanvasObject((n, ctx) => {
-        const r = Math.sqrt(n.val || 1) * 1.5
-        ctx.beginPath()
-        ctx.arc(n.x, n.y, r, 0, 2 * Math.PI)
-        ctx.fillStyle = '#ffffff'
-        ctx.fill()
-      })
-      .nodePointerAreaPaint((n, color, ctx) => {
-        const r = Math.sqrt(n.val || 1) * 1.5 + 2
-        ctx.fillStyle = color
-        ctx.beginPath()
-        ctx.arc(n.x, n.y, r, 0, 2 * Math.PI)
-        ctx.fill()
-      })
       .onNodeClick(n => {
         graph.centerAt(n.x, n.y, 1000)
         graph.zoom(4, 1000)
       })
 
-    graph.graphData(data)
     graph.d3Force('charge').strength(-300)
     graph.d3Force('link').distance(80)
-
-    // 等力图稳定后再 fit
-    setTimeout(() => graph.zoomToFit(400, 50), 500)
+    setTimeout(() => {
+      console.log('[Graph] zoomToFit')
+      graph.zoomToFit(400, 50)
+    }, 1000)
     graphReady.value = true
+    console.log('[Graph] init done')
   } catch (e) {
     console.warn('graph init error:', e)
   } finally {
