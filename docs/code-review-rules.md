@@ -1,170 +1,202 @@
 # 代码审查规则
 
-> 适用于 middleware_resource_manager 项目的 Wiki、Knowledge、Agent 模块
+> 适用于 middleware_resource_manager 全项目（后端 Java + 前端 Vue）
 
 ---
 
 ## 一、安全类规则（S 级，必须修复）
 
 ### S-01 XSS 注入
-- **规则**: 禁止在 Vue 模板中使用 `v-html` 渲染用户可控内容。若必须使用，必须先通过 DOMPurify 等库进行消毒。
-- **禁止**: 将数据库字段直接拼接进 HTML 字符串（如 `data-title="${title}"`），必须对 `"`、`<`、`>`、`&` 进行 HTML 实体转义。
-- **检查点**: `v-html`、`innerHTML`、字符串模板拼接 HTML 属性。
+- **前端**: `v-html` 渲染用户内容前必须消毒。`formatDetail()` 等手动拼 HTML 的函数必须先转义 `<>&"`。
+- **前端**: wikilink 等动态生成 HTML 属性时，值必须经过 `escapeHtml()`。
+- **前端**: `markdown-it` 必须配置 `html: false`，且后处理的正则替换不得引入未转义的用户数据。
+- **后端**: 审计日志 JSON 必须用 Gson/Jackson 序列化，禁止 `String.format` 拼接。
 
 ### S-02 SQL 注入
-- **规则**: MyBatis 中只使用 `#{}` 参数绑定，禁止使用 `${}` 字符串拼接。
-- **检查点**: 所有 Mapper XML 文件中的 `${}` 使用。
+- MyBatis 中只使用 `#{}` 参数绑定，禁止 `${}`。
 
 ### S-03 敏感信息泄露
-- **规则**: 异常消息（`e.getMessage()`）不得直接返回给前端。Controller 层必须捕获异常并返回通用错误信息，详细错误只记录到日志。
-- **规则**: 审计日志中的 JSON 字段必须使用 JSON 库序列化，禁止 `String.format` 手动拼接。
-- **检查点**: `WikiExceptionHandler` 中 `RuntimeException` 处理器、`WikiController` 中审计日志构建。
+- **后端**: 异常消息不得直接返回前端。`RuntimeException` 处理器返回通用错误信息。
+- **后端**: 硬编码的 API Key、数据库密码必须改为纯环境变量，`application.yml` 中不得有明文密钥。
+- **前端**: Token 存储在 localStorage 中，必须防御 XSS。
+- **前端**: `getSavedAuth()` 必须校验 `expiresAt`，过期则清除。
 
 ### S-04 输入验证
-- **规则**: 文件上传必须校验大小上限、条目数量、路径遍历（Zip Slip）。
-- **规则**: ZIP 导入必须检查每个条目的解压后大小，防止 Zip Bomb。
-- **规则**: 所有 REST 接口的必填参数必须在入口处做非空校验。
-- **检查点**: `WikiImportService.importFromZip`、`IngestTaskService.createTextTask`。
+- 文件上传校验大小、条目数、路径遍历（Zip Slip）、Zip Bomb。
+- REST 接口必填参数在入口处非空校验。
+- `@RequestBody` 参数使用 `@Valid` 注解。
 
 ### S-05 认证与授权
-- **规则**: 管理类接口（删除、修改、导入）必须校验当前用户身份和操作权限。
-- **规则**: Token 存储在 localStorage 中时，页面必须防御 XSS（因为 XSS 可窃取 token）。
-- **检查点**: `WikiController` 中所有 DELETE/PUT/POST 端点的权限校验。
+- 管理类接口必须校验用户身份和权限（Defense in Depth，不依赖 SecurityConfig 单一防线）。
+- CORS 不得使用 `*` + `allowCredentials(true)`。
+- 密码存储必须统一：前端 SHA-256 后传输，后端 BCrypt 存储，seed 脚本也必须遵循同一管道。
+
+### S-06 CSRF 保护
+- 使用 Cookie 认证的场景必须启用 CSRF。使用 Token 认证的 API 可禁用，但需记录决策理由。
 
 ---
 
-## 二、数据完整性类规则（D 级，高优先级）
+## 二、架构类规则（A 级）
 
-### D-01 事务管理
-- **规则**: 涉及多表写入的业务方法必须标注 `@Transactional`。
-- **必须加事务的场景**:
-  - `WikiImportService.importFromZip`（pages + links 写入）
-  - `IngestTaskService.createTaskFromContent`（source + task 写入）
-  - `LintAgent.runLint`（delete resolved + insert new）
-  - `IngestAgent.ingest`（pages + links + vector + log 写入）
-- **检查点**: Service 层多步写入方法是否有 `@Transactional`。
+### A-01 分层架构
+- Controller 不得直接注入 Mapper。必须通过 Service 层。
+- 每个 Controller 端点必须有对应的 Service 方法。
+- DTO 类统一使用 `@Data`（Lombok），禁止手写 getter/setter。
 
-### D-02 级联删除
-- **规则**: 删除主记录时，必须同步清理关联数据（外键引用、向量索引等）。
-- **检查点**: `WikiController.deletePage` 是否清理 `wiki_links`、`wiki_page_permissions`、向量嵌入。
+### A-02 组件拆分
+- 单个 Vue 组件不得超过 500 行（含模板+脚本+样式）。超限必须拆分。
+- App.vue 不得包含业务模态框。每个模态框应是独立组件。
+- 路由名称使用常量，禁止魔法字符串。
 
-### D-03 空列表防御
-- **规则**: MyBatis `<foreach>` 生成的 `IN (...)` 子句，调用方必须保证列表非空，或在 XML 中添加 `<if test="ids != null and ids.size() > 0">` 守卫。
-- **检查点**: `WikiPageMapper.findByIds` 的所有调用方。
+### A-03 请求/响应类型化
+- Controller 返回值必须使用 DTO 类型，禁止 `Map<String, Object>`。
+- 请求体使用独立的 Request DTO 类（放在 `web/api/dto/` 包），禁止内部类。
 
-### D-04 幂等性
-- **规则**: 使用 `INSERT IGNORE` 的写入，返回值不能作为"新增成功数"的依据。必须用 `insert` 的实际返回值（affected rows）判断是否真的插入。
-- **检查点**: `LinkResolver.resolveLinks` 中 `created` 计数器。
+### A-04 DDL 与实体对齐
+- 每个 DDL 表必须有对应的 Java 实体类和 Mapper。
+- 设计文档中的索引建议必须在 DDL 中体现。
 
 ---
 
-## 三、性能类规则（P 级，按优先级排序）
+## 三、模块复用规则（R 级）
+
+### R-01 工具方法去重
+- 相同逻辑不得在多处实现。发现 3 处以上重复必须提取为共享工具类。
+- **已知需提取**:
+  - `trimToNull()` — 5 个 Service 中重复
+  - `requireText()` — 3 个 Service 中重复
+  - `restorePublishedVersion()` — 2 个 Service 中重复，应移入 `VersionManager`
+  - `sha256Hex()` — 4 处重复（WikiController、IngestTaskService、IngestAgent、AdminAccountService）
+  - `formatDate()` — 前端 3 个组件中重复
+  - `renderMarkdown()` — 前端 3 个组件中重复（各有不同消毒逻辑）
+
+### R-02 PageResult 构建
+- `PageResult.of(PageInfo)` 静态工厂方法已存在，所有 Controller 必须使用它，禁止手动映射。
+
+### R-03 分页/排序工具
+- `normalizeSize()` 在 2 个 Controller 中重复，应提取到基类或工具类。
+- `loadSoftwareType()` 在 2 个 Controller 中重复，应移入 Service。
+
+### R-04 前端工具模块
+- 前端必须创建 `src/utils/` 目录，提取共享工具：`formatDate`、`escapeHtml`、`renderMarkdown`、`statusLabel`。
+
+---
+
+## 四、性能规则（P 级）
 
 ### P-01 N+1 查询
-- **规则**: 禁止在循环中逐条查询数据库。必须使用批量查询（`findByIds`、`findAll` + 内存索引）。
-- **已知违规**:
-  - `WikiController.getPageLinks` — 循环中调用 `findById`
-  - `WikiController.batchUpdateCategory` — 循环中调用 `findById`
-  - `WikiExportService.exportPages` — 循环中调用 `findByFromPageId`
-  - `WikiSearchService` 图扩展 — 循环中调用 `findAllByPageId`
+- 禁止在循环中逐条查询。必须批量查询 + 内存索引。
+- **仍存在**: `ForumController.toSummary`（标签查询）、`AdminReleaseApiController.list`（软件类型查询）。
 
 ### P-02 全量加载
-- **规则**: 禁止用 `findAll()` 加载全表数据后仅用于计数或过滤。计数必须使用 `COUNT(*)` SQL，过滤应在数据库层完成。
-- **已知违规**:
-  - `WikiController.getStats` — 加载所有页面和来源仅取 `.size()`
-  - `LinkResolver.findBrokenLinks` — 每次调用加载所有页面
-  - `LintAgent.detectBrokenLinks` — 重复加载所有页面两次
-  - `IngestAgent.buildExistingPagesSummary` — 每次调用加载所有页面
-  - `WikiGraphService.buildGraph` — 加载所有页面和链接
+- 禁止 `findAll()` 后仅取 `.size()`。计数用 `COUNT(*)`，过滤在数据库层。
+- `PublicStandardParameterApiController.list()` 无条件时加载全部参数，必须加分页。
 
-### P-03 OR 条件索引失效
-- **规则**: `WHERE col_a = ? OR col_b = ?` 无法高效使用单列索引。应改写为 `UNION ALL` 两个各带索引的查询。
-- **检查点**: `WikiLinkMapper.findAllByPageId`、`WikiLinkMapper.deleteByPageId`。
+### P-03 线程池管理
+- 热路径禁止每次创建线程池。使用类级别共享池或 Spring `TaskExecutor`。
+- `@Async` 必须配置自定义执行器。
 
-### P-04 内存风险
-- **规则**: 大数据量操作（导出、重建索引）必须分批处理，禁止一次性加载全部数据到内存。
-- **检查点**: `WikiExportService.exportAll`、`WikiController.reindexPages`。
+### P-04 内联清理
+- `TokenService.validateToken()` 每次调用都 DELETE 过期 token，应改为定时任务。
 
-### P-05 线程池管理
-- **规则**: 禁止使用 `Executors.newFixedThreadPool` 等无界工厂方法在热路径创建线程池。应使用共享线程池或 `@Async` 配置的执行器。
-- **规则**: `@Async` 方法必须配置自定义 `TaskExecutor`，禁止依赖默认的 `SimpleAsyncTaskExecutor`。
-- **检查点**: `WikiSearchService.search` 中每次调用创建 `newFixedThreadPool(2)`。
+### P-05 事件监听器清理
+- 前端 `window.addEventListener` 必须在 `onMounted` 中注册，`onBeforeUnmount` 中移除。
 
 ---
 
-## 四、代码质量类规则（Q 级）
+## 五、代码质量规则（Q 级）
 
 ### Q-01 死代码
-- **规则**: 注入但未使用的依赖必须删除。
-- **已知违规**:
-  - `LintAgent` 中 `linkMapper` 未使用
-  - `WikiSearchService` 中 `maxContentChars` 未使用
-  - `WikiSearchService` 中 `graphHopLimit` 声明但未使用（硬编码为 1）
-  - `WikiSearchService.search` 的 `topK` 参数被忽略
-  - `IngestTaskService` 中 `maxConcurrent` 未使用（Semaphore 硬编码为 2）
-  - `WikiGraphService` 中 `W_CO_OCCURRENCE` 声明但未实现
-  - `api.js` 中 `saveAuth` 的 `username` 参数未使用
-  - `api.js` 中 `fileUrl()` 是恒等函数
+- 注入但未使用的依赖必须删除。
+- 声明但未使用的 `@Value` 配置必须删除或使其生效。
+- 未使用的 Logger 字段必须删除。
 
 ### Q-02 命名一致性
-- **规则**: 同一模块的实体类命名风格必须统一。
-- **违规**: `IngestTask` 和 `LintResult` 缺少 `Wiki` 前缀，与 `WikiPage`、`WikiSource`、`WikiLink` 等不一致。
+- Logger 字段统一命名为 `log`（小写）。
+- 实体类命名风格统一（Wiki 模块全部带 `Wiki` 前缀）。
+- Lombok 使用：Domain + DTO 统一使用 `@Data`。
 
-### Q-03 代码重复
-- **规则**: 相同逻辑不得在多处实现。应提取为共享方法。
-- **已知违规**:
-  - `WIKILINK_PATTERN` 正则在 `LinkResolver` 和 `LintAgent` 中重复定义
-  - 断链检测逻辑在 `LinkResolver.findBrokenLinks` 和 `LintAgent.detectBrokenLinks` 中重复实现
+### Q-03 Java 枚举映射
+- DDL ENUM 字段在 Java 端使用对应 enum，至少在 Service 层做值校验。
+- 状态值使用枚举常量，禁止魔法字符串。
 
-### Q-04 字段类型一致性
-- **规则**: 同一概念（如"操作人"）在不同实体中的字段类型必须一致。
-- **违规**: `WikiPage.compiledBy` 是 `String`，而 `WikiPage.reviewedBy` 是 `Long`。
+### Q-04 配置项生效
+- `@Value` 注入的配置必须实际被使用。声明了但硬编码的配置等同于死代码。
 
-### Q-05 Java 枚举映射
-- **规则**: DDL 中的 ENUM 类型在 Java 端应使用对应的 Java enum，而非 String。至少应在 Service 层做值校验。
-- **涉及字段**: `page_type`、`status`、`source_type`、`link_type`、`permission_type`、`lint_type`、`severity`。
-
-### Q-06 配置项生效
-- **规则**: 通过 `@Value` 注入的配置项必须实际被代码使用。声明了但硬编码的配置等同于死代码。
-- **已知违规**: `IngestTaskService.maxConcurrent`、`WikiSearchService.graphHopLimit`。
+### Q-05 方法长度
+- 单个方法不得超过 50 行。超限必须拆分。
+- Controller 方法不得超过 30 行（含异常处理）。
 
 ---
 
-## 五、前端规则（F 级）
+## 六、前端 UI 统一性规则（U 级）
 
-### F-01 错误反馈
-- **规则**: 所有异步操作的错误必须通知用户（通过 toast/notification），禁止仅 `console.error`。
-- **已知违规**: `WikiPanel` 中 `loadPages`、`loadSources`、`loadLintResults`、`loadGraph`、`refreshIngestTasks` 均仅 `console.error`。
+### U-01 设计令牌
+- 必须创建 `src/styles/tokens.css`，定义全局 CSS 变量：
+  - 颜色：`--color-primary`、`--color-bg`、`--color-text`、`--color-border`
+  - 间距：`--space-xs/sm/md/lg/xl`（4/8/12/16/24px）
+  - 圆角：`--radius-sm/md/lg`（4/8/12px）
+  - 字号：`--text-xs/sm/md/lg/xl`（12/13/14/16/18px）
+- 所有组件必须使用这些变量，禁止硬编码颜色/间距值。
 
-### F-02 轮询退出
-- **规则**: 轮询逻辑必须有最大重试次数或超时机制，禁止无限重试。
-- **检查点**: `WikiPanel.pollTasks` 无限重试。
+### U-02 主题一致性
+- 全站统一使用浅色主题（或统一使用深色主题）。禁止混用。
+- WikiPanel 的 GitHub-dark 主题必须与 App.vue 的浅色主题统一。
 
-### F-03 可访问性
-- **规则**: 交互元素必须支持键盘操作。模态框需要 `role="dialog"`、`aria-modal`、Escape 键关闭、焦点陷阱。
-- **规则**: 输入框必须有关联的 `<label>` 或 `aria-label`。
-- **规则**: 动态内容区域使用 `aria-live` 通知屏幕阅读器。
+### U-03 共享组件库
+- 必须创建 `src/components/ui/` 目录，包含：
+  - `BaseButton.vue` — 统一按钮样式（primary/success/danger/ghost）
+  - `BaseModal.vue` — 统一模态框（backdrop + panel + 关闭 + 焦点陷阱）
+  - `BaseInput.vue` — 统一输入框样式
+  - `EmptyState.vue` — 统一空状态展示
+  - `LoadingSpinner.vue` — 统一加载状态
+- 所有业务组件必须使用这些基础组件。
 
-### F-04 XSS 防御
-- **规则**: `v-html` 的内容必须经过消毒处理。动态拼接 HTML 字符串时，用户数据必须转义。
-- **检查点**: `WikiPanel` 中 wikilink 渲染的 `data-title` 属性注入。
+### U-04 错误反馈一致性
+- 所有组件统一使用 `notify(message, type)` 展示错误。
+- `DiagnosticsPanel` 必须接收 `notify` prop，禁止使用 `alert()`。
+- `catch {}` 块必须至少 `console.warn()`，推荐使用 `notify`。
 
-### F-05 Token 过期
-- **规则**: 存储在客户端的认证 token 必须校验过期时间，过期后自动清除并跳转登录。
-- **检查点**: `api.js` 中 `getSavedAuth()` 未校验 `expiresAt`。
+### U-05 Prop 定义
+- 必填 prop 必须声明 `required: true`。
+- `notify` prop 在所有需要错误反馈的组件中必须是 required。
 
 ---
 
-## 六、设计文档一致性规则（A 级）
+## 七、日志规则（L 级）
 
-### A-01 设计与实现对齐
-- **规则**: 设计文档中承诺的功能必须在代码中完整实现，或在文档中标注为"未实现"。
-- **规则**: 设计文档中的 API 接口定义必须与实际 Controller 端点一致。
+### L-01 日志级别
+- 登录尝试/成功降级为 DEBUG（含用户名的 INFO 日志存在 PII 风险）。
+- Token 创建/删除降级为 DEBUG。
+- 客户端错误（`IllegalArgumentException`）只记录消息，不记录堆栈。
 
-### A-02 DDL 与实体对齐
-- **规则**: 每个 DDL 表必须有对应的 Java 实体类和 Mapper。
-- **已知缺失**: `wiki_audit_log` 和 `wiki_access_requests` 表无对应实体。
+### L-02 敏感数据
+- 日志中不得包含密码、Token、API Key。
+- AccessLog 的 query string 需脱敏处理。
 
-### A-03 索引设计
-- **规则**: 设计文档中列出的索引建议必须在 DDL 中体现。
-- **检查点**: `wiki_ddl.sql` 中是否包含设计文档建议的所有索引。
+### L-03 日志完整性
+- 所有 Service 层公共方法的入口和异常必须有日志。
+- 禁止空的 `catch {}` 块——至少 `log.warn()`。
+
+### L-04 全局异常处理
+- `unhandledrejection` 处理器不得 `event.preventDefault()`（会抑制 DevTools 错误报告）。
+- Toast 通知区分错误（5s）和成功（3s）的显示时长。
+
+---
+
+## 八、检查清单
+
+每次 PR 审查必须确认：
+
+- [ ] 无硬编码密钥/密码
+- [ ] 无 `v-html` 渲染未消毒内容
+- [ ] Controller 不直接注入 Mapper
+- [ ] 返回值使用 DTO 类型
+- [ ] 无 N+1 查询
+- [ ] 多步写入有 `@Transactional`
+- [ ] 删除操作有级联清理
+- [ ] 无空 `catch {}` 块
+- [ ] 重复代码已提取
+- [ ] 组件 < 500 行
+- [ ] 使用设计令牌（颜色/间距/字号）
+- [ ] 使用共享 UI 组件
