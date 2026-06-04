@@ -828,7 +828,9 @@ public class IngestAgent {
 
 ### 4.2 Query Agent（智能问答）
 
-#### 4.2.1 多阶段检索 Pipeline
+#### 4.2.1 混合检索 Pipeline（向量 + FULLTEXT 并行）
+
+**实现状态：** ✅ 已实现。向量语义搜索 + MySQL FULLTEXT 并行执行，合并结果，互补短板。向量搜索失败时自动降级到纯 FULLTEXT。
 
 **向量化在 LLM Wiki 中的定位：** 传统 RAG 中向量搜索是唯一检索手段（切片无结构）。LLM Wiki 编译后的页面有标题、摘要、分类、交叉引用等结构化信息，MySQL FULLTEXT 已能覆盖大部分检索场景。向量搜索降级为**语义兜底**，仅在结构化检索结果不足时触发。Milvus 为可选组件，无 Milvus 时系统仍可用。
 
@@ -1490,13 +1492,20 @@ Lint 面板：
 
 **目标：** 问答优先读 Wiki 页面，fallback 到原始 chunks
 
-- [x] 实现 `WikiSearchService`（多阶段检索 Pipeline：FULLTEXT → 向量兜底 → 图扩展）
+- [x] 实现 `WikiSearchService`（混合检索 Pipeline：向量 + FULLTEXT 并行 → 图扩展）
 - [x] 改造 `TroubleshootAgent`：Wiki 优先检索，结果不足时 fallback 到 chunk 搜索
-- [x] 多阶段 Pipeline：MySQL FULLTEXT → 向量语义兜底 → wiki_links 图扩展 → 合并排序
+- [x] 混合检索：向量语义搜索 + MySQL FULLTEXT 并行执行，合并结果
+- [x] Wiki 页面向量化（title + summary 写入 Milvus，含 content/sourceTitle 元数据）
+- [x] 向量搜索失败时自动降级到纯 FULLTEXT
+- [x] 向量搜索增加重试逻辑（最多 2 次）
+- [x] 新增 `POST /api/wiki/pages/reindex` 重新向量化接口
 - [x] 回答中引用标注来源页面（`【Wiki：页面标题】` 格式）
+- [x] 引用返回结构化数据（wikiPageId + title），前端可点击跳转
 - [x] WikiPageMapper 新增 `findByIds` 批量查询
 - [x] IngestAgent 向量化时标记 `source: "wiki"` 元数据
-- [x] 新增 `app.wiki.search.*` 配置项（max-context-pages、max-content-chars、graph-hop-limit 等）
+- [x] 新增 `app.wiki.search.*` 配置项（max-context-pages、max-content-chars、graph-hop-limit、vector-top-k、fulltext-top-k）
+- [x] SecurityContext 继承到异步线程（MODE_INHERITABLETHREADLOCAL）
+- [x] FULLTEXT 搜索限制 ACTIVE 状态页面
 - [ ] 可选：好答案回写为 SYNTHESIS 页面（后续阶段）
 
 ### 阶段三：知识图谱 + 前端 ✅ 已完成
@@ -1559,6 +1568,12 @@ Lint 面板：
 - [x] 文件上传大小限制（前端 10MB 校验）
 - [x] 来源文档删除（清理关联记录）
 - [x] 页面状态扩展（DRAFT/PENDING_REVIEW/ACTIVE/STALE/CONTRADICTED/REJECTED）
+- [x] Wiki 页面向量化（title + summary 写入 Milvus）
+- [x] 混合检索（向量 + FULLTEXT 并行，自动降级）
+- [x] 知识库检索集成 Wiki 向量（元数据含 content/sourceTitle）
+- [x] embedding 模型配置修正（bge-large）
+- [x] 重启 Skill（/restart 命令，含 Docker/Milvus/后端/前端）
+- [x] 登录测试 Skill（/test-login 命令）
 - [ ] 增量编译（SHA-256 哈希判断，避免重复编译）
 - [ ] 知识图谱缓存（避免每次请求重新计算）
 - [ ] 性能测试（千级 Wiki 页面）
