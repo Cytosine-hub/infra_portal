@@ -36,7 +36,7 @@
         :auth="auth"
         :software-type-categories="softwareTypeCategories"
         :software-types="softwareTypes"
-        :standard-document-options="standardDocumentOptions"
+        :standard-document-options="allParameterStandards"
         :markdown="markdown"
         :document-id="route.documentId"
         :notify="notify"
