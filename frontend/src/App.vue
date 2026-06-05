@@ -598,36 +598,7 @@ const siteConfig = reactive({ knowledgeEnabled: true, diagnosticsEnabled: true }
 const downloading = ref(false)
 const downloadProgress = ref(0)
 const downloadFileName = ref('')
-const selectedRelease = ref(null)
-const publicStandards = ref([])
-const selectedPublicStandard = ref(null)
-const selectedPublicStandardKey = computed(() => publicDocKey(selectedPublicStandard.value))
-const publicDocuments = ref([])
-const publicDocCategory = ref('全部')
-const activeStdTocId = ref('')
-const publicStandardParams = ref([])
-const publicParamSearch = ref('')
-const publicParamPage = reactive({ page: 0, size: 10, totalPages: 0, totalElements: 0, first: true, last: true })
-
-let stdScrollHandler = null
-function initStdScrollSpy() {
-  if (stdScrollHandler) window.removeEventListener('scroll', stdScrollHandler)
-  stdScrollHandler = () => {
-    const items = standardTocItems.value
-    if (!items.length) return
-    let current = ''
-    for (const item of items) {
-      const el = document.getElementById(item.id)
-      if (el && el.getBoundingClientRect().top <= 120) current = item.id
-    }
-    activeStdTocId.value = current
-  }
-  window.addEventListener('scroll', stdScrollHandler, { passive: true })
-}
-function destroyStdScrollSpy() {
-  if (stdScrollHandler) { window.removeEventListener('scroll', stdScrollHandler); stdScrollHandler = null }
-}
-const standardsLoading = ref(false)
+// 公共页面状态已迁移到各页面组件（HomePage/DownloadsPage/StandardsPage）
 // ── 管理后台状态已迁移到 composables/useAdmin.js ──
 const loginForm = reactive({ username: '', password: '' })
 const selectedPreviewDocument = ref(null)
@@ -639,8 +610,6 @@ const showDiffDialog = ref(false)
 const diffTarget = ref(null)
 const diffContent = ref('')
 const diffLines = computed(() => selectedReviewDiff.value ? selectedReviewDiff.value.split('\n') : [])
-const publicFilters = reactive({ keyword: '', platform: '', page: 0, size: 12 })
-const publicPage = reactive(emptyPage(12))
 
 // ── 常用命令 ──
 const cmdTypes = ref([])
@@ -675,28 +644,7 @@ const pageTitle = computed(() => {
   if (route.name === 'commands') return '常用命令'
   return '管理后台'
 })
-const publicStandardHtml = computed(() => {
-  let html = markdown.render(selectedPublicStandard.value?.renderedContent || selectedPublicStandard.value?.content || '')
-  let idx = 0
-  html = html.replace(/<(h[1-3])([^>]*)>([\s\S]*?)<\/\1>/g, (_, tag, attrs, inner) => {
-    if (/id=/.test(attrs)) return `<${tag}${attrs}>${inner}</${tag}>`
-    return `<${tag}${attrs} id="std-toc-${idx++}">${inner}</${tag}>`
-  })
-  return html
-})
-
-const standardTocItems = computed(() => {
-  const items = []
-  const re = /<(h[1-3])[^>]*id="([^"]*)"[^>]*>([\s\S]*?)<\/\1>/g
-  let m
-  while ((m = re.exec(publicStandardHtml.value))) {
-    const level = parseInt(m[1][1])
-    const id = m[2]
-    const text = m[3].replace(/<[^>]+>/g, '').trim()
-    if (text) items.push({ level, id, text })
-  }
-  return items
-})
+// 公共标准页面 computed 已迁移到 StandardsPage.vue
 
 const filteredCommands = computed(() => {
   let list = cmdCommands.value
@@ -871,42 +819,8 @@ const publicDocumentGroups = computed(() => {
   return Array.from(groups, ([category, documents]) => ({ category, documents }))
 })
 
-const publicDocCategories = computed(() => {
-  const cats = new Set()
-  for (const doc of publicDocuments.value) {
-    if (doc.category) cats.add(doc.category)
-  }
-  return ['全部', ...Array.from(cats)]
-})
+// 公共标准页面 computed 已迁移到 StandardsPage.vue
 
-const filteredPublicDocuments = computed(() => {
-  const tab = publicDocCategory.value
-  const docs = publicDocuments.value.filter(d => tab === '全部' || d.category === tab)
-  docs.sort((a, b) => {
-    if (a.documentType === 'STANDARD' && b.documentType !== 'STANDARD') return -1
-    if (a.documentType !== 'STANDARD' && b.documentType === 'STANDARD') return 1
-    const da = b.publishedAt || b.updatedAt || ''
-    const db = a.publishedAt || a.updatedAt || ''
-    return da.localeCompare(db) || (a.title || '').localeCompare(b.title || '')
-  })
-  return docs
-})
-
-const relatedDocsForStandard = computed(() => {
-  return selectedPublicStandard.value?.relatedDocuments || []
-})
-
-const publicStandardGroups = computed(() => {
-  const groups = new Map()
-  for (const standard of publicStandards.value) {
-    const category = standard.category || '未分类'
-    if (!groups.has(category)) {
-      groups.set(category, [])
-    }
-    groups.get(category).push(standard)
-  }
-  return Array.from(groups, ([category, standards]) => ({ category, standards }))
-})
 const activeSoftwareTypes = computed(() => softwareTypes.value.filter(type => type.active))
 const defaultSoftwareCategories = ['中间件', '主机', '数据库', '安全', '网络']
 const softwareTypeCategories = computed(() => uniqueOptions([
@@ -1140,6 +1054,9 @@ function syncRoute() {
   route.documentId = next.documentId
   route.postId = next.postId
   updateDocumentTitle()
+  // 独立页面组件自行加载数据（HomePage/DownloadsPage/StandardsPage/CommandsPage/WikiPanel/KnowledgePanel/DiagnosticsPanel）
+  const selfManagedRoutes = ['home', 'public', 'standards', 'commands', 'knowledge', 'wiki', 'diagnostics']
+  if (selfManagedRoutes.includes(route.name)) return
   if (route.name === 'documentEditor' || route.name === 'forum' || route.name === 'forumDetail' || route.name === 'forumEditor' || route.name === 'forumMine') {
     if (route.name === 'documentEditor' && auth.token) {
       loadSoftwareTypes()
@@ -1148,28 +1065,7 @@ function syncRoute() {
     }
     return
   }
-  if (route.name === 'home') {
-    loadPublic()
-  } else if (route.name === 'commands') {
-    loadCmdTypes()
-    loadCmdCommands()
-    if (auth.token) loadSoftwareTypes()
-  } else if (route.name === 'public') {
-    if (route.token) {
-      loadDetail(route.token)
-    } else {
-      selectedRelease.value = null
-      loadPublic()
-    }
-  } else if (route.name === 'standards') {
-    if (route.standardId) {
-      loadPublicDocuments()
-      loadPublicStandardDetail(route.standardId, route.standardType)
-    } else {
-      selectedPublicStandard.value = null
-      loadPublicStandards()
-    }
-  } else if (auth.token) {
+  if (auth.token) {
     if (isReadOnly.value) {
       window.location.hash = '#/home'
       return
@@ -1186,103 +1082,7 @@ function updateDocumentTitle() {
   document.title = `${pageTitle.value} - 运营集成中心`
 }
 
-function applyPage(target, source) {
-  Object.assign(target, source)
-}
-
-async function loadPublic() {
-  selectedRelease.value = null
-  const query = new URLSearchParams(publicFilters).toString()
-  applyPage(publicPage, await request(`/api/public/releases?${query}`, { token: null }))
-}
-
-async function loadDetail(token) {
-  selectedRelease.value = await request(`/api/public/releases/${token}`, { token: null })
-}
-
-async function loadPublicStandards() {
-  publicStandards.value = await request('/api/public/parameter-standards?size=100', { token: null })
-}
-
-async function loadPublicDocuments() {
-  try {
-    const [standards, docs] = await Promise.all([
-      request('/api/public/parameter-standards?size=100', { token: null }).catch(() => []),
-      request('/api/public/standards/all', { token: null }).catch(() => [])
-    ])
-    const taggedStandards = (standards || []).map(s => ({ ...s, documentType: 'STANDARD' }))
-    publicDocuments.value = [...taggedStandards, ...(docs || [])]
-  } catch {
-    publicDocuments.value = []
-  }
-}
-
-async function loadPublicStandardDetail(id, type) {
-  standardsLoading.value = true
-  activeStdTocId.value = ''
-  try {
-    if (type === 'doc') {
-      selectedPublicStandard.value = await request(`/api/public/standards/${id}`, { token: null })
-      publicStandardParams.value = []
-    } else if (type === 'ps') {
-      selectedPublicStandard.value = await request(`/api/public/parameter-standards/${id}`, { token: null })
-      await loadPublicStandardParams(id)
-    } else {
-      try {
-        selectedPublicStandard.value = await request(`/api/public/parameter-standards/${id}`, { token: null })
-        await loadPublicStandardParams(id)
-      } catch {
-        selectedPublicStandard.value = await request(`/api/public/standards/${id}`, { token: null })
-        publicStandardParams.value = []
-      }
-    }
-    await nextTick()
-    initStdScrollSpy()
-  } finally {
-    standardsLoading.value = false
-  }
-}
-
-function openPublicDocumentDetail(id) {
-  window.location.hash = `#/standards/doc/${id}`
-}
-
-async function loadPublicStandardParams(standardId) {
-  publicParamSearch.value = ''
-  publicParamPage.page = 0
-  try {
-    const list = await request(`/api/public/standard-parameters?parameterStandardId=${standardId}`, { token: null })
-    publicStandardParams.value = list.filter(p => p.active !== false)
-  } catch {
-    publicStandardParams.value = []
-  }
-}
-
-const filteredPublicParams = computed(() => {
-  let list = publicStandardParams.value
-  if (publicParamSearch.value) {
-    const q = publicParamSearch.value.toLowerCase()
-    list = list.filter(p =>
-      (p.code && p.code.toLowerCase().includes(q)) ||
-      (p.name && p.name.toLowerCase().includes(q)) ||
-      (p.description && p.description.toLowerCase().includes(q)) ||
-      (p.category && p.category.toLowerCase().includes(q))
-    )
-  }
-  return list
-})
-
-const pagedPublicParams = computed(() => {
-  const total = filteredPublicParams.value.length
-  const totalPages = Math.max(1, Math.ceil(total / publicParamPage.size))
-  publicParamPage.totalPages = totalPages
-  publicParamPage.totalElements = total
-  publicParamPage.first = publicParamPage.page <= 0
-  publicParamPage.last = publicParamPage.page >= totalPages - 1
-  if (publicParamPage.page >= totalPages) publicParamPage.page = Math.max(0, totalPages - 1)
-  const start = publicParamPage.page * publicParamPage.size
-  return filteredPublicParams.value.slice(start, start + publicParamPage.size)
-})
+// 公共页面数据加载已迁移到各页面组件（HomePage/DownloadsPage/StandardsPage）
 
 async function loadAdmin() {
   const query = `keyword=${encodeURIComponent(adminFilters.keyword)}&platform=${encodeURIComponent(adminFilters.platform)}&page=${adminFilters.page}&size=${adminFilters.size}${adminPublishedParam.value}`
@@ -1391,26 +1191,8 @@ async function logout(showMessage = true) {
   window.location.hash = '#/home'
 }
 
-function goPublic() {
-  window.location.hash = '#/downloads'
-}
-
-function goStandards() {
-  window.location.hash = '#/standards'
-}
-
-function goHome() {
-  window.location.hash = '#/home'
-}
-
-function goAdmin() {
-  window.location.hash = '#/admin'
-}
-
-function goLogin() {
-  window.location.hash = '#/admin'
-}
-
+function goAdmin() { window.location.hash = '#/admin' }
+function goLogin() { window.location.hash = '#/admin' }
 function goForum() { window.location.hash = '#/forum' }
 function goForumPost(id) { window.location.hash = `#/forum/post/${id}` }
 function goForumNew() {
@@ -1419,10 +1201,6 @@ function goForumNew() {
 }
 function goForumEdit(id) { window.location.hash = `#/forum/edit/${id}` }
 function goForumMine() { window.location.hash = '#/forum/mine' }
-function goKnowledge() { window.location.hash = '#/knowledge' }
-function goWiki() { window.location.hash = '#/wiki' }
-function goDiagnostics() { window.location.hash = '#/diagnostics' }
-function goCommands() { window.location.hash = '#/commands' }
 function onForumPostSaved() { goForum() }
 
 function handleDownload(url, fileName) {
@@ -1489,49 +1267,7 @@ function onDocumentEditorCancel() {
   setTimeout(() => { adminSection.value = 'documentMaintenance' }, 0)
 }
 
-function openDetail(token) {
-  window.location.hash = `#/downloads/${token}`
-}
-
-function closeDetail() {
-  window.location.hash = '#/downloads'
-}
-
-function openPublicStandardDetail(id, docType) {
-  const prefix = (docType === 'MANUAL' || docType === 'ARTICLE') ? 'doc' : 'ps'
-  window.location.hash = `#/standards/${prefix}/${id}`
-}
-
-function closePublicStandardDetail() {
-  selectedPublicStandard.value = null
-  destroyStdScrollSpy()
-  window.location.hash = '#/standards'
-}
-
-function scrollToStdHeading(id) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-}
-
-function openPortalModule(name) {
-  notify(`${name}模块正在建设中`)
-}
-
-function documentTypeLabel(type) {
-  if (type === 'STANDARD' || type === 'PARAMETER_STANDARD') return '参数标准'
-  if (type === 'ARTICLE') return '文章'
-  if (type === 'MANUAL') return '手册'
-  return '参数标准'
-}
-
-function formatDate(value) {
-  if (!value) return '-'
-  return String(value).slice(0, 10)
-}
-
-function changePublicPage(page) {
-  publicFilters.page = page
-  loadPublic()
-}
+// 公共页面函数已迁移到各页面组件
 
 function changeAdminPage(page) {
   adminFilters.page = page
