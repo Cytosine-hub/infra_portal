@@ -202,7 +202,7 @@ function applyMeta() {
 async function loadStandardParameters(standardDocumentId) {
   if (!standardDocumentId) { standardParameters.value = []; renderPreview(); return }
   try {
-    standardParameters.value = await request(`/api/admin/standard-parameters?standardDocumentId=${encodeURIComponent(standardDocumentId)}`)
+    standardParameters.value = await request(`/api/admin/standard-parameters?parameterStandardId=${encodeURIComponent(standardDocumentId)}`)
   } catch { standardParameters.value = [] }
   renderPreview()
 }
