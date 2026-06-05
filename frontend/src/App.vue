@@ -51,54 +51,7 @@
         @notify="notify"
       />
 
-      <section v-else-if="route.name === 'public'" class="workspace">
-        <div class="toolbar">
-          <div class="filters">
-            <input v-model.trim="publicFilters.keyword" placeholder="搜索名称、版本、说明" @keyup.enter="loadPublic()" />
-            <input v-model.trim="publicFilters.platform" placeholder="平台" @keyup.enter="loadPublic()" />
-            <button @click="loadPublic()">查询</button>
-          </div>
-        </div>
-
-        <div v-if="selectedRelease" class="detail-layout">
-          <button class="ghost" @click="closeDetail()">返回列表</button>
-          <article class="detail-panel">
-            <div>
-              <p class="eyebrow">版本详情</p>
-              <h2>{{ selectedRelease.middlewareName }}</h2>
-              <p class="muted">{{ selectedRelease.version }} · {{ selectedRelease.platform || '通用平台' }}</p>
-            </div>
-            <p class="description">{{ selectedRelease.description || '暂无版本说明。' }}</p>
-            <dl class="meta-grid">
-              <div><dt>发布日期</dt><dd>{{ selectedRelease.releasedAt || '-' }}</dd></div>
-              <div><dt>文件名</dt><dd>{{ selectedRelease.originalFileName }}</dd></div>
-              <div><dt>文件大小</dt><dd>{{ formatBytes(selectedRelease.fileSize) }}</dd></div>
-              <div><dt>下载次数</dt><dd>{{ selectedRelease.downloadCount }}</dd></div>
-            </dl>
-            <a class="primary-link" href="#" @click.prevent="handleDownload(selectedRelease.downloadUrl, selectedRelease.originalFileName)">下载文件</a>
-          </article>
-        </div>
-
-        <template v-else>
-          <div class="release-grid">
-            <article v-for="release in publicPage.content" :key="release.downloadToken" class="release-card">
-              <div>
-                <h2>{{ release.middlewareName }}</h2>
-                <p>{{ release.version }} · {{ release.platform || '通用平台' }}</p>
-              </div>
-              <p class="description">{{ release.description || '暂无版本说明。' }}</p>
-              <div class="card-footer">
-                <span>{{ formatBytes(release.fileSize) }}</span>
-                <div class="card-actions">
-                  <button class="ghost" @click="openDetail(release.downloadToken)">详情</button>
-                  <a class="download-button" href="#" @click.prevent="handleDownload(release.downloadUrl, release.originalFileName)">下载</a>
-                </div>
-              </div>
-            </article>
-          </div>
-          <Pagination :page="publicPage" @change="changePublicPage" />
-        </template>
-      </section>
+      <DownloadsPage v-else-if="route.name === 'public'" />
 
       <section v-else-if="route.name === 'standards'" class="workspace standards-page">
         <div v-if="selectedPublicStandard" class="standards-detail-layout">
@@ -1047,6 +1000,7 @@ import KnowledgePanel from './components/KnowledgePanel.vue'
 import WikiPanel from './components/WikiPanel.vue'
 import DiagnosticsPanel from './components/DiagnosticsPanel.vue'
 import HomePage from './pages/HomePage.vue'
+import DownloadsPage from './pages/DownloadsPage.vue'
 import Toast from './components/ui/Toast.vue'
 import ConfirmDialog from './components/ui/ConfirmDialog.vue'
 import FormModal from './components/ui/FormModal.vue'
