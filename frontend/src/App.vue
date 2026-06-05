@@ -544,27 +544,28 @@ const {
   adminFilters, typeFilters, standardFilters, parameterFilters, maintenanceDocumentFilters, reviewFilters, reviewPage,
   adminPage, releaseForm, importForm, passwordForm, categoryForm, typeForm, standardForm, parameterForm, userForm,
   // 加载函数
-  loadSoftwareCategories, loadSoftwareMetadata, loadAllParameterStandards,
-  loadSystemSettings, saveSystemSettings, loadUsers, loadRoles,
+  loadAdmin, loadSoftwareTypes, loadSoftwareCategories, loadSoftwareMetadata, loadStandardModule, loadAllParameterStandards,
+  loadStandardDocuments, loadStandardParameters, loadSystemSettings, saveSystemSettings, loadUsers, loadRoles,
   // 资源 CRUD
   startCreate, startEdit, cancelEdit, handleReleaseFileChange, saveRelease, togglePublish,
-  openDeleteReleaseDialog, closeDeleteReleaseDialog, confirmDeleteRelease,
+  openDeleteReleaseDialog, closeDeleteReleaseDialog, confirmDeleteRelease, regeneratePackage,
   // 批量导入
   openImportPage, closeImportPage, submitImport,
   // 类型管理
   openCreateCategoryDialog, closeCategoryDialog, saveCategory,
   openCreateTypeDialog, closeTypeDialog, saveType,
   // 标准管理
-  openCreateStandardDialog, closeStandardDialog, saveStandard,
+  openCreateStandardDialog, openEditStandardDialog, closeStandardDialog, saveStandard,
+  submitForReview, startModify, cancelModify, confirmDeleteDoc,
   // 参数管理
   openCreateParameterDialog, closeParameterDialog, saveParameter,
-  handleParamImportFileChange, importParameters, downloadParameterTemplate,
+  handleParamImportFileChange, importParameters, downloadParameterTemplate, copyParameter,
   // 审核管理
   loadReviews, openReviewDetail, closeReviewDetail, reviewApprove, reviewReject,
   openRevisionHistory,
   // 用户管理
   openCreateUserDialog, closeUserDialog, createUser, openRoleDialog, closeRoleDialog, changeUserRole, deleteUserAccount,
-  resetUserPassword,
+  resetUserPassword, openChangeRoleDialog,
   // 密码
   changePassword,
   // Computed
@@ -574,6 +575,12 @@ const {
   filteredSoftwareTypes, typePageComputed, pagedSoftwareTypes,
   filteredStandardDocuments, standardDocumentOptions, standardPageComputed, selectedStandardParameters,
   maintenanceDocumentsComputed, maintenanceDocumentPageComputed, pagedMaintenanceDocuments,
+  // 筛选/分页
+  changeTypePage, applyTypeFilters, changeStandardPage, applyStandardFilters, handleStandardFilterCategoryChange,
+  openStandardDetail, backToStandardList, changeMaintenanceDocumentPage, applyMaintenanceDocumentFilters,
+  changeReviewPage, applyReviewFilters,
+  // 工具函数
+  getStandardLabel, formatTime, statusLabel, statusClass, reviewStatusClass,
   // 切换管理区域
   switchAdminSection, changeAdminPage
 } = admin
@@ -606,15 +613,7 @@ const pageTitle = computed(() => {
 })
 // 公共标准页面 computed 已迁移到 StandardsPage.vue
 
-// 管理后台 computed 已迁移到 composables/useAdmin.js
-
-// 需要保留的 computed: typePage, standardPage, maintenanceDocumentPage, pagedSoftwareTypes,
-// filteredStandardDocuments, selectedStandardParameters, maintenanceDocuments, pagedMaintenanceDocuments
-// 由于 composable 中使用了不同的名称（typePageComputed 等），这里做别名映射
-const typePage = typePageComputed
-const standardPage = standardPageComputed
-const maintenanceDocumentPage = maintenanceDocumentPageComputed
-const maintenanceDocuments = maintenanceDocumentsComputed
+// 审核 computed — 从 allReviews 派生分页
 const filteredReviews = computed(() => {
   const status = reviewFilters.status
   if (!status) return allReviews.value
@@ -632,9 +631,6 @@ const pagedReviews = computed(() => {
 })
 
 // 文档预览 computed 已迁移到 DocumentPreview.vue
-
-// 辅助函数已迁移到 composables/useAdmin.js
-function emptyPage(size) { return { content: [], page: 0, size, totalElements: 0, totalPages: 0, first: true, last: true } }
 
 // parseRoute/syncRoute 基础逻辑在 composables/useRoute.js
 // 这里的 syncRoute 包含路由变化后的数据加载副作用
@@ -696,63 +692,8 @@ function updateDocumentTitle() {
 }
 
 // 公共页面数据加载已迁移到各页面组件（HomePage/DownloadsPage/StandardsPage）
-
-function applyPage(target, source) { Object.assign(target, source) }
-
-async function loadAdmin() {
-  const pub = adminFilters.published !== '' ? `&published=${adminFilters.published}` : ''
-  const query = `keyword=${encodeURIComponent(adminFilters.keyword)}&platform=${encodeURIComponent(adminFilters.platform)}&page=${adminFilters.page}&size=${adminFilters.size}${pub}`
-  applyPage(adminPage, await request(`/api/admin/releases?${query}`))
-}
-
-// loadSoftwareCategories/loadSoftwareMetadata/loadAllParameterStandards/loadUsers/loadRoles/changePassword
+// loadAdmin/loadSoftwareTypes/loadStandardModule/loadStandardDocuments/loadStandardParameters
 // 已迁移到 composables/useAdmin.js
-
-async function loadSoftwareTypes() {
-  softwareTypes.value = await request('/api/admin/software-types')
-  if (typeFilters.page >= typePage.value.totalPages) {
-    typeFilters.page = Math.max(typePage.value.totalPages - 1, 0)
-  }
-}
-
-async function loadStandardModule() {
-  await loadStandardDocuments()
-}
-
-async function loadStandardDocuments() {
-  const apiBase = standardApiBase()
-  const data = await request(apiBase)
-  const list = Array.isArray(data) ? data : (data?.content ?? [])
-  standardDocuments.value = list.map(normalizeDoc)
-  if (selectedStandard.value) {
-    selectedStandard.value = standardDocuments.value.find(doc => doc.id === selectedStandard.value.id) || null
-  }
-  await loadStandardParameters(selectedStandard.value?.id)
-  if (standardFilters.page >= standardPage.value.totalPages) {
-    standardFilters.page = Math.max(standardPage.value.totalPages - 1, 0)
-  }
-  if (maintenanceDocumentFilters.page >= maintenanceDocumentPage.value.totalPages) {
-    maintenanceDocumentFilters.page = Math.max(maintenanceDocumentPage.value.totalPages - 1, 0)
-  }
-}
-
-// loadAllParameterStandards 已迁移到 composables/useAdmin.js
-
-async function loadStandardParameters(targetId = selectedStandard.value?.id) {
-  if (!targetId) {
-    standardParameters.value = []
-    return
-  }
-  standardParameters.value = await fetchStandardParameters(targetId)
-  if (parameterFilters.page >= parameterPage.value.totalPages) {
-    parameterFilters.page = Math.max(parameterPage.value.totalPages - 1, 0)
-  }
-}
-
-function fetchStandardParameters(targetId) {
-  const paramName = adminSection.value === 'standardPublish' ? 'parameterStandardId' : 'standardDocumentId'
-  return request(`/api/admin/standard-parameters?${paramName}=${encodeURIComponent(targetId)}`)
-}
 
 async function login() {
   try {
@@ -823,216 +764,7 @@ function onDocumentEditorCancel() {
 
 // 公共页面函数已迁移到各页面组件
 
-// changeAdminPage 已迁移到 composables/useAdmin.js
-
-function changeTypePage(page) {
-  typeFilters.page = Math.max(page, 0)
-}
-
-function applyTypeFilters() {
-  typeFilters.page = 0
-}
-
-function applyStandardFilters() {
-  standardFilters.page = 0
-}
-
-function handleStandardFilterCategoryChange() {
-  standardFilters.software = ''
-  applyStandardFilters()
-}
-
-function changeStandardPage(page) {
-  standardFilters.page = Math.max(page, 0)
-}
-
-function openStandardDetail(document) {
-  selectedStandard.value = document
-  parameterFilters.page = 0
-  loadStandardParameters(document.id)
-}
-
-function backToStandardList() {
-  selectedStandard.value = null
-  standardParameters.value = []
-}
-
-function changeMaintenanceDocumentPage(page) {
-  maintenanceDocumentFilters.page = Math.max(page, 0)
-}
-
-function applyMaintenanceDocumentFilters() {
-  maintenanceDocumentFilters.page = 0
-}
-
-// switchAdminSection/openImportPage/closeImportPage/startCreate/startEdit/cancelEdit/handleReleaseFileChange
-// saveRelease/togglePublish 已迁移到 composables/useAdmin.js
-
-async function regeneratePackage(release) {
-  try {
-    await request(`/api/admin/releases/${release.id}/regenerate-package`, { method: 'POST' })
-    notify('标准包已提交重新生成', 'success')
-    await loadAdmin()
-  } catch (error) {
-    notify(error.message || '重新生成失败', 'error')
-  }
-}
-
-// openDeleteReleaseDialog/closeDeleteReleaseDialog/confirmDeleteRelease 已迁移到 composables/useAdmin.js
-
-// submitImport 已迁移到 composables/useAdmin.js
-
-function findSoftwareType(id) {
-  return softwareTypes.value.find(type => String(type.id) === String(id))
-}
-
-function getStandardLabel(id) {
-  const standard = allParameterStandards.value.find(doc => String(doc.id) === String(id)) ||
-    standardDocuments.value.find(doc => String(doc.id) === String(id))
-  if (!standard) return '-'
-  return [standard.category, standard.software, standard.softwareVersion].filter(Boolean).join(' / ') +
-    (standard.version ? ` · V${standard.version}` : '')
-}
-
-function displayTitle(doc) {
-  if (!doc) return ''
-  if (doc.documentType === 'MANUAL' || doc.documentType === 'ARTICLE') return doc.title
-  return [doc.category, doc.software, doc.version].filter(Boolean).join(' / ') || doc.title
-}
-
-// closeTypeDialog/saveType/deleteType/openCreateStandardDialog 已迁移到 composables/useAdmin.js
-
-function openEditStandardDialog(document) {
-  const typeId = document.softwareTypeId || (() => {
-    const cat = (document.category || '').trim().toLowerCase()
-    const name = (document.software || '').trim().toLowerCase()
-    if (!cat || !name) return ''
-    const matched = softwareTypes.value.find(t =>
-      (t.category || '').trim().toLowerCase() === cat && (t.name || '').trim().toLowerCase() === name
-    )
-    return matched ? matched.id : ''
-  })()
-  const selectedType = findSoftwareType(typeId)
-  Object.assign(standardForm, {
-    id: document.id,
-    category: selectedType?.category || document.category || '',
-    softwareTypeId: selectedType?.id || '',
-    softwareVersion: document.softwareVersion || '',
-    code: document.code || '',
-    summary: document.summary || '',
-    content: document.content || '# 参数标准\n\n'
-  })
-  showStandardDialog.value = true
-}
-
-// closeStandardDialog/buildStandardTitle/saveStandard 已迁移到 composables/useAdmin.js
-
-function statusLabel(status) {
-  const map = { DRAFT: '草稿', PENDING_REVIEW: '审核中', PUBLISHED: '已发布', MODIFYING: '修改中' }
-  return map[status] || status
-}
-
-function statusClass(status) {
-  const map = { DRAFT: 'draft', PENDING_REVIEW: 'pending-review', PUBLISHED: 'published', MODIFYING: 'modifying' }
-  return map[status] || 'off'
-}
-
-const actionMap = {
-  DRAFT: ['submit-review', 'edit', 'delete'],
-  PUBLISHED: ['start-modify'],
-  MODIFYING: ['submit-review', 'edit', 'cancel-modify', 'delete']
-}
-
-function normalizeDoc(doc) {
-  const status = doc.status || 'DRAFT'
-  doc.status = status
-  const underReview = doc.pendingReviewRecordId != null
-  if (!doc.statusLabel || underReview) doc.statusLabel = underReview ? '审核中' : statusLabel(status)
-  if (!doc._statusClass || underReview) doc._statusClass = underReview ? 'pending-review' : statusClass(status)
-  if (doc.canEdit == null) {
-    doc.canEdit = !underReview && (status === 'DRAFT' || status === 'MODIFYING')
-  }
-  if (!Array.isArray(doc.availableActions) || doc.availableActions.length === 0) {
-    doc.availableActions = underReview ? [] : (actionMap[status] || [])
-  }
-  if (doc.hasDiff == null) doc.hasDiff = false
-  return doc
-}
-
-function standardApiBase() {
-  return adminSection.value === 'standardPublish' ? '/api/admin/parameter-standards' : '/api/admin/standard-documents'
-}
-
-async function submitForReview(doc) {
-  try {
-    await request(`${standardApiBase()}/${doc.id}/submit-review`, { method: 'POST' })
-    notify('已提交审核', 'success')
-    await loadStandardDocuments()
-  } catch (error) {
-    notify(error.message || '提交审核失败', 'error')
-  }
-}
-
-async function startModify(doc) {
-  try {
-    await request(`${standardApiBase()}/${doc.id}/start-modify`, { method: 'POST' })
-    notify('已进入修改状态', 'success')
-    await loadStandardDocuments()
-  } catch (error) {
-    notify(error.message || '操作失败', 'error')
-  }
-}
-
-async function cancelModify(doc) {
-  confirmAction(`确认取消修改「${displayTitle(doc)}」？内容将恢复到上次发布版本。`, () => doCancelModify(doc))
-}
-async function doCancelModify(doc) {
-  try {
-    await request(`${standardApiBase()}/${doc.id}/cancel-modify`, { method: 'POST' })
-    notify('已取消修改，内容已恢复', 'success')
-    await loadStandardDocuments()
-  } catch (error) {
-    notify(error.message || '取消修改失败', 'error')
-  }
-}
-
-async function confirmDeleteDoc(doc) {
-  confirmAction(`确认删除「${displayTitle(doc)}」？此操作不可恢复。`, () => doDeleteDoc(doc))
-}
-async function doDeleteDoc(doc) {
-  try {
-    await request(`${standardApiBase()}/${doc.id}`, { method: 'DELETE' })
-    notify('已删除', 'success')
-    await loadStandardDocuments()
-  } catch (error) {
-    notify(error.message || '删除失败', 'error')
-  }
-}
-
-// 审核 computed 已迁移到 App.vue 顶部
-
-function changeReviewPage(page) {
-  reviewPage.page = Math.max(page, 0)
-}
-
-function reviewStatusClass(status) {
-  const map = { PENDING: 'pending-review', APPROVED: 'published', REJECTED: 'draft' }
-  return map[status] || 'off'
-}
-
-// renderMarkdown 已迁移到 utils/index.js
-
-function formatTime(time) {
-  if (!time) return '-'
-  if (Array.isArray(time)) {
-    const [y, m, d, h, min] = time
-    return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')} ${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`
-  }
-  return String(time).replace('T', ' ').substring(0, 16)
-}
-
-// 审核/设置函数已迁移到 composables/useAdmin.js
-function applyReviewFilters() { reviewPage.page = 0 }
+// 筛选/分页/标准文档CRUD/审核/工具函数 已迁移到 composables/useAdmin.js
 
 // 文档预览函数已迁移到 DocumentPreview.vue
 function previewDocument(document) {
@@ -1045,22 +777,7 @@ function previewDocument(document) {
 }
 function closePreviewDocument() { selectedPreviewDocument.value = null }
 
-// 参数管理函数已迁移到 composables/useAdmin.js
-async function copyParameter(parameter) {
-  const text = `{{${parameter.code}}}`
-  await navigator.clipboard.writeText(text)
-  notify(`已复制 ${text}`, 'success')
-}
-
-// changePassword/loadUsers/loadRoles 已迁移到 composables/useAdmin.js
-
 // 用户管理函数已迁移到 composables/useAdmin.js
-function openChangeRoleDialog(user) {
-  userFormTarget.value = user
-  userForm.role = user.role
-  if (!allRoles.value.length) loadRoles()
-  showRoleDialog.value = true
-}
 
 async function loadSiteConfig() {
   try {

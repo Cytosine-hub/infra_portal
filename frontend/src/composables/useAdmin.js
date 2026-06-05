@@ -107,6 +107,45 @@ export function useAdmin(auth, notify, confirm) {
   function applyPage(target, source) { Object.assign(target, source) }
   function findSoftwareType(id) { return softwareTypes.value.find(t => String(t.id) === String(id)) }
 
+  // ── 标准文档辅助 ──
+  const STATUS_LABEL_MAP = { DRAFT: '草稿', PENDING_REVIEW: '审核中', PUBLISHED: '已发布', MODIFYING: '修改中' }
+  const STATUS_CLASS_MAP = { DRAFT: 'draft', PENDING_REVIEW: 'pending-review', PUBLISHED: 'published', MODIFYING: 'modifying' }
+  const ACTION_MAP = { DRAFT: ['submit-review', 'edit', 'delete'], PUBLISHED: ['start-modify'], MODIFYING: ['submit-review', 'edit', 'cancel-modify', 'delete'] }
+  function statusLabel(status) { return STATUS_LABEL_MAP[status] || status }
+  function statusClass(status) { return STATUS_CLASS_MAP[status] || 'off' }
+  function reviewStatusClass(status) { const map = { PENDING: 'pending-review', APPROVED: 'published', REJECTED: 'draft' }; return map[status] || 'off' }
+  function normalizeDoc(doc) {
+    const status = doc.status || 'DRAFT'
+    doc.status = status
+    const underReview = doc.pendingReviewRecordId != null
+    if (!doc.statusLabel || underReview) doc.statusLabel = underReview ? '审核中' : statusLabel(status)
+    if (!doc._statusClass || underReview) doc._statusClass = underReview ? 'pending-review' : statusClass(status)
+    if (doc.canEdit == null) doc.canEdit = !underReview && (status === 'DRAFT' || status === 'MODIFYING')
+    if (!Array.isArray(doc.availableActions) || doc.availableActions.length === 0) doc.availableActions = underReview ? [] : (ACTION_MAP[status] || [])
+    if (doc.hasDiff == null) doc.hasDiff = false
+    return doc
+  }
+  function displayTitle(doc) {
+    if (!doc) return ''
+    if (doc.documentType === 'MANUAL' || doc.documentType === 'ARTICLE') return doc.title
+    return [doc.category, doc.software, doc.version].filter(Boolean).join(' / ') || doc.title
+  }
+  function getStandardLabel(id) {
+    const standard = allParameterStandards.value.find(doc => String(doc.id) === String(id)) ||
+      standardDocuments.value.find(doc => String(doc.id) === String(id))
+    if (!standard) return '-'
+    return [standard.category, standard.software, standard.softwareVersion].filter(Boolean).join(' / ') +
+      (standard.version ? ` · V${standard.version}` : '')
+  }
+  function formatTime(time) {
+    if (!time) return '-'
+    if (Array.isArray(time)) {
+      const [y, m, d, h, min] = time
+      return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')} ${String(h).padStart(2,'0')}:${String(min).padStart(2,'0')}`
+    }
+    return String(time).replace('T', ' ').substring(0, 16)
+  }
+
   // ── 加载函数 ──
   async function loadAdmin() {
     const pub = adminFilters.published !== '' ? `&published=${adminFilters.published}` : ''
@@ -123,12 +162,17 @@ export function useAdmin(auth, notify, confirm) {
   async function loadSoftwareMetadata() { await loadSoftwareCategories(); await loadSoftwareTypes() }
 
   async function loadStandardDocuments() {
-    const data = await request('/api/admin/standard-documents?size=1000')
+    const apiBase = standardApiBase()
+    const data = await request(apiBase)
     const list = Array.isArray(data) ? data : (data?.content ?? [])
-    standardDocuments.value = list
+    standardDocuments.value = list.map(normalizeDoc)
     if (selectedStandard.value) selectedStandard.value = standardDocuments.value.find(d => d.id === selectedStandard.value.id) || null
     await loadStandardParameters(selectedStandard.value?.id)
+    if (standardFilters.page >= standardPageComputed.value.totalPages) standardFilters.page = Math.max(standardPageComputed.value.totalPages - 1, 0)
+    if (maintenanceDocumentFilters.page >= maintenanceDocumentPageComputed.value.totalPages) maintenanceDocumentFilters.page = Math.max(maintenanceDocumentPageComputed.value.totalPages - 1, 0)
   }
+
+  function loadStandardModule() { return loadStandardDocuments() }
 
   async function loadAllParameterStandards() {
     try {
@@ -138,9 +182,14 @@ export function useAdmin(auth, notify, confirm) {
     } catch { allParameterStandards.value = [] }
   }
 
-  async function loadStandardParameters(targetId) {
+  function fetchStandardParameters(targetId) {
+    const paramName = adminSection.value === 'standardPublish' ? 'parameterStandardId' : 'standardDocumentId'
+    return request(`/api/admin/standard-parameters?${paramName}=${encodeURIComponent(targetId)}`)
+  }
+  async function loadStandardParameters(targetId = selectedStandard.value?.id) {
     if (!targetId) { standardParameters.value = []; return }
-    standardParameters.value = await request(`/api/admin/standard-parameters?standardDocumentId=${encodeURIComponent(targetId)}`)
+    standardParameters.value = await fetchStandardParameters(targetId)
+    if (parameterFilters.page >= parameterPage.value.totalPages) parameterFilters.page = Math.max(parameterPage.value.totalPages - 1, 0)
   }
 
   async function loadSystemSettings() {
@@ -326,6 +375,77 @@ export function useAdmin(auth, notify, confirm) {
       await request(standardForm.id ? `${apiBase}/${standardForm.id}` : apiBase, { method: standardForm.id ? 'PUT' : 'POST', body })
       notify(`标准已${actionText}`, 'success'); closeStandardDialog(); await loadStandardDocuments()
     } catch (e) { notify(e.message || `标准${actionText}失败`, 'error') }
+  }
+
+  // ── 标准文档 CRUD ──
+  async function submitForReview(doc) {
+    try { await request(`${standardApiBase()}/${doc.id}/submit-review`, { method: 'POST' }); notify('已提交审核', 'success'); await loadStandardDocuments() }
+    catch (error) { notify(error.message || '提交审核失败', 'error') }
+  }
+  async function startModify(doc) {
+    try { await request(`${standardApiBase()}/${doc.id}/start-modify`, { method: 'POST' }); notify('已进入修改状态', 'success'); await loadStandardDocuments() }
+    catch (error) { notify(error.message || '操作失败', 'error') }
+  }
+  function cancelModify(doc) { confirm(`确认取消修改「${displayTitle(doc)}」？内容将恢复到上次发布版本。`, () => doCancelModify(doc)) }
+  async function doCancelModify(doc) {
+    try { await request(`${standardApiBase()}/${doc.id}/cancel-modify`, { method: 'POST' }); notify('已取消修改，内容已恢复', 'success'); await loadStandardDocuments() }
+    catch (error) { notify(error.message || '取消修改失败', 'error') }
+  }
+  function confirmDeleteDoc(doc) { confirm(`确认删除「${displayTitle(doc)}」？此操作不可恢复。`, () => doDeleteDoc(doc)) }
+  async function doDeleteDoc(doc) {
+    try { await request(`${standardApiBase()}/${doc.id}`, { method: 'DELETE' }); notify('已删除', 'success'); await loadStandardDocuments() }
+    catch (error) { notify(error.message || '删除失败', 'error') }
+  }
+
+  function openEditStandardDialog(document) {
+    const typeId = document.softwareTypeId || (() => {
+      const cat = (document.category || '').trim().toLowerCase()
+      const name = (document.software || '').trim().toLowerCase()
+      if (!cat || !name) return ''
+      const matched = softwareTypes.value.find(t => (t.category || '').trim().toLowerCase() === cat && (t.name || '').trim().toLowerCase() === name)
+      return matched ? matched.id : ''
+    })()
+    const selectedType = findSoftwareType(typeId)
+    Object.assign(standardForm, {
+      id: document.id,
+      category: selectedType?.category || document.category || '',
+      softwareTypeId: selectedType?.id || '',
+      softwareVersion: document.softwareVersion || '',
+      code: document.code || '',
+      summary: document.summary || '',
+      content: document.content || '# 参数标准\n\n'
+    })
+    showStandardDialog.value = true
+  }
+
+  // ── 筛选/分页辅助 ──
+  function changeTypePage(page) { typeFilters.page = Math.max(page, 0) }
+  function applyTypeFilters() { typeFilters.page = 0 }
+  function changeStandardPage(page) { standardFilters.page = Math.max(page, 0) }
+  function applyStandardFilters() { standardFilters.page = 0 }
+  function handleStandardFilterCategoryChange() { standardFilters.software = ''; applyStandardFilters() }
+  function openStandardDetail(document) { selectedStandard.value = document; parameterFilters.page = 0; loadStandardParameters(document.id) }
+  function backToStandardList() { selectedStandard.value = null; standardParameters.value = [] }
+  function changeMaintenanceDocumentPage(page) { maintenanceDocumentFilters.page = Math.max(page, 0) }
+  function applyMaintenanceDocumentFilters() { maintenanceDocumentFilters.page = 0 }
+  function changeReviewPage(page) { reviewPage.page = Math.max(page, 0) }
+  function applyReviewFilters() { reviewPage.page = 0 }
+
+  function openChangeRoleDialog(user) {
+    userFormTarget.value = user; userForm.role = user.role
+    if (!allRoles.value.length) loadRoles()
+    showRoleDialog.value = true
+  }
+
+  async function regeneratePackage(release) {
+    try { await request(`/api/admin/releases/${release.id}/regenerate-package`, { method: 'POST' }); notify('标准包已提交重新生成', 'success'); await loadAdmin() }
+    catch (error) { notify(error.message || '重新生成失败', 'error') }
+  }
+
+  async function copyParameter(parameter) {
+    const text = `{{${parameter.code}}}`
+    await navigator.clipboard.writeText(text)
+    notify(`已复制 ${text}`, 'success')
   }
 
   // ── 参数管理 ──
@@ -558,18 +678,27 @@ export function useAdmin(auth, notify, confirm) {
     maintenanceDocumentsComputed, maintenanceDocumentPageComputed, pagedMaintenanceDocuments,
     // Functions
     loadAdmin, loadSoftwareTypes, loadSoftwareCategories, loadSoftwareMetadata,
-    loadStandardDocuments, loadAllParameterStandards, loadStandardParameters, loadSystemSettings, saveSystemSettings,
+    loadStandardDocuments, loadStandardModule, loadAllParameterStandards, loadStandardParameters, loadSystemSettings, saveSystemSettings,
     loadUsers, loadRoles, changePassword,
     startCreate, startEdit, cancelEdit, handleReleaseFileChange, saveRelease, togglePublish,
     openDeleteReleaseDialog, closeDeleteReleaseDialog, confirmDeleteRelease,
     openImportPage, closeImportPage, submitImport,
     openCreateCategoryDialog, closeCategoryDialog, saveCategory,
     openCreateTypeDialog, closeTypeDialog, saveType,
-    openCreateStandardDialog, closeStandardDialog, saveStandard,
+    openCreateStandardDialog, openEditStandardDialog, closeStandardDialog, saveStandard,
     openCreateParameterDialog, closeParameterDialog, saveParameter, handleParamImportFileChange, importParameters, downloadParameterTemplate,
+    submitForReview, startModify, cancelModify, confirmDeleteDoc,
     loadReviews, openReviewDetail, closeReviewDetail, reviewApprove, reviewReject,
     openRevisionHistory, closeRevisionModal,
     openCreateUserDialog, closeUserDialog, createUser, openRoleDialog, closeRoleDialog, changeUserRole, deleteUserAccount,
-    switchAdminSection, changeAdminPage
+    switchAdminSection, changeAdminPage,
+    // Filter/pagination helpers
+    changeTypePage, applyTypeFilters, changeStandardPage, applyStandardFilters, handleStandardFilterCategoryChange,
+    openStandardDetail, backToStandardList, changeMaintenanceDocumentPage, applyMaintenanceDocumentFilters,
+    changeReviewPage, applyReviewFilters, openChangeRoleDialog,
+    regeneratePackage, copyParameter,
+    // Utility
+    normalizeDoc, displayTitle, getStandardLabel, formatTime, statusLabel, statusClass, reviewStatusClass, findSoftwareType,
+    standardApiBase
   }
 }
