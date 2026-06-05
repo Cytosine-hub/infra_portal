@@ -221,167 +221,6 @@
       </template>
     </main>
 
-    <FormModal v-model="editing" :title="releaseForm.id ? '编辑资源' : '新增资源'" width="700px" @submit="saveRelease">
-        <div class="form-grid">
-          <label>分类
-            <select v-model="releaseForm.category" required @change="releaseForm.softwareTypeId = ''">
-              <option value="">请选择分类</option>
-              <option v-for="category in releaseCategoryOptions" :key="category" :value="category">{{ category }}</option>
-            </select>
-          </label>
-          <label>软件
-            <select v-model="releaseForm.softwareTypeId" :disabled="!releaseForm.category" required>
-              <option value="">请选择软件</option>
-              <option v-for="type in releaseSoftwareOptions" :key="type.id" :value="type.id">{{ type.name }}</option>
-            </select>
-          </label>
-          <label>版本号<input v-model.trim="releaseForm.version" required maxlength="60" /></label>
-          <label>平台<input v-model.trim="releaseForm.platform" maxlength="60" /></label>
-          <label>发布日期<input v-model="releaseForm.releasedAt" type="date" /></label>
-          <label class="checkline"><input v-model="releaseForm.published" type="checkbox" />发布</label>
-          <label>关联标准
-            <select v-model="releaseForm.standardDocumentId" :disabled="!releaseForm.category || !releaseForm.softwareTypeId">
-              <option :value="null">不关联</option>
-              <option v-for="doc in releaseStandardOptions" :key="doc.id" :value="doc.id">{{ getStandardLabel(doc.id) }}</option>
-            </select>
-          </label>
-          <label class="checkline"><input v-model="releaseForm.standardPackage" type="checkbox" />标准包</label>
-          <label v-if="releaseForm.standardPackage">关联参数标准
-            <select v-model="releaseForm.parameterStandardId" :disabled="!releaseForm.category || !releaseForm.softwareTypeId">
-              <option :value="null">请选择参数标准</option>
-              <option v-for="ps in releaseParameterStandardOptions" :key="ps.id" :value="ps.id">{{ ps.title }}</option>
-            </select>
-          </label>
-          <label class="file-field">安装包
-            <span class="file-control">
-              <input type="file" @change="handleReleaseFileChange" />
-              <span class="file-button">选择文件</span>
-              <span class="file-name">{{ releaseForm.file?.name || releaseForm.originalFileName || '未选择文件' }}</span>
-            </span>
-          </label>
-          <label class="wide">说明<textarea v-model.trim="releaseForm.description" maxlength="2000" /></label>
-        </div>
-        <div v-if="uploading" class="upload-progress-bar">
-          <div class="progress-track">
-            <div class="progress-fill" :style="{ width: uploadProgress + '%' }"></div>
-          </div>
-          <span class="progress-text">上传中 {{ uploadProgress }}%</span>
-        </div>
-      <template #actions>
-        <BaseButton type="submit" :loading="uploading">{{ uploading ? '上传中...' : '保存' }}</BaseButton>
-        <BaseButton variant="ghost" @click="cancelEdit()" :disabled="uploading">取消</BaseButton>
-      </template>
-    </FormModal>
-
-    <FormModal v-model="showImport" title="批量导入" width="700px" @submit="submitImport">
-        <p class="muted" style="margin:0 0 12px">扫描指定目录并按所选软件导入安装包资源。</p>
-        <div class="form-grid">
-          <label class="wide">目录路径<input v-model.trim="importForm.sourceDirectory" :disabled="importing" required /></label>
-          <label>分类
-            <select v-model="importForm.category" :disabled="importing" required @change="importForm.softwareTypeId = ''">
-              <option value="">请选择分类</option>
-              <option v-for="category in activeTypeCategories" :key="category" :value="category">{{ category }}</option>
-            </select>
-          </label>
-          <label>软件
-            <select v-model="importForm.softwareTypeId" :disabled="importing || !importForm.category" required>
-              <option value="">请选择软件</option>
-              <option v-for="type in importSoftwareOptions" :key="type.id" :value="type.id">{{ type.name }}</option>
-            </select>
-          </label>
-          <label>平台<input v-model.trim="importForm.platform" :disabled="importing" /></label>
-          <label class="checkline"><input v-model="importForm.recursive" :disabled="importing" type="checkbox" />递归扫描</label>
-          <label class="checkline"><input v-model="importForm.published" :disabled="importing" type="checkbox" />导入后发布</label>
-          <label class="wide">说明<textarea v-model.trim="importForm.description" :disabled="importing" /></label>
-        </div>
-        <div v-if="importing" class="loading-panel">
-          <LoadingSpinner text="正在导入，请稍候..." />
-          <p>正在扫描目录并写入资源记录，导入完成后会显示结果。</p>
-        </div>
-      <template #actions>
-        <BaseButton type="submit" :loading="importing">{{ importing ? '导入中...' : '开始导入' }}</BaseButton>
-        <BaseButton variant="ghost" :disabled="importing" @click="closeImportPage()">取消</BaseButton>
-      </template>
-    </FormModal>
-
-    <FormModal v-model="showTypeDialog" :title="typeForm.id ? '编辑类型' : '新增类型'" @submit="saveType">
-      <div class="form-grid single">
-        <label>分类
-          <select v-model="typeForm.category" required>
-            <option value="">请选择分类</option>
-            <option v-for="category in softwareTypeCategories" :key="category" :value="category">{{ category }}</option>
-          </select>
-        </label>
-        <label>软件类型名称<input v-model.trim="typeForm.name" required maxlength="120" /></label>
-        <label>说明<textarea v-model.trim="typeForm.description" maxlength="500" /></label>
-        <label class="checkline"><input v-model="typeForm.active" type="checkbox" />启用</label>
-      </div>
-    </FormModal>
-
-    <FormModal v-model="showCategoryDialog" title="新增分类" @submit="saveCategory">
-      <div class="form-grid single">
-        <label>分类名称<input v-model.trim="categoryForm.name" required maxlength="40" placeholder="例如 中间件、数据库、应用软件" /></label>
-      </div>
-    </FormModal>
-
-    <FormModal v-model="showStandardDialog" :title="standardForm.id ? '编辑标准' : '新增标准'" @submit="saveStandard">
-        <div class="form-grid single">
-          <label>分类
-            <select v-model="standardForm.category" required @change="standardForm.softwareTypeId = ''">
-              <option value="">请选择分类</option>
-              <option v-for="category in standardCategoryOptions" :key="category" :value="category">{{ category }}</option>
-            </select>
-          </label>
-          <label>软件
-            <select v-model="standardForm.softwareTypeId" :disabled="!standardForm.category" required>
-              <option value="">请选择软件</option>
-              <option v-for="type in standardSoftwareOptions" :key="type.id" :value="type.id">
-                {{ type.name }}{{ type.active ? '' : '（停用）' }}
-              </option>
-            </select>
-          </label>
-          <label>软件版本<input v-model.trim="standardForm.softwareVersion" required maxlength="80" /></label>
-          <label>编码<input v-model.trim="standardForm.code" maxlength="20" /></label>
-          <label v-if="adminSection !== 'standardPublish'">说明<textarea v-model.trim="standardForm.summary" maxlength="500" /></label>
-        </div>
-    </FormModal>
-
-    <FormModal v-model="showParameterDialog" :title="parameterForm.id ? '编辑参数' : '新增参数'" @submit="saveParameter">
-      <div class="form-grid single">
-        <label>参数编码<input v-model.trim="parameterForm.code" required maxlength="80" placeholder="例如 JDK_VERSION" /></label>
-        <label>参数名称<input v-model.trim="parameterForm.name" required maxlength="120" /></label>
-        <label>参数值<input v-model.trim="parameterForm.value" required maxlength="500" /></label>
-        <label>分类<input v-model.trim="parameterForm.category" maxlength="60" /></label>
-        <label>说明<textarea v-model.trim="parameterForm.description" maxlength="500" /></label>
-        <label class="checkline"><input v-model="parameterForm.active" type="checkbox" />启用</label>
-        <label class="checkline"><input v-model="parameterForm.deploymentStandard" type="checkbox" />是否为部署标准</label>
-      </div>
-    </FormModal>
-
-    <FormModal v-model="showParamImportDialog" title="批量导入参数" submitText="开始导入" :submitDisabled="paramImporting" @submit="importParameters">
-      <div class="form-grid single">
-        <p class="muted" style="margin:0 0 12px">请先下载模板，按格式填写后上传 Excel 文件。支持的列：参数编码、参数名称、参数值、分类、说明、是否启用（是/否）、是否部署标准（是/否）。</p>
-        <label class="file-field">选择 Excel 文件
-          <span class="file-control">
-            <input type="file" accept=".xlsx,.xls" @change="handleParamImportFileChange" required />
-            <span class="file-button">选择文件</span>
-            <span class="file-name">{{ paramImportFile?.name || '未选择文件' }}</span>
-          </span>
-        </label>
-      </div>
-      <div v-if="paramImportResult" class="import-result">
-        <p>导入完成：成功 <strong>{{ paramImportResult.imported }}</strong> 条，跳过 <strong>{{ paramImportResult.skipped }}</strong> 条</p>
-        <ul v-if="paramImportResult.errors.length > 0">
-          <li v-for="(err, idx) in paramImportResult.errors" :key="idx" class="import-error">{{ err }}</li>
-        </ul>
-      </div>
-      <template #actions>
-        <BaseButton variant="ghost" @click="downloadParameterTemplate()">下载模板</BaseButton>
-        <BaseButton type="submit" :loading="paramImporting">{{ paramImporting ? '导入中...' : '开始导入' }}</BaseButton>
-        <BaseButton variant="ghost" @click="showParamImportDialog = false; paramImportResult = null">关闭</BaseButton>
-      </template>
-    </FormModal>
-
     <DocumentPreview
       :document="selectedPreviewDocument"
       :documents="maintenanceDocuments"
@@ -390,97 +229,13 @@
       @preview="previewDocument"
     />
 
-    <FormModal v-model="showUserDialog" title="新增用户" submitText="创建" @submit="createUser">
-      <div class="form-grid single">
-        <label>账号<input v-model.trim="userForm.username" required minlength="2" maxlength="60" placeholder="登录账号" /></label>
-        <label>用户名<input v-model.trim="userForm.displayName" maxlength="60" placeholder="显示名称（可选）" /></label>
-        <label>密码<input v-model="userForm.password" type="password" required minlength="6" maxlength="64" placeholder="至少6位" /></label>
-        <label>角色
-          <select v-model="userForm.role" required>
-            <option v-for="r in allRoles" :key="r.name" :value="r.name">{{ r.name }}</option>
-          </select>
-        </label>
-      </div>
-    </FormModal>
-
-    <FormModal v-model="showRoleDialog" :title="'修改角色 — ' + (userFormTarget?.username || '')" @submit="changeUserRole">
-      <label>角色
-        <select v-model="userForm.role" required>
-          <option v-for="r in allRoles" :key="r.name" :value="r.name">{{ r.name }}</option>
-        </select>
-      </label>
-    </FormModal>
-
-    <BaseModal v-model="showImportResultDialog" title="导入结果">
-      <div class="result-grid">
-        <div><span>扫描文件</span><strong>{{ importResult?.scannedCount ?? 0 }}</strong></div>
-        <div><span>成功导入</span><strong>{{ importResult?.importedCount ?? 0 }}</strong></div>
-        <div><span>跳过文件</span><strong>{{ importResult?.skippedCount ?? 0 }}</strong></div>
-        <div><span>失败文件</span><strong>{{ importResult?.failedCount ?? 0 }}</strong></div>
-      </div>
-      <template #footer>
-        <BaseButton @click="showImportResultDialog = false">确定</BaseButton>
-      </template>
-    </BaseModal>
-
-    <BaseModal :modelValue="!!deleteTarget" @update:modelValue="closeDeleteReleaseDialog()" title="删除资源" width="400px">
-      <p class="confirm-message">
-        确认删除 {{ deleteTarget?.middlewareName }} {{ deleteTarget?.version }}？
-      </p>
-      <template #footer>
-        <BaseButton variant="ghost" :disabled="deletingRelease" @click="closeDeleteReleaseDialog()">取消</BaseButton>
-        <BaseButton variant="danger" :disabled="deletingRelease" :loading="deletingRelease" @click="confirmDeleteRelease()">确认删除</BaseButton>
-      </template>
-    </BaseModal>
-
-    <BaseModal v-model="showRevisionModal" :title="revisionDocTitle + ' - 修订历史'" width="700px">
-        <div v-if="revisionList.length === 0" class="empty-state" style="padding:40px 0">暂无修订记录</div>
-        <div v-else class="revision-list">
-          <div v-for="rev in revisionList" :key="rev.id" class="revision-item">
-            <div class="revision-header">
-              <span class="revision-version">V{{ rev.version }}</span>
-              <span class="revision-time">{{ formatTime(rev.revisedAt) }}</span>
-              <span class="revision-author">提交人：{{ rev.submittedBy || '-' }}</span>
-              <span class="revision-author">修订人：{{ rev.revisedBy || '-' }}</span>
-            </div>
-            <p v-if="rev.revisionComment" class="revision-comment">审核意见：{{ rev.revisionComment }}</p>
-            <details class="revision-content-detail">
-              <summary>查看修订详情</summary>
-              <div class="revision-content-block">
-                <div v-if="rev.content" class="revision-rendered" v-html="renderMarkdown(rev.content)"></div>
-                <div v-else class="empty-state" style="padding:12px 0;font-size:13px">无内容快照</div>
-              </div>
-            </details>
-          </div>
-        </div>
-    </BaseModal>
-
-    <BaseModal :modelValue="!!selectedReview" @update:modelValue="closeReviewDetail()" :title="selectedReview?.documentType === 'PARAMETER_STANDARD' ? [selectedReview?.category, selectedReview?.software].filter(Boolean).join(' / ') : (selectedReview?.documentTitle || '')" width="700px">
-      <p class="muted" style="margin: 0 0 12px">
-        <span :class="['status', reviewStatusClass(selectedReview?.status)]">{{ selectedReview?.statusLabel }}</span>
-        V{{ selectedReview?.documentVersion || '-' }} · {{ selectedReview?.category || '-' }} / {{ selectedReview?.software || '-' }}
-      </p>
-      <div class="review-meta">
-        <p>提交人：{{ selectedReview?.submitterDisplayName || selectedReview?.submitterUsername }} · 提交时间：{{ formatTime(selectedReview?.submittedAt) }}</p>
-        <p v-if="selectedReview?.reviewerUsername">审核人：{{ selectedReview?.reviewerUsername }} · 审核时间：{{ formatTime(selectedReview?.reviewedAt) }}</p>
-        <p v-if="selectedReview?.reviewComment">审核意见：{{ selectedReview?.reviewComment }}</p>
-      </div>
-      <div class="diff-view">
-        <h4>版本差异对比</h4>
-        <pre class="diff-content"><template v-for="(line, idx) in diffLines" :key="idx"><span :class="['diff-line', line.startsWith('+') ? 'diff-line-add' : line.startsWith('-') ? 'diff-line-del' : line.startsWith('@@') ? 'diff-line-info' : '' ]">{{ line }}</span>
-</template></pre>
-      </div>
-      <div v-if="selectedReview?.status === 'PENDING' && (isSysAdmin || (isCategoryAdmin && managedCategory === selectedReview?.category))" class="review-actions-panel">
-        <div class="form-grid single">
-          <label>审核意见<textarea v-model.trim="reviewComment" maxlength="1000" placeholder="请输入审核意见（可选）" /></label>
-        </div>
-        <div class="form-actions">
-          <BaseButton variant="ghost" @click="closeReviewDetail()">取消</BaseButton>
-          <BaseButton variant="danger" @click="reviewReject(selectedReview)">驳回</BaseButton>
-          <BaseButton variant="success" @click="reviewApprove(selectedReview)">审核通过</BaseButton>
-        </div>
-      </div>
-    </BaseModal>
+    <AdminModals
+      :admin="admin"
+      :isSysAdmin="isSysAdmin"
+      :isCategoryAdmin="isCategoryAdmin"
+      :managedCategory="managedCategory"
+      :selectedReviewDiff="selectedReviewDiff"
+    />
 
     <Toast :notice="notice" />
     <ConfirmDialog v-model="confirmDialog" />
@@ -494,7 +249,6 @@ import { request } from './api'
 import { useAuth } from './composables/useAuth'
 import { useNotify } from './composables/useNotify'
 import { useRoute } from './composables/useRoute'
-import { formatDetail, formatDate, renderMarkdown, documentTypeLabel } from './utils'
 import Pagination from './components/Pagination.vue'
 import DocumentEditor from './components/DocumentEditor.vue'
 import ForumPostList from './components/ForumPostList.vue'
@@ -518,11 +272,8 @@ import DocumentsSection from './pages/admin/DocumentsSection.vue'
 import SettingsSection from './pages/admin/SettingsSection.vue'
 import Toast from './components/ui/Toast.vue'
 import ConfirmDialog from './components/ui/ConfirmDialog.vue'
-import FormModal from './components/ui/FormModal.vue'
-import BaseModal from './components/ui/BaseModal.vue'
-import BaseButton from './components/ui/BaseButton.vue'
-import LoadingSpinner from './components/ui/LoadingSpinner.vue'
 import DocumentPreview from './components/DocumentPreview.vue'
+import AdminModals from './components/AdminModals.vue'
 import { useAdmin } from './composables/useAdmin'
 
 const { auth, login: authLogin, logout: authLogout, restoreAuth, sha256,
@@ -629,6 +380,7 @@ const pagedReviews = computed(() => {
   const start = reviewPageInfo.value.page * reviewPage.size
   return filteredReviews.value.slice(start, start + reviewPage.size)
 })
+const diffLines = computed(() => (selectedReviewDiff.value || '').split('\n'))
 
 // 文档预览 computed 已迁移到 DocumentPreview.vue
 
