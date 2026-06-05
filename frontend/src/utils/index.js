@@ -52,3 +52,11 @@ export function formatDetail(text) {
   if (!text) return ''
   return escapeHtml(text).replace(/\n/g, '<br>').replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
 }
+
+/** 文档类型标签 */
+export function documentTypeLabel(type) {
+  if (type === 'STANDARD' || type === 'PARAMETER_STANDARD') return '参数标准'
+  if (type === 'ARTICLE') return '文章'
+  if (type === 'MANUAL') return '手册'
+  return '参数标准'
+}

@@ -544,7 +544,7 @@ import { request } from './api'
 import { useAuth } from './composables/useAuth'
 import { useNotify } from './composables/useNotify'
 import { useRoute } from './composables/useRoute'
-import { formatBytes, formatDetail, formatDate, renderMarkdown } from './utils'
+import { formatBytes, formatDetail, formatDate, renderMarkdown, documentTypeLabel } from './utils'
 import Pagination from './components/Pagination.vue'
 import DocumentEditor from './components/DocumentEditor.vue'
 import ForumPostList from './components/ForumPostList.vue'
@@ -579,7 +579,7 @@ const { auth, login: authLogin, logout: authLogout, restoreAuth, sha256,
 const { notice, notify, confirmDialog, confirm: confirmAction, handleConfirm, cancelConfirm } = useNotify()
 const { route, navigate } = useRoute()
 
-// ── 管理后台状态 composable（仅状态，函数保留在 App.vue）──
+// ── 管理后台 composable（仅状态，函数保留 App.vue 版本以保持副作用逻辑）──
 const admin = useAdmin(auth, notify, confirmAction)
 const {
   adminSection, showPassword, showImport, importing, importResult, showImportResultDialog,
@@ -906,20 +906,14 @@ async function loadAdmin() {
   applyPage(adminPage, await request(`/api/admin/releases?${query}`))
 }
 
+// loadSoftwareCategories/loadSoftwareMetadata/loadAllParameterStandards/loadUsers/loadRoles/changePassword
+// 已迁移到 composables/useAdmin.js
+
 async function loadSoftwareTypes() {
   softwareTypes.value = await request('/api/admin/software-types')
   if (typeFilters.page >= typePage.value.totalPages) {
     typeFilters.page = Math.max(typePage.value.totalPages - 1, 0)
   }
-}
-
-async function loadSoftwareCategories() {
-  softwareCategories.value = await request('/api/admin/software-type-categories')
-}
-
-async function loadSoftwareMetadata() {
-  await loadSoftwareCategories()
-  await loadSoftwareTypes()
 }
 
 async function loadStandardModule() {
@@ -943,15 +937,7 @@ async function loadStandardDocuments() {
   }
 }
 
-async function loadAllParameterStandards() {
-  try {
-    const data = await request('/api/admin/parameter-standards')
-    const list = Array.isArray(data) ? data : (data?.content ?? [])
-    allParameterStandards.value = list.filter(d => d.status === 'PUBLISHED')
-  } catch {
-    allParameterStandards.value = []
-  }
-}
+// loadAllParameterStandards 已迁移到 composables/useAdmin.js
 
 async function loadStandardParameters(targetId = selectedStandard.value?.id) {
   if (!targetId) {
@@ -1080,10 +1066,7 @@ function onDocumentEditorCancel() {
 
 // 公共页面函数已迁移到各页面组件
 
-function changeAdminPage(page) {
-  adminFilters.page = page
-  loadAdmin()
-}
+// changeAdminPage 已迁移到 composables/useAdmin.js
 
 function changeTypePage(page) {
   typeFilters.page = Math.max(page, 0)
@@ -1393,16 +1376,6 @@ function displayTitle(doc) {
   if (!doc) return ''
   if (doc.documentType === 'MANUAL' || doc.documentType === 'ARTICLE') return doc.title
   return [doc.category, doc.software, doc.version].filter(Boolean).join(' / ') || doc.title
-}
-
-function publicDocKey(doc) {
-  if (!doc) return ''
-  const prefix = (doc.documentType === 'MANUAL' || doc.documentType === 'ARTICLE') ? 'doc' : 'ps'
-  return prefix + ':' + doc.id
-}
-
-function findStandardDocument(id) {
-  return standardDocuments.value.find(doc => String(doc.id) === String(id))
 }
 
 function openCreateCategoryDialog() {
@@ -1931,30 +1904,7 @@ async function importParameters() {
   }
 }
 
-async function changePassword() {
-  try {
-    const cp = await sha256(passwordForm.currentPassword)
-    const np = await sha256(passwordForm.newPassword)
-    await request('/api/admin/account/password', { method: 'POST', body: { currentPassword: cp, newPassword: np, confirmPassword: np } })
-    Object.assign(passwordForm, { currentPassword: '', newPassword: '', confirmPassword: '' })
-    notify('密码已更新，请使用新密码重新登录', 'success')
-    logout(false)
-  } catch (error) {
-    notify(error.message || '密码修改失败', 'error')
-  }
-}
-
-// formatBytes 已迁移到 utils/index.js
-// notify / confirmAction 已迁移到 composables/useNotify.js
-
-// ── User management ──
-async function loadUsers() {
-  try { userList.value = await request('/api/admin/users') } catch { userList.value = [] }
-}
-
-async function loadRoles() {
-  try { allRoles.value = await request('/api/admin/users/roles') } catch { allRoles.value = [] }
-}
+// changePassword/loadUsers/loadRoles 已迁移到 composables/useAdmin.js
 
 function userCountByRole(role) {
   return userList.value.filter(u => u.role === role).length
