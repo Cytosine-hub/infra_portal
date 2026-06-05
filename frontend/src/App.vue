@@ -363,6 +363,7 @@ function syncRoute() {
       loadSoftwareTypes()
       loadSoftwareCategories()
       loadStandardModule()
+      loadAllParameterStandards()
     }
     return
   }
