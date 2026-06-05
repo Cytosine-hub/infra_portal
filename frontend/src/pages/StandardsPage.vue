@@ -236,7 +236,7 @@ async function loadDocuments() {
   try {
     const [stds, docs] = await Promise.all([
       request('/api/public/parameter-standards?size=100', { token: null }),
-      request('/api/public/standard-documents?size=1000', { token: null })
+      request('/api/public/standards?size=1000', { token: null })
     ])
     standards.value = stds || []
     documents.value = (docs || []).map(d => ({ ...d, parameterStandardId: d.parameterStandardId || null }))

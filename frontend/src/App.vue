@@ -425,6 +425,10 @@ function goForumNew() {
   navigate('forum/new')
 }
 
+function openDetail(token) {
+  window.location.hash = `#/downloads/${token}`
+}
+
 function goDocumentEditor() {
   window.location.hash = '#/admin/document-editor'
 }
