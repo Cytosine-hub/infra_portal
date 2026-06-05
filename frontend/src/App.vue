@@ -886,17 +886,6 @@ function findSoftwareType(id) {
   return softwareTypes.value.find(type => String(type.id) === String(id))
 }
 
-function findSoftwareTypeIdByCategoryAndName(category, name) {
-  const targetCategory = (category || '').trim().toLowerCase()
-  const targetName = (name || '').trim().toLowerCase()
-  if (!targetCategory || !targetName) return ''
-  const matched = softwareTypes.value.find(type =>
-    (type.category || '').trim().toLowerCase() === targetCategory &&
-    (type.name || '').trim().toLowerCase() === targetName
-  )
-  return matched ? matched.id : ''
-}
-
 function getStandardLabel(id) {
   const standard = allParameterStandards.value.find(doc => String(doc.id) === String(id)) ||
     standardDocuments.value.find(doc => String(doc.id) === String(id))
@@ -914,7 +903,16 @@ function displayTitle(doc) {
 // closeTypeDialog/saveType/deleteType/openCreateStandardDialog 已迁移到 composables/useAdmin.js
 
 function openEditStandardDialog(document) {
-  const selectedType = findSoftwareType(document.softwareTypeId || findSoftwareTypeIdByCategoryAndName(document.category, document.software))
+  const typeId = document.softwareTypeId || (() => {
+    const cat = (document.category || '').trim().toLowerCase()
+    const name = (document.software || '').trim().toLowerCase()
+    if (!cat || !name) return ''
+    const matched = softwareTypes.value.find(t =>
+      (t.category || '').trim().toLowerCase() === cat && (t.name || '').trim().toLowerCase() === name
+    )
+    return matched ? matched.id : ''
+  })()
+  const selectedType = findSoftwareType(typeId)
   Object.assign(standardForm, {
     id: document.id,
     category: selectedType?.category || document.category || '',
