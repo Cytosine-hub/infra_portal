@@ -437,6 +437,106 @@ export function useAdmin(auth, notify, confirm) {
   }
   function changeAdminPage(page) { adminFilters.page = page; loadAdmin() }
 
+  // ── Computed 属性 ──
+  function uniqueOptions(values) { return [...new Set(values.map(value => (value || '').trim()).filter(Boolean))] }
+  function softwareTypesByCategory(category, onlyActive = false) {
+    if (!category) return []
+    const source = onlyActive ? softwareTypes.value.filter(t => t.active) : softwareTypes.value
+    return source.filter(type => type.category === category)
+  }
+
+  const activeSoftwareTypes = computed(() => softwareTypes.value.filter(type => type.active))
+  const defaultSoftwareCategories = ['中间件', '主机', '数据库', '安全', '网络']
+  const softwareTypeCategories = computed(() => uniqueOptions([
+    ...defaultSoftwareCategories,
+    ...softwareCategories.value,
+    ...softwareTypes.value.map(type => type.category)
+  ]))
+  const activeTypeCategories = computed(() => uniqueOptions(activeSoftwareTypes.value.map(type => type.category)))
+  const releaseCategoryOptions = computed(() => releaseForm.id ? softwareTypeCategories.value : activeTypeCategories.value)
+  const releaseSoftwareOptions = computed(() => softwareTypesByCategory(releaseForm.category, !releaseForm.id))
+  const releaseStandardOptions = computed(() => {
+    const selectedType = softwareTypes.value.find(t => String(t.id) === String(releaseForm.softwareTypeId))
+    const softwareName = selectedType?.name || ''
+    return allParameterStandards.value.filter(s => s.category === releaseForm.category && (!softwareName || s.software === softwareName))
+  })
+  const releaseParameterStandardOptions = computed(() => {
+    const selectedType = softwareTypes.value.find(t => String(t.id) === String(releaseForm.softwareTypeId))
+    const softwareName = selectedType?.name || ''
+    return allParameterStandards.value.filter(s => s.status === 'PUBLISHED' && s.category === releaseForm.category && (!softwareName || s.software === softwareName))
+  })
+  const importSoftwareOptions = computed(() => softwareTypesByCategory(importForm.category, true))
+  const standardCategoryOptions = computed(() => standardForm.id ? softwareTypeCategories.value : activeTypeCategories.value)
+  const standardSoftwareOptions = computed(() => softwareTypesByCategory(standardForm.category, !standardForm.id))
+  const filteredSoftwareTypes = computed(() => {
+    const name = typeFilters.name.trim().toLowerCase()
+    return softwareTypes.value.filter(type => {
+      const matchesCategory = !typeFilters.category || type.category === typeFilters.category
+      const matchesName = !name || type.name.toLowerCase().includes(name)
+      return matchesCategory && matchesName
+    })
+  })
+  const typePageComputed = computed(() => {
+    const totalElements = filteredSoftwareTypes.value.length
+    const totalPages = Math.max(Math.ceil(totalElements / typeFilters.size), 1)
+    const page = Math.min(typeFilters.page, totalPages - 1)
+    return { content: [], page, size: typeFilters.size, totalElements, totalPages, first: page <= 0, last: page >= totalPages - 1 }
+  })
+  const pagedSoftwareTypes = computed(() => {
+    const page = typePageComputed.value.page
+    const start = page * typeFilters.size
+    return filteredSoftwareTypes.value.slice(start, start + typeFilters.size)
+  })
+  const filteredStandardDocuments = computed(() => {
+    const keyword = standardFilters.keyword.trim().toLowerCase()
+    return standardDocuments.value.filter(doc => {
+      if (adminSection.value !== 'standardPublish' && doc.documentType !== 'STANDARD') return false
+      const matchesCategory = !standardFilters.category || doc.category === standardFilters.category
+      const matchesStatus = !standardFilters.status || doc.status === standardFilters.status
+      const matchesSoftware = !standardFilters.software || doc.software === standardFilters.software
+      const matchesKeyword = !keyword || doc.title.toLowerCase().includes(keyword) || (doc.summary || '').toLowerCase().includes(keyword) || (doc.softwareVersion || '').toLowerCase().includes(keyword)
+      return matchesCategory && matchesStatus && matchesSoftware && matchesKeyword
+    })
+  })
+  const standardDocumentOptions = computed(() => {
+    if (adminSection.value === 'standardPublish') return standardDocuments.value
+    return allParameterStandards.value
+  })
+  const standardPageComputed = computed(() => {
+    const totalElements = filteredStandardDocuments.value.length
+    const totalPages = Math.max(Math.ceil(totalElements / standardFilters.size), 1)
+    const page = Math.min(standardFilters.page, totalPages - 1)
+    return { content: [], page, size: standardFilters.size, totalElements, totalPages, first: page <= 0, last: page >= totalPages - 1 }
+  })
+  const selectedStandardParameters = computed(() => {
+    if (!selectedStandard.value) return []
+    return standardParameters.value.filter(parameter => {
+      const pid = parameter.parameterStandardId || parameter.standardDocumentId
+      return String(pid) === String(selectedStandard.value.id)
+    })
+  })
+  const maintenanceDocumentsComputed = computed(() => {
+    const keyword = maintenanceDocumentFilters.keyword.trim().toLowerCase()
+    return standardDocuments.value.filter(doc => {
+      if (doc.documentType !== 'MANUAL' && doc.documentType !== 'ARTICLE') return false
+      const matchesType = !maintenanceDocumentFilters.documentType || doc.documentType === maintenanceDocumentFilters.documentType
+      const matchesStatus = !maintenanceDocumentFilters.status || doc.status === maintenanceDocumentFilters.status
+      const matchesKeyword = !keyword || doc.title.toLowerCase().includes(keyword) || (doc.summary || '').toLowerCase().includes(keyword)
+      return matchesType && matchesStatus && matchesKeyword
+    })
+  })
+  const maintenanceDocumentPageComputed = computed(() => {
+    const totalElements = maintenanceDocumentsComputed.value.length
+    const totalPages = Math.max(Math.ceil(totalElements / maintenanceDocumentFilters.size), 1)
+    const page = Math.min(maintenanceDocumentFilters.page, totalPages - 1)
+    return { content: [], page, size: maintenanceDocumentFilters.size, totalElements, totalPages, first: page <= 0, last: page >= totalPages - 1 }
+  })
+  const pagedMaintenanceDocuments = computed(() => {
+    const page = maintenanceDocumentPageComputed.value.page
+    const start = page * maintenanceDocumentFilters.size
+    return maintenanceDocumentsComputed.value.slice(start, start + maintenanceDocumentFilters.size)
+  })
+
   return {
     // State
     adminSection, showPassword, showImport, importing, importResult, showImportResultDialog,
@@ -449,6 +549,13 @@ export function useAdmin(auth, notify, confirm) {
     adminFilters, typeFilters, standardFilters, parameterFilters, maintenanceDocumentFilters, reviewFilters, reviewPage,
     adminPage, typePage, standardPage, parameterPage, maintenanceDocumentPage, reviewListPage,
     releaseForm, importForm, passwordForm, categoryForm, typeForm, standardForm, parameterForm, userForm,
+    // Computed
+    activeSoftwareTypes, softwareTypeCategories, activeTypeCategories,
+    releaseCategoryOptions, releaseSoftwareOptions, releaseStandardOptions, releaseParameterStandardOptions,
+    importSoftwareOptions, standardCategoryOptions, standardSoftwareOptions,
+    filteredSoftwareTypes, typePageComputed, pagedSoftwareTypes,
+    filteredStandardDocuments, standardDocumentOptions, standardPageComputed, selectedStandardParameters,
+    maintenanceDocumentsComputed, maintenanceDocumentPageComputed, pagedMaintenanceDocuments,
     // Functions
     loadAdmin, loadSoftwareTypes, loadSoftwareCategories, loadSoftwareMetadata,
     loadStandardDocuments, loadAllParameterStandards, loadStandardParameters, loadSystemSettings, saveSystemSettings,

@@ -604,6 +604,13 @@ const {
   resetUserPassword,
   // 密码
   changePassword,
+  // Computed
+  activeSoftwareTypes, softwareTypeCategories, activeTypeCategories,
+  releaseCategoryOptions, releaseSoftwareOptions, releaseStandardOptions, releaseParameterStandardOptions,
+  importSoftwareOptions, standardCategoryOptions, standardSoftwareOptions,
+  filteredSoftwareTypes, typePageComputed, pagedSoftwareTypes,
+  filteredStandardDocuments, standardDocumentOptions, standardPageComputed, selectedStandardParameters,
+  maintenanceDocumentsComputed, maintenanceDocumentPageComputed, pagedMaintenanceDocuments,
   // 切换管理区域
   switchAdminSection, changeAdminPage
 } = admin
@@ -636,111 +643,29 @@ const pageTitle = computed(() => {
 })
 // 公共标准页面 computed 已迁移到 StandardsPage.vue
 
-const activeSoftwareTypes = computed(() => softwareTypes.value.filter(type => type.active))
-const defaultSoftwareCategories = ['中间件', '主机', '数据库', '安全', '网络']
-const softwareTypeCategories = computed(() => uniqueOptions([
-  ...defaultSoftwareCategories,
-  ...softwareCategories.value,
-  ...softwareTypes.value.map(type => type.category)
-]))
-const activeTypeCategories = computed(() => uniqueOptions(activeSoftwareTypes.value.map(type => type.category)))
-const releaseCategoryOptions = computed(() => releaseForm.id ? softwareTypeCategories.value : activeTypeCategories.value)
-const releaseSoftwareOptions = computed(() => softwareTypesByCategory(releaseForm.category, !releaseForm.id))
-const releaseStandardOptions = computed(() => {
-  const selectedType = softwareTypes.value.find(t => String(t.id) === String(releaseForm.softwareTypeId))
-  const softwareName = selectedType?.name || ''
-  return allParameterStandards.value.filter(s => s.category === releaseForm.category && (!softwareName || s.software === softwareName))
+// 管理后台 computed 已迁移到 composables/useAdmin.js
+
+// 需要保留的 computed: typePage, standardPage, maintenanceDocumentPage, pagedSoftwareTypes,
+// filteredStandardDocuments, selectedStandardParameters, maintenanceDocuments, pagedMaintenanceDocuments
+// 由于 composable 中使用了不同的名称（typePageComputed 等），这里做别名映射
+const typePage = typePageComputed
+const standardPage = standardPageComputed
+const maintenanceDocumentPage = maintenanceDocumentPageComputed
+const maintenanceDocuments = maintenanceDocumentsComputed
+const filteredReviews = computed(() => {
+  const status = reviewFilters.status
+  if (!status) return allReviews.value
+  return allReviews.value.filter(r => r.status === status)
 })
-const releaseParameterStandardOptions = computed(() => {
-  const selectedType = softwareTypes.value.find(t => String(t.id) === String(releaseForm.softwareTypeId))
-  const softwareName = selectedType?.name || ''
-  return allParameterStandards.value.filter(s => s.status === 'PUBLISHED' && s.category === releaseForm.category && (!softwareName || s.software === softwareName))
+const reviewPageInfo = computed(() => {
+  const totalElements = filteredReviews.value.length
+  const totalPages = Math.max(Math.ceil(totalElements / reviewPage.size), 1)
+  const page = Math.min(reviewPage.page, totalPages - 1)
+  return { content: [], page, size: reviewPage.size, totalElements, totalPages, first: page <= 0, last: page >= totalPages - 1 }
 })
-const importSoftwareOptions = computed(() => softwareTypesByCategory(importForm.category, true))
-const standardCategoryOptions = computed(() => standardForm.id ? softwareTypeCategories.value : activeTypeCategories.value)
-const standardSoftwareOptions = computed(() => softwareTypesByCategory(standardForm.category, !standardForm.id))
-const filteredSoftwareTypes = computed(() => {
-  const name = typeFilters.name.trim().toLowerCase()
-  return softwareTypes.value.filter(type => {
-    const matchesCategory = !typeFilters.category || type.category === typeFilters.category
-    const matchesName = !name || type.name.toLowerCase().includes(name)
-    return matchesCategory && matchesName
-  })
-})
-const typePage = computed(() => {
-  const totalElements = filteredSoftwareTypes.value.length
-  const totalPages = Math.max(Math.ceil(totalElements / typeFilters.size), 1)
-  const page = Math.min(typeFilters.page, totalPages - 1)
-  return {
-    content: [],
-    page,
-    size: typeFilters.size,
-    totalElements,
-    totalPages,
-    first: page <= 0,
-    last: page >= totalPages - 1
-  }
-})
-const pagedSoftwareTypes = computed(() => {
-  const page = typePage.value.page
-  const start = page * typeFilters.size
-  return filteredSoftwareTypes.value.slice(start, start + typeFilters.size)
-})
-const filteredStandardDocuments = computed(() => {
-  const keyword = standardFilters.keyword.trim().toLowerCase()
-  return standardDocuments.value.filter(doc => {
-    if (adminSection.value !== 'standardPublish' && doc.documentType !== 'STANDARD') return false
-    const matchesCategory = !standardFilters.category || doc.category === standardFilters.category
-    const matchesManagedCategory = !managedCategory.value || doc.category === managedCategory.value
-    const matchesStatus = !standardFilters.status || doc.status === standardFilters.status
-    const matchesSoftware = !standardFilters.software || doc.software === standardFilters.software
-    const matchesKeyword = !keyword ||
-      doc.title.toLowerCase().includes(keyword) ||
-      (doc.summary || '').toLowerCase().includes(keyword) ||
-      (doc.softwareVersion || '').toLowerCase().includes(keyword)
-    return matchesCategory && matchesManagedCategory && matchesStatus && matchesSoftware && matchesKeyword
-  })
-})
-const standardDocumentOptions = computed(() => {
-  if (adminSection.value === 'standardPublish') return standardDocuments.value
-  return allParameterStandards.value
-})
-const standardPage = computed(() => {
-  const totalElements = filteredStandardDocuments.value.length
-  const totalPages = Math.max(Math.ceil(totalElements / standardFilters.size), 1)
-  const page = Math.min(standardFilters.page, totalPages - 1)
-  return { content: [], page, size: standardFilters.size, totalElements, totalPages, first: page <= 0, last: page >= totalPages - 1 }
-})
-const selectedStandardParameters = computed(() => {
-  if (!selectedStandard.value) return []
-  return standardParameters.value.filter(parameter => {
-    const pid = parameter.parameterStandardId || parameter.standardDocumentId
-    return String(pid) === String(selectedStandard.value.id)
-  })
-})
-const maintenanceDocuments = computed(() => {
-  const keyword = maintenanceDocumentFilters.keyword.trim().toLowerCase()
-  return standardDocuments.value.filter(doc => {
-    if (doc.documentType === 'STANDARD') return false
-    if (managedCategory.value && doc.category !== managedCategory.value) return false
-    const matchesType = !maintenanceDocumentFilters.documentType || doc.documentType === maintenanceDocumentFilters.documentType
-    const matchesStatus = !maintenanceDocumentFilters.status || doc.status === maintenanceDocumentFilters.status
-    const matchesKeyword = !keyword ||
-      doc.title.toLowerCase().includes(keyword) ||
-      (doc.summary || '').toLowerCase().includes(keyword) ||
-      (doc.content || '').toLowerCase().includes(keyword)
-    return matchesType && matchesStatus && matchesKeyword
-  })
-})
-const maintenanceDocumentPage = computed(() => {
-  const totalElements = maintenanceDocuments.value.length
-  const totalPages = Math.max(Math.ceil(totalElements / maintenanceDocumentFilters.size), 1)
-  const page = Math.min(maintenanceDocumentFilters.page, totalPages - 1)
-  return { content: [], page, size: maintenanceDocumentFilters.size, totalElements, totalPages, first: page <= 0, last: page >= totalPages - 1 }
-})
-const pagedMaintenanceDocuments = computed(() => {
-  const start = maintenanceDocumentPage.value.page * maintenanceDocumentFilters.size
-  return maintenanceDocuments.value.slice(start, start + maintenanceDocumentFilters.size)
+const pagedReviews = computed(() => {
+  const start = reviewPageInfo.value.page * reviewPage.size
+  return filteredReviews.value.slice(start, start + reviewPage.size)
 })
 
 const previewRenderedHtml = computed(() => {
@@ -772,54 +697,8 @@ const previewTocItems = computed(() => {
   return items
 })
 
-function emptyPage(size) {
-  return { content: [], page: 0, size, totalElements: 0, totalPages: 0, first: true, last: true }
-}
-
-function uniqueOptions(values) {
-  return [...new Set(values.map(value => (value || '').trim()).filter(Boolean))]
-}
-
-function todayString() {
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${now.getFullYear()}-${month}-${day}`
-}
-
-function softwareTypesByCategory(category, onlyActive = false) {
-  if (!category) return []
-  const source = onlyActive ? activeSoftwareTypes.value : softwareTypes.value
-  return source.filter(type => type.category === category)
-}
-
-function defaultReleaseForm() {
-  return { id: null, category: '', softwareTypeId: '', middlewareName: '', version: '', platform: '', description: '', releasedAt: todayString(), published: false, file: null, originalFileName: '', standardDocumentId: null, standardPackage: false, parameterStandardId: null }
-}
-
-function defaultImportForm() {
-  return { sourceDirectory: '', category: '', softwareTypeId: '', middlewareName: '', platform: '', description: '', published: false, recursive: true }
-}
-
-function defaultTypeForm() {
-  return { id: null, category: '中间件', name: '', description: '', active: true }
-}
-
-function defaultStandardForm() {
-  return {
-    id: null,
-    category: '',
-    softwareTypeId: '',
-    softwareVersion: '',
-    code: '',
-    summary: '',
-    content: '# 参数标准\n\n'
-  }
-}
-
-function defaultParameterForm() {
-  return { id: null, standardDocumentId: null, parameterStandardId: null, code: '', name: '', value: '', category: '', description: '', active: true, deploymentStandard: false }
-}
+// 辅助函数已迁移到 composables/useAdmin.js
+function emptyPage(size) { return { content: [], page: 0, size, totalElements: 0, totalPages: 0, first: true, last: true } }
 
 // parseRoute/syncRoute 基础逻辑在 composables/useRoute.js
 // 这里的 syncRoute 包含路由变化后的数据加载副作用
@@ -1196,25 +1075,7 @@ async function doDeleteDoc(doc) {
   }
 }
 
-// 审核/差异对话框已迁移到 ReviewsSection
-
-const filteredReviews = computed(() => {
-  const status = reviewFilters.status
-  if (!status) return allReviews.value
-  return allReviews.value.filter(r => r.status === status)
-})
-
-const reviewPageInfo = computed(() => {
-  const totalElements = filteredReviews.value.length
-  const totalPages = Math.max(Math.ceil(totalElements / reviewPage.size), 1)
-  const page = Math.min(reviewPage.page, totalPages - 1)
-  return { content: [], page, size: reviewPage.size, totalElements, totalPages, first: page <= 0, last: page >= totalPages - 1 }
-})
-
-const pagedReviews = computed(() => {
-  const start = reviewPageInfo.value.page * reviewPage.size
-  return filteredReviews.value.slice(start, start + reviewPage.size)
-})
+// 审核 computed 已迁移到 App.vue 顶部
 
 function changeReviewPage(page) {
   reviewPage.page = Math.max(page, 0)
