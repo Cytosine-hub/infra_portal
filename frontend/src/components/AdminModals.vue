@@ -136,7 +136,7 @@
     </div>
   </FormModal>
 
-  <FormModal v-model="admin.showParamImportDialog.value" title="批量导入参数" submitText="开始导入" :submitDisabled="admin.paramImporting.value" @submit="admin.importParameters">
+  <FormModal v-model="admin.showParamImportDialog.value" title="批量导入参数" submitText="开始导入" @submit="admin.importParameters">
     <div class="form-grid single">
       <p class="muted" style="margin:0 0 12px">请先下载模板，按格式填写后上传 Excel 文件。支持的列：参数编码、参数名称、参数值、分类、说明、是否启用（是/否）、是否部署标准（是/否）。</p>
       <label class="file-field">选择 Excel 文件

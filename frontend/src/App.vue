@@ -223,7 +223,7 @@
 
     <DocumentPreview
       :document="selectedPreviewDocument"
-      :documents="maintenanceDocuments"
+      :documents="maintenanceDocumentsComputed"
       :parameters="standardParameters"
       @close="closePreviewDocument()"
       @preview="previewDocument"
@@ -291,15 +291,15 @@ const {
   loadAdmin, loadSoftwareTypes, loadSoftwareCategories, loadSoftwareMetadata, loadStandardModule, loadAllParameterStandards,
   loadStandardDocuments, loadStandardParameters, saveSystemSettings,
   startCreate, startEdit, togglePublish, openDeleteReleaseDialog, regeneratePackage,
-  openImportPage, openCreateCategoryDialog, openCreateTypeDialog,
+  openImportPage, openCreateCategoryDialog, openCreateTypeDialog, openEditTypeDialog, deleteType,
   openCreateStandardDialog, openEditStandardDialog,
   submitForReview, startModify, cancelModify, confirmDeleteDoc,
-  openCreateParameterDialog, downloadParameterTemplate, copyParameter,
+  openCreateParameterDialog, openEditParameterDialog, downloadParameterTemplate, copyParameter,
   openReviewDetail, openRevisionHistory,
   openCreateUserDialog, changeUserRole, deleteUserAccount, resetUserPassword, openChangeRoleDialog,
   changePassword,
   softwareTypeCategories, filteredStandardDocuments, pagedSoftwareTypes, typePageComputed, standardPageComputed,
-  selectedStandardParameters, pagedMaintenanceDocuments, maintenanceDocumentPageComputed,
+  selectedStandardParameters, pagedMaintenanceDocuments, maintenanceDocumentsComputed, maintenanceDocumentPageComputed,
   filteredReviews, reviewPageInfo, pagedReviews,
   changeTypePage, applyTypeFilters, changeStandardPage, applyStandardFilters, handleStandardFilterCategoryChange,
   openStandardDetail, backToStandardList, changeMaintenanceDocumentPage, applyMaintenanceDocumentFilters,

@@ -332,6 +332,10 @@ export function useAdmin(auth, notify, confirm) {
     catch (e) { notify(e.message || '创建失败', 'error') }
   }
   function openCreateTypeDialog() { Object.assign(typeForm, defaultTypeForm()); showTypeDialog.value = true }
+  function openEditTypeDialog(type) {
+    Object.assign(typeForm, { id: type.id, category: type.category, name: type.name, description: type.description || '', active: type.active })
+    showTypeDialog.value = true
+  }
   function closeTypeDialog() { showTypeDialog.value = false }
   async function saveType() {
     if (!typeForm.category || !typeForm.name.trim()) { notify('分类和名称必填', 'error'); return }
@@ -340,6 +344,12 @@ export function useAdmin(auth, notify, confirm) {
       await request(url, { method: typeForm.id ? 'PUT' : 'POST', body: typeForm })
       notify('已保存', 'success'); closeTypeDialog(); await loadSoftwareMetadata()
     } catch (e) { notify(e.message || '保存失败', 'error') }
+  }
+  async function deleteType(type) {
+    confirm(`确定删除类型「${type.name}」？`, async () => {
+      try { await request(`/api/admin/software-types/${type.id}`, { method: 'DELETE' }); notify('已删除', 'success'); await loadSoftwareMetadata() }
+      catch (e) { notify(e.message || '删除失败', 'error') }
+    })
   }
 
   // ── 标准管理 ──
@@ -442,6 +452,10 @@ export function useAdmin(auth, notify, confirm) {
 
   // ── 参数管理 ──
   function openCreateParameterDialog() { Object.assign(parameterForm, defaultParameterForm()); showParameterDialog.value = true }
+  function openEditParameterDialog(param) {
+    Object.assign(parameterForm, { id: param.id, standardDocumentId: param.standardDocumentId, parameterStandardId: param.parameterStandardId, code: param.code, name: param.name, value: param.value, category: param.category || '', description: param.description || '', active: param.active !== false, deploymentStandard: param.deploymentStandard || false })
+    showParameterDialog.value = true
+  }
   function closeParameterDialog() { showParameterDialog.value = false }
   async function saveParameter() {
     if (!parameterForm.code.trim() || !parameterForm.name.trim()) { notify('编码和名称必填', 'error'); return }
@@ -692,9 +706,9 @@ export function useAdmin(auth, notify, confirm) {
     openDeleteReleaseDialog, closeDeleteReleaseDialog, confirmDeleteRelease,
     openImportPage, closeImportPage, submitImport,
     openCreateCategoryDialog, closeCategoryDialog, saveCategory,
-    openCreateTypeDialog, closeTypeDialog, saveType,
+    openCreateTypeDialog, openEditTypeDialog, closeTypeDialog, saveType, deleteType,
     openCreateStandardDialog, openEditStandardDialog, closeStandardDialog, saveStandard,
-    openCreateParameterDialog, closeParameterDialog, saveParameter, handleParamImportFileChange, importParameters, downloadParameterTemplate,
+    openCreateParameterDialog, openEditParameterDialog, closeParameterDialog, saveParameter, handleParamImportFileChange, importParameters, downloadParameterTemplate,
     submitForReview, startModify, cancelModify, confirmDeleteDoc,
     loadReviews, openReviewDetail, closeReviewDetail, reviewApprove, reviewReject,
     openRevisionHistory, closeRevisionModal,
