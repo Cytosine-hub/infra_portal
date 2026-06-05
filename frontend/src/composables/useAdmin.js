@@ -474,10 +474,11 @@ export function useAdmin(auth, notify, confirm) {
   function handleParamImportFileChange(e) { paramImportFile.value = e.target.files[0] || null }
   async function importParameters() {
     if (!paramImportFile.value) { notify('请选择文件', 'error'); return }
+    if (!selectedStandard.value) { notify('请先选择一个参数标准', 'error'); return }
     paramImporting.value = true
     try {
       const fd = new FormData(); fd.append('file', paramImportFile.value)
-      if (selectedStandard.value) fd.append('standardDocumentId', selectedStandard.value.id)
+      fd.append('parameterStandardId', selectedStandard.value.id)
       const result = await request('/api/admin/standard-parameters/import', { method: 'POST', body: fd })
       paramImportResult.value = result; await loadStandardParameters(); notify('导入完成', 'success')
     } catch (e) { notify(e.message || '导入失败', 'error') }
