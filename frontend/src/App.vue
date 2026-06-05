@@ -219,18 +219,6 @@
         </template>
       </section>
       </template>
-
-      <div v-if="downloading" class="download-progress-overlay">
-        <div class="download-progress-card">
-          <div class="download-progress-title">正在下载：{{ downloadFileName }}</div>
-          <div class="progress-track large">
-            <div class="progress-fill" :style="{ width: downloadProgress + '%' }"></div>
-          </div>
-          <div class="download-progress-info">
-            <span>{{ downloadProgress }}%</span>
-          </div>
-        </div>
-      </div>
     </main>
 
     <FormModal v-model="editing" :title="releaseForm.id ? '编辑资源' : '新增资源'" width="700px" @submit="saveRelease">
@@ -595,9 +583,7 @@ const {
 
 const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const siteConfig = reactive({ knowledgeEnabled: true, diagnosticsEnabled: true })
-const downloading = ref(false)
-const downloadProgress = ref(0)
-const downloadFileName = ref('')
+// 下载进度已迁移到 DownloadsPage.vue
 // 公共页面状态已迁移到各页面组件（HomePage/DownloadsPage/StandardsPage）
 // ── 管理后台状态已迁移到 composables/useAdmin.js ──
 const loginForm = reactive({ username: '', password: '' })
@@ -972,49 +958,7 @@ function goForumNew() {
   navigate('forum/new')
 }
 
-function handleDownload(url, fileName) {
-  if (!auth.token) {
-    notify('请先登录后再下载文件')
-    window.location.hash = '#/admin'
-    return
-  }
-  if (downloading.value) {
-    notify('有文件正在下载中，请等待完成', 'error')
-    return
-  }
-  downloading.value = true
-  downloadProgress.value = 0
-  downloadFileName.value = fileName || '文件'
-
-  fetch(fileUrl(url), {
-    headers: { 'Authorization': 'Bearer ' + auth.token }
-  }).then(async resp => {
-    if (!resp.ok) throw new Error('下载失败')
-    const contentLength = +(resp.headers.get('Content-Length') || 0)
-    const reader = resp.body.getReader()
-    const chunks = []
-    let received = 0
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      chunks.push(value)
-      received += value.length
-      if (contentLength > 0) downloadProgress.value = Math.round(received / contentLength * 100)
-    }
-    const blob = new Blob(chunks)
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = downloadFileName.value
-    a.click()
-    URL.revokeObjectURL(a.href)
-  }).catch(err => {
-    notify(err.message || '下载失败', 'error')
-  }).finally(() => {
-    downloading.value = false
-    downloadProgress.value = 0
-    downloadFileName.value = ''
-  })
-}
+// handleDownload 已迁移到 DownloadsPage.vue
 
 function goDocumentEditor() {
   window.location.hash = '#/admin/document-editor'
@@ -1070,10 +1014,6 @@ function openStandardDetail(document) {
 function backToStandardList() {
   selectedStandard.value = null
   standardParameters.value = []
-}
-
-function changeParameterPage(page) {
-  parameterFilters.page = Math.max(page, 0)
 }
 
 function changeMaintenanceDocumentPage(page) {
