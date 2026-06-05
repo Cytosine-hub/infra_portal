@@ -603,13 +603,7 @@ const downloadFileName = ref('')
 const loginForm = reactive({ username: '', password: '' })
 const selectedPreviewDocument = ref(null)
 const previewTocActiveId = ref('')
-const showReviewDialog = ref(false)
-const reviewTarget = ref(null)
-const reviewAction = ref('approve')
-const showDiffDialog = ref(false)
-const diffTarget = ref(null)
-const diffContent = ref('')
-const diffLines = computed(() => selectedReviewDiff.value ? selectedReviewDiff.value.split('\n') : [])
+// 审核/差异对话框状态已迁移到 ReviewsSection
 
 // ── 常用命令已迁移到 CommandsPage.vue ──
 
@@ -1648,52 +1642,7 @@ async function doDeleteDoc(doc) {
   }
 }
 
-function openReviewDialog(doc, action) {
-  reviewTarget.value = doc
-  reviewAction.value = action
-  reviewComment.value = ''
-  showReviewDialog.value = true
-}
-
-function closeReviewDialog() {
-  showReviewDialog.value = false
-  reviewTarget.value = null
-}
-
-async function confirmReview() {
-  const doc = reviewTarget.value
-  if (!doc) return
-  const action = reviewAction.value
-  const actionText = action === 'approve' ? '通过' : '驳回'
-  try {
-    await request(`${standardApiBase()}/${doc.id}/${action}`, {
-      method: 'POST',
-      body: { comment: reviewComment.value || null }
-    })
-    notify(`文档已${actionText}`, 'success')
-    closeReviewDialog()
-    await loadStandardDocuments()
-  } catch (error) {
-    notify(error.message || `审核${actionText}失败`, 'error')
-  }
-}
-
-async function openDiffDialog(doc) {
-  diffTarget.value = doc
-  diffContent.value = '加载中...'
-  showDiffDialog.value = true
-  try {
-    diffContent.value = await request(`/api/admin/standard-documents/${doc.id}/diff`)
-  } catch (error) {
-    diffContent.value = '加载差异失败: ' + (error.message || '未知错误')
-  }
-}
-
-function closeDiffDialog() {
-  showDiffDialog.value = false
-  diffTarget.value = null
-  diffContent.value = ''
-}
+// 审核/差异对话框已迁移到 ReviewsSection
 
 const filteredReviews = computed(() => {
   const status = reviewFilters.status
