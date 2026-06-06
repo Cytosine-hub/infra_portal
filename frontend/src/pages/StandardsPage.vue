@@ -165,7 +165,7 @@ const filteredDocuments = computed(() => {
 })
 const relatedDocs = computed(() => {
   if (!selectedStandard.value) return []
-  return documents.value.filter(d => d.parameterStandardId === selectedStandard.value.id)
+  return documents.value.filter(d => d.relatedStandardDocumentId === selectedStandard.value.id)
 })
 const standardGroups = computed(() => {
   const groups = new Map()
@@ -236,10 +236,10 @@ async function loadDocuments() {
   try {
     const [stds, docs] = await Promise.all([
       request('/api/public/parameter-standards?size=100', { token: null }),
-      request('/api/public/standards?size=1000', { token: null })
+      request('/api/public/standards/all', { token: null })
     ])
     standards.value = stds || []
-    documents.value = (docs || []).map(d => ({ ...d, parameterStandardId: d.parameterStandardId || null }))
+    documents.value = (docs || []).map(d => ({ ...d, parameterStandardId: d.relatedStandardDocumentId || null }))
   } catch { /* ignore */ }
 }
 async function openStandardDetail(id) {
