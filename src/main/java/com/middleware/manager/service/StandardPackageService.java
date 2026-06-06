@@ -1,11 +1,14 @@
 package com.middleware.manager.service;
 
+import com.middleware.manager.constant.ErrorCode;
+import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.domain.ReleaseAsset;
 import com.middleware.manager.domain.StandardParameter;
+import com.middleware.manager.exception.BusinessException;
+import com.middleware.manager.exception.NotFoundException;
 import com.middleware.manager.repository.ReleaseAssetMapper;
 import com.middleware.manager.repository.StandardParameterMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -24,10 +27,15 @@ import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 @Service
+@Slf4j
 public class StandardPackageService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(StandardPackageService.class);
     private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\{\\{(\\w+)}}");
     private static final String TEMPLATE_DIR = "templates";
+    private static final String STATUS_PROCESSING = "PROCESSING";
+    private static final String STATUS_SUCCESS = "SUCCESS";
+    private static final String STATUS_FAILED = "FAILED";
+    private static final String STATUS_PENDING = "PENDING";
+    private static final String CONTENT_TYPE_ZIP = "application/zip";
     private static final String CONF_DIR = "conf";
 
     private final ReleaseAssetMapper releaseAssetMapper;
@@ -51,9 +59,9 @@ public class StandardPackageService {
             Files.createDirectories(templateDir);
             Path templateFile = templateDir.resolve(asset.getOriginalFileName());
             Files.copy(fileStream, templateFile, StandardCopyOption.REPLACE_EXISTING);
-            LOGGER.info("standard package template saved id={} path={}", asset.getId(), templateFile);
+            log.info("standard package template saved id={} path={}", asset.getId(), templateFile);
         } catch (IOException ex) {
-            throw new IllegalStateException("保存标准包模板失败", ex);
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, "保存标准包模板失败");
         }
         processAsync(asset);
     }
@@ -63,15 +71,15 @@ public class StandardPackageService {
      */
     @Async
     public void processAsync(ReleaseAsset asset) {
-        LOGGER.info("standard package processing started id={}", asset.getId());
-        asset.setPackageStatus("PROCESSING");
+        log.info("standard package processing started id={}", asset.getId());
+        asset.setPackageStatus(STATUS_PROCESSING);
         asset.setPackageError(null);
         releaseAssetMapper.update(asset);
 
         try {
             Path templateFile = findTemplateFile(asset.getId());
             if (templateFile == null) {
-                throw new IllegalStateException("模板文件不存在");
+                throw new NotFoundException(ErrorCode.NOT_FOUND, "模板文件不存在");
             }
 
             // 解压到临时目录
@@ -82,7 +90,7 @@ public class StandardPackageService {
                 // 扫描 conf/ 目录中的占位符
                 Path confDir = workDir.resolve(CONF_DIR);
                 if (!Files.exists(confDir) || !Files.isDirectory(confDir)) {
-                    throw new IllegalStateException("标准包中缺少 conf 目录");
+                    throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, "标准包中缺少 conf 目录");
                 }
 
                 // 收集所有占位符
@@ -90,16 +98,16 @@ public class StandardPackageService {
                 if (placeholders.isEmpty()) {
                     // 没有占位符，直接压缩
                     zipDirectory(workDir, asset);
-                    asset.setPackageStatus("SUCCESS");
+                    asset.setPackageStatus(STATUS_SUCCESS);
                     asset.setPackageError(null);
                     releaseAssetMapper.update(asset);
-                    LOGGER.info("standard package no placeholders found, packaged directly id={}", asset.getId());
+                    log.info("standard package no placeholders found, packaged directly id={}", asset.getId());
                     return;
                 }
 
                 // 查询参数标准中的参数
                 if (asset.getParameterStandardId() == null) {
-                    throw new IllegalStateException("未关联参数标准");
+                    throw new BusinessException(ErrorCode.PARAMETER_BINDING_INVALID, ErrorMessages.PARAMETER_BINDING_INVALID);
                 }
                 List<StandardParameter> params = standardParameterMapper
                         .findByParameterStandardIdAndActiveTrueOrderByCategoryAscCodeAsc(asset.getParameterStandardId());
@@ -117,10 +125,10 @@ public class StandardPackageService {
                 }
 
                 if (!unmatched.isEmpty()) {
-                    asset.setPackageStatus("FAILED");
+                    asset.setPackageStatus(STATUS_FAILED);
                     asset.setPackageError("未匹配占位符: " + String.join(", ", unmatched));
                     releaseAssetMapper.update(asset);
-                    LOGGER.warn("standard package failed id={} unmatched={}", asset.getId(), unmatched);
+                    log.warn("standard package failed id={} unmatched={}", asset.getId(), unmatched);
                     return;
                 }
 
@@ -129,22 +137,22 @@ public class StandardPackageService {
 
                 // 压缩生成包
                 zipDirectory(workDir, asset);
-                asset.setPackageStatus("SUCCESS");
+                asset.setPackageStatus(STATUS_SUCCESS);
                 asset.setPackageError(null);
                 releaseAssetMapper.update(asset);
-                LOGGER.info("standard package generated successfully id={}", asset.getId());
+                log.info("standard package generated successfully id={}", asset.getId());
 
             } finally {
                 deleteDirectory(workDir);
             }
         } catch (Exception ex) {
-            LOGGER.error("standard package processing failed id={}", asset.getId(), ex);
-            asset.setPackageStatus("FAILED");
+            log.error("standard package processing failed id={}", asset.getId(), ex);
+            asset.setPackageStatus(STATUS_FAILED);
             asset.setPackageError("生成失败: " + ex.getMessage());
             try {
                 releaseAssetMapper.update(asset);
             } catch (Exception updateEx) {
-                LOGGER.error("failed to update package status id={}", asset.getId(), updateEx);
+                log.error("failed to update package status id={}", asset.getId(), updateEx);
             }
         }
     }
@@ -155,7 +163,7 @@ public class StandardPackageService {
     public void regenerateByParameterStandard(Long parameterStandardId) {
         List<ReleaseAsset> assets = releaseAssetMapper.findByParameterStandardId(parameterStandardId);
         for (ReleaseAsset asset : assets) {
-            LOGGER.info("regenerating standard package id={} for parameterStandard={}", asset.getId(), parameterStandardId);
+            log.info("regenerating standard package id={} for parameterStandard={}", asset.getId(), parameterStandardId);
             processAsync(asset);
         }
     }
@@ -256,7 +264,7 @@ public class StandardPackageService {
                 });
             }
             // 删除旧文件
-            if (asset.getStoredFileName() != null && !"pending".equals(asset.getStoredFileName())) {
+            if (asset.getStoredFileName() != null && !STATUS_PENDING.equals(asset.getStoredFileName())) {
                 storageService.deleteIfExists(asset.getStoredFileName());
             }
             // 存储新文件
@@ -264,7 +272,7 @@ public class StandardPackageService {
             String origName = asset.getOriginalFileName();
             asset.setOriginalFileName(origName.endsWith(".zip") ? origName : origName + ".zip");
             asset.setStoredFileName(storedFile.storedFileName());
-            asset.setContentType("application/zip");
+            asset.setContentType(CONTENT_TYPE_ZIP);
             asset.setFileSize(storedFile.size());
         } finally {
             Files.deleteIfExists(zipFile);
@@ -295,7 +303,7 @@ public class StandardPackageService {
                 }
             });
         } catch (IOException ex) {
-            LOGGER.warn("failed to delete temp dir={}", dir, ex);
+            log.warn("failed to delete temp dir={}", dir, ex);
         }
     }
 
