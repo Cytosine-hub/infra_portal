@@ -9,8 +9,9 @@
             "command": "/Users/zhushihao/Projects/middleware_resource_manager/.claude/restart-backend.sh \"$FILE_PATH\""
           },
           {
-            "type": "agent",
-            "prompt": "调用 /code-review skill 检查刚修改的文件是否符合开发规范（docs/development-standards.md）。"
+            "type": "prompt",
+            "prompt": "检查刚修改的文件 $FILE_PATH 是否符合开发规范（docs/development-standards.md）。重点检查：1) 后端：是否使用 BusinessException 而非原生异常，是否有魔法值，日志是否参数化 2) 前端：是否使用设计令牌，组件是否用 script setup。如有违规，列出具体问题和修复建议。",
+            "continueOnBlock": true
           }
         ]
       }
