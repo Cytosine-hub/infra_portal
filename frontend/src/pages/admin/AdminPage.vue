@@ -48,7 +48,7 @@ const visibleSections = computed(() => allSections.filter(s => !s.sysAdmin || pr
 </script>
 
 <style scoped>
-.admin-layout { display: flex; height: calc(100vh - 84px); overflow: hidden; }
+.admin-layout { display: flex; height: 100%; overflow: hidden; }
 .admin-sidebar {
   width: 220px; background: var(--color-bg-secondary); border-right: 1px solid var(--color-border);
   padding: var(--space-xl); display: flex; flex-direction: column; flex-shrink: 0;
