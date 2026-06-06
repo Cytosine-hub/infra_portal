@@ -168,11 +168,14 @@
                 </template>
               </TypesSection>
               <StandardsSection v-else-if="adminSection === 'standardPublish'"
-                :parameterStandards="allParameterStandards"
-                :categories="softwareTypeCategories" :filters="standardFilters"
+                :standards="filteredStandardDocuments" :categories="softwareTypeCategories"
+                :filters="standardFilters" :pageInfo="standardPageComputed"
                 :selectedStandard="selectedStandard" :parameters="selectedStandardParameters"
                 @filterCategoryChange="handleStandardFilterCategoryChange"
-                @openDetail="openStandardDetail"
+                @openDetail="openStandardDetail" @editStandard="openEditStandardDialog"
+                @submitReview="submitForReview" @startModify="startModify" @cancelModify="cancelModify"
+                @revisionHistory="(doc) => openRevisionHistory(doc, 'PARAMETER_STANDARD')"
+                @deleteStandard="confirmDeleteDoc" @changePage="changeStandardPage"
                 @backToList="backToStandardList" @downloadTemplate="downloadParameterTemplate"
                 @importParams="showParamImportDialog = true" @createParam="openCreateParameterDialog"
                 @copyParam="copyParameter" @editParam="openEditParameterDialog"
