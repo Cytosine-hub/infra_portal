@@ -61,4 +61,7 @@ public final class ErrorMessages {
     // 发布资源相关
     public static final String RELEASE_NOT_FOUND = "资源不存在";
     public static final String RELEASE_PUBLISHED = "已发布资源不能编辑，请先下架";
+
+    // 基础设施
+    public static final String SHA256_UNAVAILABLE = "SHA-256 算法不可用";
 }

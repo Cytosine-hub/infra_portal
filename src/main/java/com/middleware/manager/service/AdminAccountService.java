@@ -1,8 +1,13 @@
 package com.middleware.manager.service;
 
+import com.middleware.manager.constant.ErrorCode;
+import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.domain.AdminAccount;
 import com.middleware.manager.domain.RoleEntity;
+import com.middleware.manager.exception.BusinessException;
+import com.middleware.manager.exception.NotFoundException;
 import com.middleware.manager.repository.AdminAccountMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
@@ -25,7 +30,11 @@ import java.util.List;
 
 @Service
 @Order(1)
+@Slf4j
 public class AdminAccountService implements UserDetailsService, ApplicationRunner {
+    private static final String ROLE_DEV_MGR = "ROLE_DEV_MGR";
+    private static final String SYSTEM_ADMIN = "系统管理员";
+    private static final int MIN_PASSWORD_LENGTH = 6;
 
     private final AdminAccountMapper mapper;
     private final RoleService roleService;
@@ -52,11 +61,11 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         AdminAccount account = mapper.findByUsername(username);
         if (account == null) {
-            throw new UsernameNotFoundException("账号不存在");
+            throw new UsernameNotFoundException(ErrorMessages.USER_NOT_FOUND);
         }
 
         RoleEntity role = roleService.getByDisplayName(account.getRole());
-        String authority = role != null ? role.getAuthority() : "ROLE_DEV_MGR";
+        String authority = role != null ? role.getAuthority() : ROLE_DEV_MGR;
         return new User(account.getUsername(), account.getPasswordHash(),
                 AuthorityUtils.createAuthorityList(authority));
     }
@@ -65,29 +74,30 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
     public void changePassword(String username, String currentPassword, String newPassword) {
         AdminAccount account = mapper.findByUsername(username);
         if (account == null) {
-            throw new IllegalArgumentException("账号不存在");
+            throw new NotFoundException(ErrorCode.USER_NOT_FOUND, ErrorMessages.USER_NOT_FOUND);
         }
         if (!passwordEncoder.matches(currentPassword, account.getPasswordHash())) {
-            throw new IllegalArgumentException("当前密码不正确");
+            throw new BusinessException(ErrorCode.PASSWORD_INVALID, ErrorMessages.PASSWORD_INVALID);
         }
-        // 前端传来的已经是 sha256(password)，统一走 sha256 → bcrypt 管道
         account.setPasswordHash(encodePassword(sha256Hex(newPassword)));
         account.setUpdatedAt(LocalDateTime.now());
         mapper.update(account);
+        log.info("密码已修改 username={}", username);
     }
 
     @Transactional
     public void resetPassword(Long userId, String newPassword) {
         AdminAccount account = mapper.findById(userId);
         if (account == null) {
-            throw new IllegalArgumentException("用户不存在");
+            throw new NotFoundException(ErrorCode.USER_NOT_FOUND, ErrorMessages.USER_NOT_FOUND);
         }
-        if (!StringUtils.hasText(newPassword) || newPassword.trim().length() < 6) {
-            throw new IllegalArgumentException("密码至少6位");
+        if (!StringUtils.hasText(newPassword) || newPassword.trim().length() < MIN_PASSWORD_LENGTH) {
+            throw new BusinessException(ErrorCode.PASSWORD_TOO_SHORT, ErrorMessages.PASSWORD_TOO_SHORT);
         }
         account.setPasswordHash(encodePassword(sha256Hex(newPassword.trim())));
         account.setUpdatedAt(LocalDateTime.now());
         mapper.update(account);
+        log.info("密码已重置 userId={}", userId);
     }
 
     public String getDisplayNameByUsername(String username) {
@@ -102,10 +112,10 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
     @Transactional
     public AdminAccount createUser(String username, String displayName, String password, String role) {
         if (mapper.findByUsername(username) != null) {
-            throw new IllegalArgumentException("账号已存在");
+            throw new BusinessException(ErrorCode.USER_DUPLICATE, ErrorMessages.USER_DUPLICATE);
         }
         if (roleService.getByDisplayName(role) == null) {
-            throw new IllegalArgumentException("未知角色: " + role);
+            throw new BusinessException(ErrorCode.ROLE_NOT_FOUND, ErrorMessages.ROLE_NOT_FOUND, role);
         }
         AdminAccount account = new AdminAccount();
         account.setUsername(username);
@@ -115,6 +125,7 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
         account.setCreatedAt(LocalDateTime.now());
         account.setUpdatedAt(LocalDateTime.now());
         mapper.insert(account);
+        log.info("用户已创建 username={}", username);
         return account;
     }
 
@@ -130,22 +141,23 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
             for (byte b : hash) hex.append(String.format("%02x", b));
             return hex.toString();
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
+            throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.SHA256_UNAVAILABLE);
         }
     }
 
     @Transactional
     public AdminAccount updateUserRole(Long userId, String newRole) {
         if (roleService.getByDisplayName(newRole) == null) {
-            throw new IllegalArgumentException("未知角色: " + newRole);
+            throw new BusinessException(ErrorCode.ROLE_NOT_FOUND, ErrorMessages.ROLE_NOT_FOUND, newRole);
         }
         AdminAccount account = mapper.findById(userId);
         if (account == null) {
-            throw new IllegalArgumentException("用户不存在");
+            throw new NotFoundException(ErrorCode.USER_NOT_FOUND, ErrorMessages.USER_NOT_FOUND);
         }
         account.setRole(newRole);
         account.setUpdatedAt(LocalDateTime.now());
         mapper.update(account);
+        log.info("用户角色已更新 userId={}, role={}", userId, newRole);
         return account;
     }
 
@@ -153,12 +165,13 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
     public void deleteUser(Long userId) {
         AdminAccount account = mapper.findById(userId);
         if (account == null) {
-            throw new IllegalArgumentException("用户不存在");
+            throw new NotFoundException(ErrorCode.USER_NOT_FOUND, ErrorMessages.USER_NOT_FOUND);
         }
-        if ("系统管理员".equals(account.getRole()) && mapper.countByRole("系统管理员") <= 1) {
-            throw new IllegalArgumentException("不能删除最后一个系统管理员");
+        if (SYSTEM_ADMIN.equals(account.getRole()) && mapper.countByRole(SYSTEM_ADMIN) <= 1) {
+            throw new BusinessException(ErrorCode.LAST_ADMIN_CANNOT_DELETE, ErrorMessages.LAST_ADMIN_CANNOT_DELETE);
         }
         mapper.deleteById(userId);
+        log.info("用户已删除 userId={}", userId);
     }
 
     private void seedDefaultAccounts() {
@@ -190,5 +203,6 @@ public class AdminAccountService implements UserDetailsService, ApplicationRunne
             account.setUpdatedAt(LocalDateTime.now());
             mapper.insert(account);
         }
+        log.info("已创建默认管理员账号 count={}", defaultAccounts.length);
     }
 }
