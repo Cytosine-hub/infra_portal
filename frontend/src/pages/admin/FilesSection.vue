@@ -1,7 +1,7 @@
 <template>
   <div>
-    <div class="toolbar">
-      <div class="filters admin-filters">
+    <div class="section-toolbar">
+      <div class="filters">
         <input v-model.trim="filters.keyword" placeholder="搜索资源" @keyup.enter="$emit('search')" />
         <input v-model.trim="filters.platform" placeholder="平台" @keyup.enter="$emit('search')" />
         <select v-model="filters.published" @change="$emit('search')">
@@ -10,6 +10,9 @@
           <option value="false">未发布</option>
         </select>
         <button @click="$emit('search')">查询</button>
+      </div>
+      <div class="actions">
+        <slot name="actions" />
       </div>
     </div>
 

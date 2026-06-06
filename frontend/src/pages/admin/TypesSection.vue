@@ -1,12 +1,17 @@
 <template>
   <section class="utility-panel type-panel">
-    <div class="filters type-filters">
-      <select v-model="filters.category">
-        <option value="">全部分类</option>
-        <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-      </select>
-      <input v-model.trim="filters.name" placeholder="软件名称" @keyup.enter="$emit('applyFilters')" />
-      <button type="button" @click="$emit('applyFilters')">查询</button>
+    <div class="section-toolbar">
+      <div class="filters">
+        <select v-model="filters.category">
+          <option value="">全部分类</option>
+          <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+        </select>
+        <input v-model.trim="filters.name" placeholder="软件名称" @keyup.enter="$emit('applyFilters')" />
+        <button type="button" @click="$emit('applyFilters')">查询</button>
+      </div>
+      <div class="actions">
+        <slot name="actions" />
+      </div>
     </div>
     <div class="list-panel type-list-panel">
       <div class="type-list">

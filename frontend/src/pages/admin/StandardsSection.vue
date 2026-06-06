@@ -1,11 +1,16 @@
 <template>
   <section class="utility-panel type-panel">
     <template v-if="!selectedStandard">
-      <div class="standards-filter-bar">
-        <select v-model="filters.category" @change="$emit('filterCategoryChange')">
-          <option value="">软件分类</option>
-          <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
-        </select>
+      <div class="section-toolbar">
+        <div class="filters">
+          <select v-model="filters.category" @change="$emit('filterCategoryChange')">
+            <option value="">软件分类</option>
+            <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+          </select>
+        </div>
+        <div class="actions">
+          <slot name="actions" />
+        </div>
       </div>
       <div class="standards-table-wrap">
         <table class="standards-table">

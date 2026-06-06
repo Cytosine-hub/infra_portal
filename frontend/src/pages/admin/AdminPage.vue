@@ -18,16 +18,6 @@
     </aside>
 
     <section class="admin-content">
-      <div class="admin-header">
-        <div>
-          <p class="eyebrow">{{ currentLabel.eyebrow }}</p>
-          <h2>{{ currentLabel.title }}</h2>
-        </div>
-        <div class="admin-actions">
-          <slot name="header-actions" />
-        </div>
-      </div>
-
       <div class="admin-body">
         <slot />
       </div>
@@ -45,17 +35,16 @@ const props = defineProps({
 defineEmits(['switchSection', 'showPassword', 'logout'])
 
 const allSections = [
-  { key: 'files', label: '文件管理', eyebrow: 'Files', title: '文件管理', sysAdmin: false },
-  { key: 'types', label: '类型管理', eyebrow: 'Types', title: '类型管理', sysAdmin: true },
-  { key: 'standardPublish', label: '参数标准', eyebrow: 'Standards', title: '参数标准', sysAdmin: false },
-  { key: 'documentMaintenance', label: '标准文档', eyebrow: 'Documents', title: '标准文档', sysAdmin: false },
-  { key: 'reviews', label: '审核管理', eyebrow: 'Reviews', title: '审核管理', sysAdmin: false },
-  { key: 'users', label: '用户管理', eyebrow: 'Users', title: '用户管理', sysAdmin: true },
-  { key: 'settings', label: '系统设置', eyebrow: 'Settings', title: '系统设置', sysAdmin: true }
+  { key: 'files', label: '文件管理', sysAdmin: false },
+  { key: 'types', label: '类型管理', sysAdmin: true },
+  { key: 'standardPublish', label: '参数标准', sysAdmin: false },
+  { key: 'documentMaintenance', label: '标准文档', sysAdmin: false },
+  { key: 'reviews', label: '审核管理', sysAdmin: false },
+  { key: 'users', label: '用户管理', sysAdmin: true },
+  { key: 'settings', label: '系统设置', sysAdmin: true }
 ]
 
 const visibleSections = computed(() => allSections.filter(s => !s.sysAdmin || props.isSysAdmin))
-const currentLabel = computed(() => allSections.find(s => s.key === props.section) || { eyebrow: 'Admin', title: '管理台' })
 </script>
 
 <style scoped>
@@ -77,11 +66,17 @@ const currentLabel = computed(() => allSections.find(s => s.key === props.sectio
 .side-nav button.active { background: var(--color-primary-light); color: var(--color-primary); font-weight: 600; }
 .sidebar-actions { display: flex; flex-direction: column; gap: var(--space-sm); margin-top: var(--space-lg); }
 .admin-content { flex: 1; padding: var(--space-xl); overflow-y: auto; display: flex; flex-direction: column; min-height: 0; }
-.admin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-xl); flex-shrink: 0; }
-.admin-header .eyebrow { color: var(--color-text-tertiary); font-size: var(--text-xs); text-transform: uppercase; margin: 0; }
-.admin-header h2 { margin: var(--space-xs) 0 0; font-size: var(--text-2xl); }
-.admin-actions { display: flex; gap: var(--space-sm); }
 .admin-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.admin-body :deep(.section-toolbar) {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--space-lg); flex-shrink: 0; gap: var(--space-md);
+}
+.admin-body :deep(.section-toolbar .filters) {
+  display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;
+}
+.admin-body :deep(.section-toolbar .actions) {
+  display: flex; align-items: center; gap: var(--space-sm); flex-shrink: 0;
+}
 .admin-body > :deep(div) { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .admin-body > :deep(div) > .list-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .admin-body > :deep(div) > .list-panel > .table-wrap { flex: 1; overflow-y: auto; min-height: 0; }

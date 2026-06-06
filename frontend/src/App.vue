@@ -135,29 +135,6 @@
             @showPassword="showPassword = !showPassword"
             @logout="logout()"
           >
-            <template #header-actions>
-              <template v-if="adminSection === 'files'">
-                <button class="ghost" @click="openImportPage()">批量导入</button>
-                <button @click="startCreate()">新增资源</button>
-              </template>
-              <template v-else-if="adminSection === 'types'">
-                <button class="ghost" @click="loadSoftwareMetadata()">刷新</button>
-                <button class="ghost" @click="openCreateCategoryDialog()">新增分类</button>
-                <button @click="openCreateTypeDialog()">新增类型</button>
-              </template>
-              <template v-else-if="adminSection === 'standardPublish'">
-                <button class="ghost" @click="loadStandardModule()">刷新</button>
-                <button @click="openCreateStandardDialog()">新增标准</button>
-              </template>
-              <template v-else-if="adminSection === 'documentMaintenance'">
-                <button class="ghost" @click="loadStandardDocuments()">刷新</button>
-                <button @click="goDocumentEditor()">新增文档</button>
-              </template>
-              <template v-else-if="adminSection === 'users'">
-                <button @click="openCreateUserDialog()">新增用户</button>
-              </template>
-            </template>
-
               <FormModal v-model="showPassword" title="修改密码" @submit="changePassword">
                 <div class="form-grid single">
                   <label>当前密码<input v-model="passwordForm.currentPassword" type="password" required /></label>
@@ -172,13 +149,24 @@
                 @search="loadAdmin" @edit="startEdit" @togglePublish="togglePublish"
                 @regenerate="regeneratePackage" @delete="openDeleteReleaseDialog"
                 @changePage="changeAdminPage"
-              />
+              >
+                <template #actions>
+                  <button class="ghost" @click="openImportPage()">批量导入</button>
+                  <button @click="startCreate()">新增资源</button>
+                </template>
+              </FilesSection>
               <TypesSection v-else-if="adminSection === 'types'"
                 :types="pagedSoftwareTypes" :categories="softwareTypeCategories"
                 :filters="typeFilters" :pageInfo="typePageComputed"
                 @applyFilters="applyTypeFilters" @editType="openEditTypeDialog"
                 @deleteType="deleteType" @changePage="changeTypePage"
-              />
+              >
+                <template #actions>
+                  <button class="ghost" @click="loadSoftwareMetadata()">刷新</button>
+                  <button class="ghost" @click="openCreateCategoryDialog()">新增分类</button>
+                  <button @click="openCreateTypeDialog()">新增类型</button>
+                </template>
+              </TypesSection>
               <StandardsSection v-else-if="adminSection === 'standardPublish'"
                 :standards="filteredStandardDocuments" :categories="softwareTypeCategories"
                 :filters="standardFilters" :pageInfo="standardPageComputed"
@@ -191,7 +179,12 @@
                 @backToList="backToStandardList" @downloadTemplate="downloadParameterTemplate"
                 @importParams="showParamImportDialog = true" @createParam="openCreateParameterDialog"
                 @copyParam="copyParameter" @editParam="openEditParameterDialog"
-              />
+              >
+                <template #actions>
+                  <button class="ghost" @click="loadStandardModule()">刷新</button>
+                  <button @click="openCreateStandardDialog()">新增标准</button>
+                </template>
+              </StandardsSection>
               <ReviewsSection v-else-if="adminSection === 'reviews'"
                 :reviews="pagedReviews" :filterStatus="reviewFilters.status" :pageInfo="reviewPageInfo"
                 :isSysAdmin="isSysAdmin" :isCategoryAdmin="isCategoryAdmin" :managedCategory="managedCategory"
@@ -202,7 +195,11 @@
                 :users="userList"
                 @changeRole="openChangeRoleDialog" @resetPassword="resetUserPassword"
                 @deleteUser="deleteUserAccount"
-              />
+              >
+                <template #actions>
+                  <button @click="openCreateUserDialog()">新增用户</button>
+                </template>
+              </UsersSection>
               <DocumentsSection v-else-if="adminSection === 'documentMaintenance'"
                 :documents="pagedMaintenanceDocuments" :filters="maintenanceDocumentFilters"
                 :pageInfo="maintenanceDocumentPageComputed" :getStandardLabel="getStandardLabel"
@@ -211,7 +208,12 @@
                 @startModify="startModify" @cancelModify="cancelModify"
                 @revisionHistory="(doc) => openRevisionHistory(doc, doc.documentType || 'MANUAL')"
                 @delete="confirmDeleteDoc" @changePage="changeMaintenanceDocumentPage"
-              />
+              >
+                <template #actions>
+                  <button class="ghost" @click="loadStandardDocuments()">刷新</button>
+                  <button @click="goDocumentEditor()">新增文档</button>
+                </template>
+              </DocumentsSection>
               <SettingsSection v-else-if="adminSection === 'settings'"
                 :settings="systemSettings" @save="saveSystemSettings"
               />

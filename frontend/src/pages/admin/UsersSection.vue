@@ -1,5 +1,11 @@
 <template>
   <section class="utility-panel type-panel">
+    <div class="section-toolbar">
+      <div class="filters"></div>
+      <div class="actions">
+        <slot name="actions" />
+      </div>
+    </div>
     <div class="list-panel type-list-panel">
       <div class="type-list">
         <article v-for="user in users" :key="user.id" class="parameter-item document-item">

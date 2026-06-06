@@ -1,20 +1,25 @@
 <template>
   <section class="utility-panel type-panel">
-    <div class="filters document-filters">
-      <select v-model="filters.documentType" @change="$emit('applyFilters')">
-        <option value="">全部类型</option>
-        <option value="MANUAL">手册</option>
-        <option value="ARTICLE">文章</option>
-      </select>
-      <select v-model="filters.status" @change="$emit('applyFilters')">
-        <option value="">全部状态</option>
-        <option value="DRAFT">草稿</option>
-        <option value="PENDING_REVIEW">审核中</option>
-        <option value="PUBLISHED">已发布</option>
-        <option value="MODIFYING">修改中</option>
-      </select>
-      <input v-model.trim="filters.keyword" placeholder="搜索标题/摘要" @keyup.enter="$emit('applyFilters')" />
-      <button type="button" @click="$emit('applyFilters')">查询</button>
+    <div class="section-toolbar">
+      <div class="filters">
+        <select v-model="filters.documentType" @change="$emit('applyFilters')">
+          <option value="">全部类型</option>
+          <option value="MANUAL">手册</option>
+          <option value="ARTICLE">文章</option>
+        </select>
+        <select v-model="filters.status" @change="$emit('applyFilters')">
+          <option value="">全部状态</option>
+          <option value="DRAFT">草稿</option>
+          <option value="PENDING_REVIEW">审核中</option>
+          <option value="PUBLISHED">已发布</option>
+          <option value="MODIFYING">修改中</option>
+        </select>
+        <input v-model.trim="filters.keyword" placeholder="搜索标题/摘要" @keyup.enter="$emit('applyFilters')" />
+        <button type="button" @click="$emit('applyFilters')">查询</button>
+      </div>
+      <div class="actions">
+        <slot name="actions" />
+      </div>
     </div>
     <div class="list-panel type-list-panel">
       <div class="type-list">
