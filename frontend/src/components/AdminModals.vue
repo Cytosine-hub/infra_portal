@@ -272,7 +272,7 @@ const diffLines = computed(() => (props.selectedReviewDiff || '').split('\n'))
   display: flex; align-items: center; gap: var(--space-md);
 }
 .file-row .checkline {
-  flex-shrink: 0; margin: 0;
+  flex-shrink: 0; margin: 0; align-self: center;
 }
 .file-row .file-field {
   flex: 1; min-width: 0;
