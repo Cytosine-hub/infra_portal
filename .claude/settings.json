@@ -7,6 +7,10 @@
           {
             "type": "command",
             "command": "/Users/zhushihao/Projects/middleware_resource_manager/.claude/restart-backend.sh \"$FILE_PATH\""
+          },
+          {
+            "type": "agent",
+            "prompt": "调用 /code-review skill 检查刚修改的文件是否符合开发规范（docs/development-standards.md）。"
           }
         ]
       }
