@@ -2,13 +2,16 @@ package com.middleware.manager.service;
 
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.PageInfo;
+import com.middleware.manager.constant.ErrorCode;
+import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.domain.ReleaseAsset;
 import com.middleware.manager.domain.SoftwareType;
+import com.middleware.manager.exception.BusinessException;
+import com.middleware.manager.exception.NotFoundException;
 import com.middleware.manager.repository.ReleaseAssetMapper;
 import com.middleware.manager.web.form.BatchImportForm;
 import com.middleware.manager.web.form.ReleaseForm;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -31,10 +34,17 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Service
+@Slf4j
 public class ReleaseService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ReleaseService.class);
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 50;
+    private static final int DEFAULT_DOWNLOAD_COUNT = 0;
+    private static final int MAX_MIDDLEWARE_NAME_LENGTH = 120;
+    private static final int MAX_VERSION_LENGTH = 60;
+    private static final String PACKAGE_STATUS_PENDING = "PENDING";
+    private static final String STORED_FILE_PENDING = "pending";
+    private static final String UNCATEGORIZED_MIDDLEWARE = "未分类中间件";
+    private static final String UNKNOWN_VERSION = "unknown";
 
     private final ReleaseAssetMapper releaseAssetMapper;
     private final StorageService storageService;
@@ -70,7 +80,7 @@ public class ReleaseService {
     public ReleaseAsset getAdminRelease(Long id) {
         ReleaseAsset asset = releaseAssetMapper.findById(id);
         if (asset == null) {
-            throw new IllegalArgumentException("版本记录不存在");
+            throw new NotFoundException(ErrorCode.RELEASE_NOT_FOUND, ErrorMessages.RELEASE_NOT_FOUND);
         }
         return asset;
     }
@@ -78,7 +88,7 @@ public class ReleaseService {
     public ReleaseAsset getPublishedReleaseByNameAndFile(String middlewareName, String fileName) {
         ReleaseAsset asset = releaseAssetMapper.findByMiddlewareNameAndOriginalFileNameAndPublishedTrue(middlewareName, fileName);
         if (asset == null) {
-            throw new IllegalArgumentException("资源不存在或未发布");
+            throw new NotFoundException(ErrorCode.RELEASE_NOT_FOUND, ErrorMessages.RELEASE_NOT_FOUND);
         }
         return asset;
     }
@@ -86,7 +96,7 @@ public class ReleaseService {
     public ReleaseAsset getPublishedRelease(String token) {
         ReleaseAsset asset = releaseAssetMapper.findByDownloadTokenAndPublishedTrue(token);
         if (asset == null) {
-            throw new IllegalArgumentException("公开资源不存在或未发布");
+            throw new NotFoundException(ErrorCode.RELEASE_NOT_FOUND, ErrorMessages.RELEASE_NOT_FOUND);
         }
         return asset;
     }
@@ -95,14 +105,14 @@ public class ReleaseService {
     public BatchImportResult batchImport(BatchImportForm form) {
         Path sourceDirectory = Paths.get(form.getSourceDirectory().trim()).toAbsolutePath().normalize();
         if (!Files.exists(sourceDirectory) || !Files.isDirectory(sourceDirectory)) {
-            throw new IllegalArgumentException("导入目录不存在或不是有效目录");
+            throw new BusinessException(ErrorCode.PARAM_INVALID, "导入目录不存在或不是有效目录");
         }
 
         List<Path> files = collectFiles(sourceDirectory, form.isRecursive());
         BatchImportResult result = new BatchImportResult(sourceDirectory.toString(), files.size());
         boolean sourceInsideStorage = sourceDirectory.startsWith(storageService.getRootLocation());
         SoftwareType selectedType = resolveSoftwareType(form.getSoftwareTypeId());
-        LOGGER.info("batch import started directory={} recursive={} files={} softwareTypeId={} published={}",
+        log.info("batch import started directory={} recursive={} files={} softwareTypeId={} published={}",
                 sourceDirectory, form.isRecursive(), files.size(), form.getSoftwareTypeId(), form.isPublished());
 
         for (Path file : files) {
@@ -116,7 +126,7 @@ public class ReleaseService {
 
             if (managedStoredFileName != null && releaseAssetMapper.existsByStoredFileNameIgnoreCase(managedStoredFileName)) {
                 result.addSkipped(displayPath, "管理目录中同名文件已存在，已跳过");
-                LOGGER.info("batch import skipped managed duplicate file={} storedFileName={}", file, managedStoredFileName);
+                log.info("batch import skipped managed duplicate file={} storedFileName={}", file, managedStoredFileName);
                 continue;
             }
 
@@ -153,12 +163,12 @@ public class ReleaseService {
                 if (!sourceInsideStorage && storedFile != null) {
                     storageService.deleteIfExists(storedFile.storedFileName());
                 }
-                LOGGER.warn("batch import failed file={} reason={}", file, ex.getMessage(), ex);
+                log.warn("batch import failed file={} reason={}", file, ex.getMessage(), ex);
                 result.addFailed(displayPath, ex.getMessage());
             }
         }
 
-        LOGGER.info("batch import finished directory={} scanned={} imported={} skipped={} failed={}",
+        log.info("batch import finished directory={} scanned={} imported={} skipped={} failed={}",
                 result.getSourceDirectory(), result.getScannedCount(), result.getImportedCount(),
                 result.getSkippedCount(), result.getFailedCount());
         return result;
@@ -178,10 +188,10 @@ public class ReleaseService {
         if (isStdPkg) {
             // 标准包：先保存元数据，再异步处理
             entity.setOriginalFileName(form.getFile().getOriginalFilename());
-            entity.setStoredFileName("pending");
+            entity.setStoredFileName(STORED_FILE_PENDING);
             entity.setContentType(form.getFile().getContentType());
             entity.setFileSize(form.getFile().getSize());
-            entity.setPackageStatus("PENDING");
+            entity.setPackageStatus(PACKAGE_STATUS_PENDING);
             entity.setDownloadCount(0);
             entity.setDownloadToken(UUID.randomUUID().toString().replace("-", ""));
             entity.setCreatedAt(LocalDateTime.now());
@@ -192,7 +202,7 @@ public class ReleaseService {
             try (InputStream is = form.getFile().getInputStream()) {
                 standardPackageService.saveTemplateAndProcessAsync(entity, is);
             } catch (IOException ex) {
-                throw new IllegalStateException("读取上传文件失败", ex);
+                throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, ErrorMessages.FILE_UPLOAD_FAILED);
             }
         } else {
             StorageService.StoredFile storedFile = storageService.store(form.getFile(), entity.getMiddlewareName());
@@ -207,7 +217,7 @@ public class ReleaseService {
             releaseAssetMapper.insert(entity);
         }
 
-        LOGGER.info("release created id={} middleware={} version={} published={} standardPackage={}",
+        log.info("release created id={} middleware={} version={} published={} standardPackage={}",
                 entity.getId(), entity.getMiddlewareName(), entity.getVersion(), entity.isPublished(), entity.isStandardPackage());
         return entity;
     }
@@ -218,9 +228,9 @@ public class ReleaseService {
         String oldStoredFileName = null;
 
         if (entity.isPublished()) {
-            LOGGER.warn("release update rejected because published id={} middleware={} version={}",
+            log.warn("release update rejected because published id={} middleware={} version={}",
                     entity.getId(), entity.getMiddlewareName(), entity.getVersion());
-            throw new IllegalStateException("已发布资源不能编辑，请先下架后再编辑");
+            throw new BusinessException(ErrorCode.RELEASE_PUBLISHED, ErrorMessages.RELEASE_PUBLISHED);
         }
 
         applyForm(entity, form);
@@ -245,7 +255,7 @@ public class ReleaseService {
         if (StringUtils.hasText(oldStoredFileName)) {
             storageService.deleteIfExists(oldStoredFileName);
         }
-        LOGGER.info("release updated id={} middleware={} version={} published={} fileChanged={}",
+        log.info("release updated id={} middleware={} version={} published={} fileChanged={}",
                 entity.getId(), entity.getMiddlewareName(), entity.getVersion(), entity.isPublished(),
                 StringUtils.hasText(oldStoredFileName));
         return entity;
@@ -257,7 +267,7 @@ public class ReleaseService {
         entity.setPublished(true);
         entity.setUpdatedAt(LocalDateTime.now());
         releaseAssetMapper.update(entity);
-        LOGGER.info("release published id={} middleware={} version={}",
+        log.info("release published id={} middleware={} version={}",
                 entity.getId(), entity.getMiddlewareName(), entity.getVersion());
     }
 
@@ -267,7 +277,7 @@ public class ReleaseService {
         entity.setPublished(false);
         entity.setUpdatedAt(LocalDateTime.now());
         releaseAssetMapper.update(entity);
-        LOGGER.info("release unpublished id={} middleware={} version={}",
+        log.info("release unpublished id={} middleware={} version={}",
                 entity.getId(), entity.getMiddlewareName(), entity.getVersion());
     }
 
@@ -275,13 +285,13 @@ public class ReleaseService {
     public void delete(Long id) {
         ReleaseAsset entity = getAdminRelease(id);
         if (entity.isPublished()) {
-            LOGGER.warn("release delete rejected because published id={} middleware={} version={}",
+            log.warn("release delete rejected because published id={} middleware={} version={}",
                     entity.getId(), entity.getMiddlewareName(), entity.getVersion());
-            throw new IllegalStateException("已发布资源不能删除，请先下架后再删除");
+            throw new BusinessException(ErrorCode.RELEASE_PUBLISHED, ErrorMessages.RELEASE_PUBLISHED);
         }
         releaseAssetMapper.deleteById(id);
         storageService.deleteIfExists(entity.getStoredFileName());
-        LOGGER.info("release deleted id={} middleware={} version={} file={}",
+        log.info("release deleted id={} middleware={} version={} file={}",
                 entity.getId(), entity.getMiddlewareName(), entity.getVersion(), entity.getOriginalFileName());
     }
 
@@ -316,26 +326,26 @@ public class ReleaseService {
                     .sorted(Comparator.comparing(path -> path.toString().toLowerCase()))
                     .collect(Collectors.toList());
         } catch (IOException ex) {
-            throw new IllegalStateException("扫描导入目录失败", ex);
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, "扫描导入目录失败");
         }
     }
 
     private String resolveImportedMiddlewareName(BatchImportForm form, Path sourceDirectory, Path file) {
         if (StringUtils.hasText(form.getMiddlewareName())) {
-            return truncate(form.getMiddlewareName().trim(), 120);
+            return truncate(form.getMiddlewareName().trim(), MAX_MIDDLEWARE_NAME_LENGTH);
         }
 
         Path relativePath = sourceDirectory.relativize(file);
         if (relativePath.getNameCount() > 1) {
-            return truncate(relativePath.getName(0).toString(), 120);
+            return truncate(relativePath.getName(0).toString(), MAX_MIDDLEWARE_NAME_LENGTH);
         }
 
         Path directoryName = sourceDirectory.getFileName();
         if (directoryName != null && StringUtils.hasText(directoryName.toString())) {
-            return truncate(directoryName.toString(), 120);
+            return truncate(directoryName.toString(), MAX_MIDDLEWARE_NAME_LENGTH);
         }
 
-        return "未分类中间件";
+        return UNCATEGORIZED_MIDDLEWARE;
     }
 
     private String resolveImportedVersion(Path file) {
@@ -343,7 +353,7 @@ public class ReleaseService {
         int lastDot = fileName.lastIndexOf('.');
         String baseName = lastDot > 0 ? fileName.substring(0, lastDot) : fileName;
         String normalized = baseName.trim();
-        return truncate(StringUtils.hasText(normalized) ? normalized : "unknown", 60);
+        return truncate(StringUtils.hasText(normalized) ? normalized : UNKNOWN_VERSION, MAX_VERSION_LENGTH);
     }
 
     private LocalDate resolveReleasedAt(Path file) {
