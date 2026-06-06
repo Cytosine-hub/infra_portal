@@ -300,9 +300,9 @@ public class ReleaseService {
         entity.setDescription(trimToNull(form.getDescription()));
         entity.setReleasedAt(form.getReleasedAt());
         entity.setPublished(form.isPublished());
-        entity.setStandardDocumentId(form.getStandardDocumentId());
+        // standardDocumentId 已废弃，不再写入，保留历史数据
         entity.setStandardPackage(form.isStandardPackage());
-        entity.setParameterStandardId(form.isStandardPackage() ? form.getParameterStandardId() : null);
+        // parameterStandardId 由 create/update 方法统一处理
     }
 
     private SoftwareType resolveSoftwareType(Long softwareTypeId) {
