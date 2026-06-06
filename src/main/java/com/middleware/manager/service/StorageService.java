@@ -1,8 +1,11 @@
 package com.middleware.manager.service;
 
 import com.middleware.manager.config.StorageProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.middleware.manager.constant.ErrorCode;
+import com.middleware.manager.constant.ErrorMessages;
+import com.middleware.manager.exception.BusinessException;
+import com.middleware.manager.exception.NotFoundException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
@@ -21,10 +24,13 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 @Service
+@Slf4j
 public class StorageService {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(StorageService.class);
     private static final Pattern UNSAFE_CATEGORY_CHARS = Pattern.compile("[^\\p{IsAlphabetic}\\p{IsDigit}]+");
+    private static final String DEFAULT_RESOURCE_NAME = "resource.bin";
+    private static final String UNCATEGORIZED = "uncategorized";
+    private static final String FILE_PROTOCOL_PREFIX = "dos:readonly";
 
     private final Path rootLocation;
 
@@ -35,10 +41,10 @@ public class StorageService {
 
     public StoredFile store(MultipartFile file, String middlewareName) {
         if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("请上传安装介质文件");
+            throw new BusinessException(ErrorCode.PARAM_INVALID, "请上传安装介质文件");
         }
 
-        String originalFileName = StringUtils.cleanPath(file.getOriginalFilename() == null ? "resource.bin" : file.getOriginalFilename());
+        String originalFileName = StringUtils.cleanPath(file.getOriginalFilename() == null ? DEFAULT_RESOURCE_NAME : file.getOriginalFilename());
         String extension = resolveExtension(originalFileName);
         String storedFileName = resolveCategory(middlewareName) + "/" + UUID.randomUUID() + extension;
         Path destination = resolveStoragePath(storedFileName);
@@ -47,7 +53,7 @@ public class StorageService {
             Files.createDirectories(destination.getParent());
             Files.copy(inputStream, destination, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException ex) {
-            throw new IllegalStateException("文件保存失败", ex);
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, ErrorMessages.FILE_UPLOAD_FAILED);
         }
 
         return new StoredFile(storedFileName, originalFileName, file.getContentType(), file.getSize());
@@ -55,7 +61,7 @@ public class StorageService {
 
     public StoredFile store(Path filePath, String middlewareName) {
         if (!Files.exists(filePath)) {
-            throw new IllegalArgumentException("文件不存在");
+            throw new NotFoundException(ErrorCode.NOT_FOUND, "文件不存在");
         }
 
         String originalFileName = filePath.getFileName().toString();
@@ -70,14 +76,14 @@ public class StorageService {
             String contentType = Files.probeContentType(filePath);
             return new StoredFile(storedFileName, originalFileName, contentType, size);
         } catch (IOException ex) {
-            throw new IllegalStateException("文件保存失败", ex);
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, ErrorMessages.FILE_UPLOAD_FAILED);
         }
     }
 
     public StoredFile importFile(Path sourceFile, String middlewareName) {
         Path normalizedSource = sourceFile.toAbsolutePath().normalize();
         if (!Files.exists(normalizedSource) || !Files.isRegularFile(normalizedSource)) {
-            throw new IllegalArgumentException("待导入文件不存在");
+            throw new NotFoundException(ErrorCode.NOT_FOUND, "待导入文件不存在");
         }
 
         String originalFileName = StringUtils.cleanPath(normalizedSource.getFileName().toString());
@@ -97,7 +103,7 @@ public class StorageService {
             Files.copy(normalizedSource, destination, StandardCopyOption.REPLACE_EXISTING);
             return new StoredFile(storedFileName, originalFileName, contentType, size);
         } catch (IOException ex) {
-            throw new IllegalStateException("导入文件到受管目录失败", ex);
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, "导入文件到受管目录失败");
         }
     }
 
@@ -110,7 +116,7 @@ public class StorageService {
             }
         } catch (IOException ignored) {
         }
-        throw new IllegalArgumentException("文件不存在或无法读取");
+        throw new NotFoundException(ErrorCode.NOT_FOUND, "文件不存在或无法读取");
     }
 
     public void deleteIfExists(String storedFileName) {
@@ -122,8 +128,8 @@ public class StorageService {
             clearReadOnlyAttribute(file);
             Files.deleteIfExists(file);
         } catch (IOException ex) {
-            LOGGER.warn("delete file failed path={}", file, ex);
-            throw new IllegalStateException("删除历史文件失败：" + file, ex);
+            log.warn("删除文件失败 path={}", file, ex);
+            throw new BusinessException(ErrorCode.UNKNOWN_ERROR, "删除历史文件失败");
         }
     }
 
@@ -150,7 +156,7 @@ public class StorageService {
             Files.move(source, destination, StandardCopyOption.REPLACE_EXISTING);
             return targetPath;
         } catch (IOException ex) {
-            throw new IllegalStateException("迁移文件目录失败", ex);
+            throw new BusinessException(ErrorCode.UNKNOWN_ERROR, "迁移文件目录失败");
         }
     }
 
@@ -161,7 +167,7 @@ public class StorageService {
     private Path resolveStoragePath(String storedFileName) {
         Path destination = rootLocation.resolve(storedFileName).normalize();
         if (!destination.startsWith(rootLocation)) {
-            throw new IllegalArgumentException("非法文件路径");
+            throw new BusinessException(ErrorCode.FORBIDDEN, "非法文件路径");
         }
         return destination;
     }
@@ -171,22 +177,22 @@ public class StorageService {
             return;
         }
         try {
-            Files.setAttribute(file, "dos:readonly", false);
-            LOGGER.info("cleared readonly attribute path={}", file);
+            Files.setAttribute(file, FILE_PROTOCOL_PREFIX, false);
+            log.info("已清除只读属性 path={}", file);
         } catch (UnsupportedOperationException ex) {
             if (!file.toFile().setWritable(true)) {
                 throw new IOException("无法移除文件只读属性：" + file, ex);
             }
-            LOGGER.info("cleared readonly attribute path={}", file);
+            log.info("已清除只读属性 path={}", file);
         }
     }
 
     private String resolveCategory(String middlewareName) {
-        String candidate = StringUtils.hasText(middlewareName) ? middlewareName.trim() : "uncategorized";
+        String candidate = StringUtils.hasText(middlewareName) ? middlewareName.trim() : UNCATEGORIZED;
         candidate = Normalizer.normalize(candidate, Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
         candidate = UNSAFE_CATEGORY_CHARS.matcher(candidate).replaceAll("-");
         candidate = candidate.replaceAll("^-+|-+$", "");
-        return candidate.trim().isEmpty() ? "uncategorized" : candidate;
+        return candidate.trim().isEmpty() ? UNCATEGORIZED : candidate;
     }
 
     private String resolveExtension(String originalFileName) {
