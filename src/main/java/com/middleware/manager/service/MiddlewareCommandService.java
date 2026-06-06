@@ -2,12 +2,14 @@ package com.middleware.manager.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.middleware.manager.constant.ErrorCode;
+import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.domain.MiddlewareCommand;
 import com.middleware.manager.domain.SoftwareType;
+import com.middleware.manager.exception.NotFoundException;
 import com.middleware.manager.repository.MiddlewareCommandMapper;
 import com.middleware.manager.repository.SoftwareTypeMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.io.Resource;
@@ -22,9 +24,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class MiddlewareCommandService implements ApplicationRunner {
-
-    private static final Logger log = LoggerFactory.getLogger(MiddlewareCommandService.class);
 
     private final SoftwareTypeMapper softwareTypeMapper;
     private final MiddlewareCommandMapper commandMapper;
@@ -42,7 +43,7 @@ public class MiddlewareCommandService implements ApplicationRunner {
         try {
             seedCommands();
         } catch (Exception e) {
-            log.warn("[MiddlewareCommand] Seed failed: {}", e.getMessage());
+            log.warn("初始化命令失败: {}", e.getMessage());
         }
     }
 
@@ -50,7 +51,7 @@ public class MiddlewareCommandService implements ApplicationRunner {
         Resource resource = new PathMatchingResourcePatternResolver()
                 .getResource("classpath:commands/commands.json");
         if (!resource.exists()) {
-            log.info("[MiddlewareCommand] No commands.json found, skipping seed");
+            log.info("未找到 commands.json，跳过初始化");
             return;
         }
         List<Map<String, Object>> commands;
@@ -63,7 +64,7 @@ public class MiddlewareCommandService implements ApplicationRunner {
             String typeName = (String) c.get("softwareTypeName");
             SoftwareType type = softwareTypeMapper.findByCategoryIgnoreCaseAndNameIgnoreCase(categoryName, typeName);
             if (type == null) {
-                log.warn("[MiddlewareCommand] Unknown software type: {}/{}, skipping command", categoryName, typeName);
+                log.warn("未知软件类型: {}/{}，跳过命令", categoryName, typeName);
                 continue;
             }
             String format = (String) c.get("commandFormat");
@@ -83,7 +84,7 @@ public class MiddlewareCommandService implements ApplicationRunner {
             }
             commandMapper.insert(entity);
         }
-        log.info("[MiddlewareCommand] Seed complete. {} commands", commandMapper.count());
+        log.info("命令初始化完成，共 {} 条", commandMapper.count());
     }
 
     public List<SoftwareType> listTypes() {
@@ -109,7 +110,7 @@ public class MiddlewareCommandService implements ApplicationRunner {
                                     String detailedDescription, String categories, int sortOrder) {
         SoftwareType type = softwareTypeMapper.findById(softwareTypeId);
         if (type == null) {
-            throw new IllegalArgumentException("类型不存在: " + softwareTypeId);
+            throw new NotFoundException(ErrorCode.SOFTWARE_TYPE_NOT_FOUND, ErrorMessages.SOFTWARE_TYPE_NOT_FOUND);
         }
         MiddlewareCommand cmd = new MiddlewareCommand();
         cmd.setSoftwareTypeId(type.getId());
@@ -119,6 +120,7 @@ public class MiddlewareCommandService implements ApplicationRunner {
         cmd.setCategories(categories);
         cmd.setSortOrder(sortOrder);
         commandMapper.insert(cmd);
+        log.info("命令已创建 id={}", cmd.getId());
         return cmd;
     }
 
@@ -127,12 +129,12 @@ public class MiddlewareCommandService implements ApplicationRunner {
                                     String detailedDescription, String categories, int sortOrder) {
         MiddlewareCommand cmd = commandMapper.findById(id);
         if (cmd == null) {
-            throw new IllegalArgumentException("命令不存在: " + id);
+            throw new NotFoundException(ErrorCode.NOT_FOUND, ErrorMessages.COMMAND_NOT_FOUND);
         }
         if (softwareTypeId != null) {
             SoftwareType type = softwareTypeMapper.findById(softwareTypeId);
             if (type == null) {
-                throw new IllegalArgumentException("类型不存在: " + softwareTypeId);
+                throw new NotFoundException(ErrorCode.SOFTWARE_TYPE_NOT_FOUND, ErrorMessages.SOFTWARE_TYPE_NOT_FOUND);
             }
             cmd.setSoftwareTypeId(type.getId());
         }
@@ -142,6 +144,7 @@ public class MiddlewareCommandService implements ApplicationRunner {
         cmd.setCategories(categories);
         cmd.setSortOrder(sortOrder);
         commandMapper.update(cmd);
+        log.info("命令已更新 id={}", id);
         return cmd;
     }
 
@@ -152,5 +155,6 @@ public class MiddlewareCommandService implements ApplicationRunner {
     @Transactional
     public void delete(Long id) {
         commandMapper.deleteById(id);
+        log.info("命令已删除 id={}", id);
     }
 }

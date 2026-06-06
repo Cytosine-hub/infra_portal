@@ -69,6 +69,9 @@ public final class ErrorMessages {
     public static final String RELEASE_NOT_FOUND = "资源不存在";
     public static final String RELEASE_PUBLISHED = "已发布资源不能编辑，请先下架";
 
+    // 中间件命令相关
+    public static final String COMMAND_NOT_FOUND = "命令不存在";
+
     // 基础设施
     public static final String SHA256_UNAVAILABLE = "SHA-256 算法不可用";
 }
