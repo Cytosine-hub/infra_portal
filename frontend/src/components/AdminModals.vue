@@ -16,7 +16,7 @@
       <label>版本号<input v-model.trim="admin.releaseForm.version" required maxlength="60" /></label>
       <label>平台<input v-model.trim="admin.releaseForm.platform" maxlength="60" /></label>
       <label>发布日期<input v-model="admin.releaseForm.releasedAt" type="date" /></label>
-      <label v-if="!admin.releaseForm.standardPackage">关联标准
+      <label>关联标准
         <select v-model="admin.releaseForm.standardDocumentId" :disabled="!admin.releaseForm.category || !admin.releaseForm.softwareTypeId">
           <option :value="null">不关联</option>
           <option v-for="doc in admin.releaseStandardOptions.value" :key="doc.id" :value="doc.id">{{ admin.getStandardLabel(doc.id) }}</option>
