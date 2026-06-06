@@ -168,7 +168,7 @@
                 </template>
               </TypesSection>
               <StandardsSection v-else-if="adminSection === 'standardPublish'"
-                :parameterStandards="allParameterStandards" :standardDocuments="standardDocuments"
+                :parameterStandards="allParameterStandards"
                 :categories="softwareTypeCategories" :filters="standardFilters"
                 :selectedStandard="selectedStandard" :parameters="selectedStandardParameters"
                 @filterCategoryChange="handleStandardFilterCategoryChange"

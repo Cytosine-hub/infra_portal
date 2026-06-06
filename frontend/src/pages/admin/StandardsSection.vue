@@ -77,7 +77,6 @@ import { statusLabel } from '../../utils'
 
 const props = defineProps({
   parameterStandards: { type: Array, default: () => [] },
-  standardDocuments: { type: Array, default: () => [] },
   categories: { type: Array, default: () => [] },
   filters: { type: Object, required: true },
   selectedStandard: { type: Object, default: null },
@@ -89,10 +88,6 @@ const treeData = computed(() => {
   const category = props.filters.category
   return props.parameterStandards
     .filter(s => !category || s.category === category)
-    .map(std => ({
-      ...std,
-      relatedDocuments: props.standardDocuments.filter(d => d.relatedStandardDocumentId === std.id)
-    }))
 })
 
 /** @type {Record<string, boolean>} */
