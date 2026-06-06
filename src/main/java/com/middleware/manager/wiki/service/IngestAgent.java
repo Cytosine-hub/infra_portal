@@ -383,7 +383,7 @@ public class IngestAgent {
                 }
             }
         }
-        throw new RuntimeException("LLM call failed after " + MAX_RETRIES + " retries", lastException);
+        throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, "LLM 调用失败，请稍后再试");
     }
 
     private JsonObject parseJson(String text) {
@@ -480,7 +480,7 @@ public class IngestAgent {
             }
             return hexString.toString();
         } catch (Exception e) {
-            throw new RuntimeException("SHA-256 computation failed", e);
+            throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, com.middleware.manager.constant.ErrorMessages.SHA256_UNAVAILABLE);
         }
     }
 }

@@ -542,7 +542,7 @@ public class WikiController {
             }
             return hexString.toString();
         } catch (Exception e) {
-            throw new RuntimeException("SHA-256 computation failed", e);
+            throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, com.middleware.manager.constant.ErrorMessages.SHA256_UNAVAILABLE);
         }
     }
 }

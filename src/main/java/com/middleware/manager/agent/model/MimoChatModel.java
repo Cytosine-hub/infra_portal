@@ -92,6 +92,6 @@ public class MimoChatModel implements ChatModel {
                 try { Thread.sleep(attempt * 2000L); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
             }
         }
-        throw new RuntimeException("模型响应超时，已重试" + MAX_RETRIES + "次，请稍后再试", lastException);
+        throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, "模型响应超时，请稍后再试");
     }
 }

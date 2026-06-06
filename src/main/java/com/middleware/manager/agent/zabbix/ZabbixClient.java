@@ -172,7 +172,7 @@ public class ZabbixClient {
         }
 
         if (hostId == null) {
-            throw new RuntimeException("Host not found: " + hostName);
+            throw new com.middleware.manager.exception.NotFoundException(com.middleware.manager.constant.ErrorCode.NOT_FOUND, "主机不存在");
         }
 
         // 2. Get items matching pattern
@@ -279,7 +279,7 @@ public class ZabbixClient {
             if (jsonResponse.has("error")) {
                 JsonObject error = jsonResponse.getAsJsonObject("error");
                 String message = error.has("data") ? error.get("data").getAsString() : error.get("message").getAsString();
-                throw new RuntimeException("Zabbix API error: " + message);
+                throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, "Zabbix 接口调用失败");
             }
 
             return jsonResponse;

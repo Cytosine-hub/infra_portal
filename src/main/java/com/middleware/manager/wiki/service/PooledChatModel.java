@@ -39,7 +39,7 @@ public class PooledChatModel implements ChatModel {
         try {
             log.debug("Waiting for LLM slot (available={}/{})", semaphore.availablePermits(), maxConcurrent);
             if (!semaphore.tryAcquire(timeoutSeconds, TimeUnit.SECONDS)) {
-                throw new RuntimeException("等待 LLM 并发槽位超时（" + timeoutSeconds + "秒），当前并发数已达上限：" + maxConcurrent);
+                throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, "LLM 并发数已达上限，请稍后再试");
             }
             try {
                 log.debug("Acquired LLM slot, calling API...");
@@ -50,7 +50,7 @@ public class PooledChatModel implements ChatModel {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("LLM 调用被中断", e);
+            throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, "LLM 调用被中断");
         }
     }
 

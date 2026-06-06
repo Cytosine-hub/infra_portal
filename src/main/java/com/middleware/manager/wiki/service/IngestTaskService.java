@@ -66,7 +66,7 @@ public class IngestTaskService {
             return createTaskFromContent(fileName, content, category, software, operatorId, "UPLOAD");
         } catch (Exception e) {
             log.error("Failed to create ingest task: {}", e.getMessage(), e);
-            throw new RuntimeException("创建任务失败: " + e.getMessage(), e);
+            throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, "创建任务失败");
         }
     }
 
@@ -82,7 +82,7 @@ public class IngestTaskService {
      */
     public IngestTask createReingestTask(Long sourceId, Long operatorId) {
         WikiSource source = sourceMapper.findById(sourceId);
-        if (source == null) throw new RuntimeException("来源文档不存在");
+        if (source == null) throw new com.middleware.manager.exception.NotFoundException(com.middleware.manager.constant.ErrorCode.DOCUMENT_NOT_FOUND, com.middleware.manager.constant.ErrorMessages.DOCUMENT_NOT_FOUND);
 
         IngestTask task = buildTask(source.getTitle(), sourceId, source.getContent(), operatorId);
         taskMapper.insert(task);
@@ -273,7 +273,7 @@ public class IngestTaskService {
             }
             return hexString.toString();
         } catch (Exception e) {
-            throw new RuntimeException("SHA-256 computation failed", e);
+            throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, com.middleware.manager.constant.ErrorMessages.SHA256_UNAVAILABLE);
         }
     }
 }
