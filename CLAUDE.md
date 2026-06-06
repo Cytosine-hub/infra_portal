@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ 强制规则：每次编码后必须执行规范检查
+
+**每次完成代码修改（Edit/Write）后，必须调用 `/code-review` skill 检查规范。**
+
+执行顺序：
+1. 完成代码编写
+2. Git commit
+3. 调用 `/code-review` 检查规范
+4. 修复发现的问题
+5. 重启服务验证
+
 ## 开发规范（必须遵守）
 
 完整规范见 `docs/development-standards.md`，以下是核心规则：
