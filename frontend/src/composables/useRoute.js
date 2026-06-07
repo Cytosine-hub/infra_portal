@@ -49,8 +49,10 @@ function parseRoute() {
   return { name: 'public', token: null }
 }
 
+const HASH_PREFIX = '#/'
+
 const route = reactive(Object.assign(
-  { documentId: null, postId: null, standardType: null, standardId: null, token: null },
+  { documentId: null, postId: null, standardType: null, standardId: null, token: null, returnTo: null },
   parseRoute()
 ))
 
@@ -60,8 +62,10 @@ export function useRoute() {
     Object.assign(route, parsed)
   }
 
-  function navigate(name) {
-    window.location.hash = '#/' + name
+  /** 导航到指定路由，opts.from 可设置返回目标 */
+  function navigate(name, opts) {
+    route.returnTo = opts?.from || null
+    window.location.hash = HASH_PREFIX + name
   }
 
   return { route, routeNames, syncRoute, navigate }

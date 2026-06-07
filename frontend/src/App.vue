@@ -69,7 +69,7 @@
           :post-id="route.postId"
           :markdown="markdown"
           :notify="notify"
-          @back="navigate('forum')"
+          @back="navigate(route.returnTo || 'forum')"
           @edit-post="(id) => navigate('forum/edit/' + id)"
           @login="navigate('admin')"
         />
@@ -89,7 +89,7 @@
           :auth="auth"
           :notify="notify"
           @back="navigate('forum')"
-          @open-post="(id) => navigate('forum/post/' + id)"
+          @open-post="(id) => navigate('forum/post/' + id, { from: 'forum/mine' })"
           @edit-post="(id) => navigate('forum/edit/' + id)"
         />
       </section>
