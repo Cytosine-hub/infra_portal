@@ -44,10 +44,9 @@
     </template>
   </FormModal>
 
-  <FormModal v-model="admin.showImport.value" title="批量导入" width="700px" @submit="admin.submitImport">
-    <p class="muted" style="margin:0 0 12px">扫描指定目录并按所选软件导入安装包资源。</p>
+  <FormModal v-model="admin.showImport.value" title="批量导入" width="700px">
     <div class="form-grid">
-      <label class="wide">目录路径<input v-model.trim="admin.importForm.sourceDirectory" :disabled="admin.importing.value" required /></label>
+      <label class="wide">目录路径<input v-model.trim="admin.importForm.sourceDirectory" :disabled="admin.importing.value" required placeholder="请输入服务器上的目录绝对路径" /></label>
       <label>分类
         <select v-model="admin.importForm.category" :disabled="admin.importing.value" required @change="admin.importForm.softwareTypeId = ''">
           <option value="">请选择分类</option>
@@ -60,17 +59,19 @@
           <option v-for="type in admin.importSoftwareOptions.value" :key="type.id" :value="type.id">{{ type.name }}</option>
         </select>
       </label>
-      <label>平台<input v-model.trim="admin.importForm.platform" :disabled="admin.importing.value" /></label>
+      <label>平台<input v-model.trim="admin.importForm.platform" :disabled="admin.importing.value" placeholder="可选" /></label>
       <label class="checkline"><input v-model="admin.importForm.recursive" :disabled="admin.importing.value" type="checkbox" />递归扫描</label>
       <label class="checkline"><input v-model="admin.importForm.published" :disabled="admin.importing.value" type="checkbox" />导入后发布</label>
-      <label class="wide">说明<textarea v-model.trim="admin.importForm.description" :disabled="admin.importing.value" /></label>
+      <label class="wide">说明<textarea v-model.trim="admin.importForm.description" :disabled="admin.importing.value" placeholder="可选" /></label>
     </div>
-    <div v-if="admin.importing.value" class="loading-panel">
-      <LoadingSpinner text="正在导入，请稍候..." />
-      <p>正在扫描目录并写入资源记录，导入完成后会显示结果。</p>
+    <div v-if="admin.importing.value" class="import-progress">
+      <div class="progress-bar">
+        <div class="progress-bar-fill"></div>
+      </div>
+      <p class="import-progress-text">正在扫描目录并写入资源记录...</p>
     </div>
     <template #actions>
-      <BaseButton type="submit" :loading="admin.importing.value">{{ admin.importing.value ? '导入中...' : '开始导入' }}</BaseButton>
+      <BaseButton variant="primary" :loading="admin.importing.value" @click="handleImport">{{ admin.importing.value ? '导入中...' : '开始导入' }}</BaseButton>
       <BaseButton variant="ghost" :disabled="admin.importing.value" @click="admin.closeImportPage()">取消</BaseButton>
     </template>
   </FormModal>
@@ -251,7 +252,6 @@ import { computed } from 'vue'
 import FormModal from './ui/FormModal.vue'
 import BaseModal from './ui/BaseModal.vue'
 import BaseButton from './ui/BaseButton.vue'
-import LoadingSpinner from './ui/LoadingSpinner.vue'
 import { renderMarkdown } from '../utils'
 
 const props = defineProps({
@@ -263,4 +263,8 @@ const props = defineProps({
 })
 
 const diffLines = computed(() => (props.selectedReviewDiff || '').split('\n'))
+
+function handleImport() {
+  props.admin.submitImport()
+}
 </script>
