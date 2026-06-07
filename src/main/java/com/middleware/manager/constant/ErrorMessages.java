@@ -78,4 +78,7 @@ public final class ErrorMessages {
 
     // 基础设施
     public static final String SHA256_UNAVAILABLE = "SHA-256 算法不可用";
+    public static final String LLM_AUTH_FAILED = "模型服务认证失败，请检查 API Key 配置";
+    public static final String LLM_SERVICE_BUSY = "模型服务繁忙，请稍后再试";
+    public static final String LLM_RESPONSE_TIMEOUT = "模型响应超时，请稍后再试";
 }

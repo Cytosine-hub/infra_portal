@@ -1,9 +1,9 @@
 package com.middleware.manager.knowledge.agent;
 
 import com.middleware.manager.constant.ErrorCode;
+import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.exception.BusinessException;
 import com.middleware.manager.exception.NotFoundException;
-import com.middleware.manager.constant.ErrorMessages;
 
 import com.google.gson.Gson;
 import com.middleware.manager.knowledge.service.KnowledgeService;
@@ -196,6 +196,9 @@ public class TroubleshootAgent {
                 break;
             } catch (Exception e) {
                 log.error("LLM call failed (attempt {}/{}): {}", attempt, MAX_RETRIES, e.getMessage());
+                if (isNonRetryableLlmFailure(e)) {
+                    throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_AUTH_FAILED);
+                }
                 lastException = e;
                 if (attempt < MAX_RETRIES) {
                     if (onRetry != null) {
@@ -206,7 +209,10 @@ public class TroubleshootAgent {
             }
         }
         if (response == null) {
-            throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, "模型响应超时，请稍后再试");
+            if (lastException != null) {
+                log.error("LLM call exhausted retries", lastException);
+            }
+            throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
         }
 
         String answer = response.aiMessage() != null ? response.aiMessage().text() : "";
@@ -228,6 +234,18 @@ public class TroubleshootAgent {
      */
     public List<com.middleware.manager.knowledge.agent.ChatMessage> getSessionMessages(Long sessionId) {
         return chatMessageMapper.findBySessionIdOrderByCreatedAtAsc(sessionId);
+    }
+
+    private boolean isNonRetryableLlmFailure(Exception e) {
+        String message = e.getMessage();
+        if (message == null) return false;
+        String lower = message.toLowerCase();
+        return lower.contains("401")
+                || lower.contains("403")
+                || lower.contains("unauthorized")
+                || lower.contains("forbidden")
+                || lower.contains("invalid api key")
+                || lower.contains("api key");
     }
 
     /**

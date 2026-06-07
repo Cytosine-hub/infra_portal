@@ -3,6 +3,9 @@ package com.middleware.manager.agent.model;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.middleware.manager.constant.ErrorCode;
+import com.middleware.manager.constant.ErrorMessages;
+import com.middleware.manager.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -71,7 +74,13 @@ public class MimoChatModel implements ChatModel {
                 String respBody = response.body() != null ? response.body().string() : "";
                 if (!response.isSuccessful()) {
                     log.error("[Agent] LLM API error (attempt {}/{}): {} {}", attempt, MAX_RETRIES, response.code(), respBody);
+                    if (response.code() == 401 || response.code() == 403) {
+                        throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_AUTH_FAILED);
+                    }
                     lastException = new RuntimeException("LLM API error: " + response.code());
+                    if (!isRetryableStatus(response.code())) {
+                        throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_SERVICE_BUSY);
+                    }
                 } else {
                     JsonObject json = gson.fromJson(respBody, JsonObject.class);
                     return json.getAsJsonArray("choices")
@@ -90,6 +99,14 @@ public class MimoChatModel implements ChatModel {
                 try { Thread.sleep(attempt * 2000L); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); break; }
             }
         }
-        throw new com.middleware.manager.exception.BusinessException(com.middleware.manager.constant.ErrorCode.UNKNOWN_ERROR, "模型响应超时，请稍后再试");
+        if (lastException != null) {
+            log.error("[Agent] LLM API exhausted retries", lastException);
+        }
+        throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
+    }
+
+    private boolean isRetryableStatus(int statusCode) {
+        return statusCode == 408 || statusCode == 409 || statusCode == 425
+                || statusCode == 429 || statusCode >= 500;
     }
 }

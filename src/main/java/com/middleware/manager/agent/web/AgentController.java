@@ -106,7 +106,7 @@ public class AgentController {
                 emitter.complete();
             } catch (Exception e) {
                 String msg = toClientError(e);
-                boolean isRetryFail = msg.contains("已重试");
+                boolean isRetryFail = isRetryFailure(msg);
                 try {
                     emitter.send(SseEmitter.event()
                             .name("error")
@@ -271,5 +271,10 @@ public class AgentController {
         }
         log.error("Ops agent SSE failed", e);
         return ErrorMessages.UNKNOWN_ERROR;
+    }
+
+    private boolean isRetryFailure(String message) {
+        return ErrorMessages.LLM_RESPONSE_TIMEOUT.equals(message)
+                || ErrorMessages.LLM_SERVICE_BUSY.equals(message);
     }
 }

@@ -542,6 +542,8 @@ async function sendMessage() {
                 content: data.retryFailed ? `⚠️ ${data.error}` : `请求失败：${data.error}`
               })
             }
+            await loadSessions()
+            return
           } else {
             if (retryMsgIdx >= 0) {
               messages.value.splice(retryMsgIdx, 1)
