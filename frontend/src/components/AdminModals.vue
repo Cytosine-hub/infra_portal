@@ -233,7 +233,7 @@
   </BaseModal>
 
   <BaseModal :modelValue="!!admin.selectedReview.value" @update:modelValue="admin.closeReviewDetail()" :title="admin.selectedReview.value?.documentType === 'PARAMETER_STANDARD' ? [admin.selectedReview.value?.category, admin.selectedReview.value?.software].filter(Boolean).join(' / ') : (admin.selectedReview.value?.documentTitle || '')" width="700px">
-    <p class="muted" style="margin: 0 0 12px">
+    <p class="review-status-line">
       <span :class="['status', admin.reviewStatusClass(admin.selectedReview.value?.status)]">{{ admin.selectedReview.value?.statusLabel }}</span>
       V{{ admin.selectedReview.value?.documentVersion || '-' }} · {{ admin.selectedReview.value?.category || '-' }} / {{ admin.selectedReview.value?.software || '-' }}
     </p>
@@ -247,16 +247,16 @@
       <pre class="diff-content"><template v-for="(line, idx) in diffLines" :key="idx"><span :class="['diff-line', line.startsWith('+') ? 'diff-line-add' : line.startsWith('-') ? 'diff-line-del' : line.startsWith('@@') ? 'diff-line-info' : '' ]">{{ line }}</span>
 </template></pre>
     </div>
-    <div v-if="admin.selectedReview.value?.status === 'PENDING' && (isSysAdmin || (isCategoryAdmin && managedCategory === admin.selectedReview.value?.category))" class="review-actions-panel">
-      <div class="form-grid single">
-        <label>审核意见<textarea v-model.trim="admin.reviewComment.value" maxlength="1000" placeholder="请输入审核意见（可选）" /></label>
+    <template v-if="admin.selectedReview.value?.status === 'PENDING' && (isSysAdmin || (isCategoryAdmin && managedCategory === admin.selectedReview.value?.category))" #footer>
+      <div class="review-footer">
+        <input v-model.trim="admin.reviewComment.value" maxlength="1000" placeholder="审核意见（可选）" class="review-comment-input" />
+        <div class="review-footer-actions">
+          <BaseButton variant="ghost" @click="admin.closeReviewDetail()">取消</BaseButton>
+          <BaseButton variant="danger" @click="admin.reviewReject(admin.selectedReview.value)">驳回</BaseButton>
+          <BaseButton variant="success" @click="admin.reviewApprove(admin.selectedReview.value)">审核通过</BaseButton>
+        </div>
       </div>
-      <div class="form-actions">
-        <BaseButton variant="ghost" @click="admin.closeReviewDetail()">取消</BaseButton>
-        <BaseButton variant="danger" @click="admin.reviewReject(admin.selectedReview.value)">驳回</BaseButton>
-        <BaseButton variant="success" @click="admin.reviewApprove(admin.selectedReview.value)">审核通过</BaseButton>
-      </div>
-    </div>
+    </template>
   </BaseModal>
 </template>
 
@@ -335,4 +335,21 @@ function computeDiff(oldText, newText) {
 .diff-add .diff-marker { color: var(--color-success); }
 .diff-del { background: var(--color-danger-light); color: var(--color-danger); }
 .diff-del .diff-marker { color: var(--color-danger); }
+.review-meta { padding: var(--space-md); background: var(--color-bg-secondary); border-radius: var(--radius-md); margin-bottom: var(--space-lg); }
+.review-meta p { margin: var(--space-xs) 0; font-size: var(--text-sm); color: var(--color-text-secondary); }
+.diff-view { max-height: 50vh; overflow: auto; background: var(--color-bg-tertiary); border-radius: var(--radius-md); padding: var(--space-lg); margin-bottom: var(--space-lg); }
+.diff-view h4 { margin: 0 0 var(--space-sm); font-size: var(--text-sm); color: var(--color-text-secondary); }
+.diff-content { font-family: Consolas, "SFMono-Regular", monospace; font-size: var(--text-sm); line-height: var(--leading-relaxed); color: var(--color-text); margin: 0; white-space: pre-wrap; word-break: break-all; }
+.diff-line-add { background: var(--color-success-light); color: var(--color-success); display: block; padding: 1px 4px; border-radius: 2px; }
+.diff-line-del { background: var(--color-danger-light); color: var(--color-danger); display: block; padding: 1px 4px; border-radius: 2px; }
+.diff-line-info { color: var(--color-text-tertiary); font-style: italic; display: block; padding: 1px 4px; }
+.review-footer { display: flex; flex-direction: column; gap: var(--space-md); }
+.review-comment-input {
+  width: 100%; min-height: 38px; border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: 8px 12px; font-size: var(--text-base);
+  color: var(--color-text); background: var(--color-bg);
+}
+.review-comment-input:focus { border-color: var(--color-primary); outline: none; box-shadow: 0 0 0 3px var(--color-primary-ring); }
+.review-footer-actions { display: flex; justify-content: flex-end; gap: var(--space-sm); }
+.review-status-line { margin: 0 0 var(--space-md); color: var(--color-text-secondary); }
 </style>
