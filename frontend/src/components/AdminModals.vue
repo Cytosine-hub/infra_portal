@@ -210,7 +210,7 @@
         <p v-if="rev.revisionComment" class="revision-comment">审核意见：{{ rev.revisionComment }}</p>
 
         <!-- 差异对比 -->
-        <details class="revision-content-detail" open>
+        <details class="revision-content-detail">
           <summary>变更内容</summary>
           <div class="revision-diff-block">
             <template v-if="idx < admin.revisionList.value.length - 1">
