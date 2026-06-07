@@ -170,7 +170,8 @@
               <StandardsSection v-else-if="adminSection === 'standardPublish'"
                 :standards="filteredStandardDocuments" :categories="softwareTypeCategories"
                 :filters="standardFilters" :pageInfo="standardPageComputed"
-                :selectedStandard="selectedStandard" :parameters="selectedStandardParameters"
+                :selectedStandard="selectedStandard" :parameters="pagedStandardParameters"
+                :paramPageInfo="paramPageComputed"
                 @filterCategoryChange="handleStandardFilterCategoryChange"
                 @openDetail="openStandardDetail" @editStandard="openEditStandardDialog"
                 @submitReview="submitForReview" @startModify="startModify" @cancelModify="cancelModify"
@@ -179,6 +180,7 @@
                 @backToList="backToStandardList" @downloadTemplate="downloadParameterTemplate"
                 @importParams="showParamImportDialog = true" @createParam="openCreateParameterDialog"
                 @copyParam="copyParameter" @editParam="openEditParameterDialog"
+                @changeParamPage="changeParamPage"
               >
                 <template #actions>
                   <button class="ghost" @click="loadStandardModule()">刷新</button>

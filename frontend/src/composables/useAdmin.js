@@ -658,6 +658,17 @@ export function useAdmin(auth, notify, confirm) {
       return String(pid) === String(selectedStandard.value.id)
     })
   })
+  const paramPageComputed = computed(() => {
+    const totalElements = selectedStandardParameters.value.length
+    const totalPages = Math.max(Math.ceil(totalElements / parameterFilters.size), 1)
+    const page = Math.min(parameterFilters.page, totalPages - 1)
+    return { content: [], page, size: parameterFilters.size, totalElements, totalPages, first: page <= 0, last: page >= totalPages - 1 }
+  })
+  const pagedStandardParameters = computed(() => {
+    const start = parameterFilters.page * parameterFilters.size
+    return selectedStandardParameters.value.slice(start, start + parameterFilters.size)
+  })
+  function changeParamPage(page) { parameterFilters.page = Math.max(page, 0) }
   const maintenanceDocumentsComputed = computed(() => {
     const keyword = maintenanceDocumentFilters.keyword.trim().toLowerCase()
     return standardDocuments.value.filter(doc => {
@@ -712,7 +723,7 @@ export function useAdmin(auth, notify, confirm) {
     releaseCategoryOptions, releaseSoftwareOptions, releaseStandardOptions, releaseParameterStandardOptions,
     importSoftwareOptions, standardCategoryOptions, standardSoftwareOptions,
     filteredSoftwareTypes, typePageComputed, pagedSoftwareTypes,
-    filteredStandardDocuments, standardDocumentOptions, standardPageComputed, selectedStandardParameters,
+    filteredStandardDocuments, standardDocumentOptions, standardPageComputed, selectedStandardParameters, paramPageComputed, pagedStandardParameters,
     maintenanceDocumentsComputed, maintenanceDocumentPageComputed, pagedMaintenanceDocuments,
     filteredReviews, reviewPageInfo, pagedReviews,
     // Functions
@@ -732,7 +743,7 @@ export function useAdmin(auth, notify, confirm) {
     openCreateUserDialog, closeUserDialog, createUser, openRoleDialog, closeRoleDialog, changeUserRole, deleteUserAccount,
     switchAdminSection, changeAdminPage,
     // Filter/pagination helpers
-    changeTypePage, applyTypeFilters, changeStandardPage, applyStandardFilters, handleStandardFilterCategoryChange,
+    changeTypePage, applyTypeFilters, changeStandardPage, applyStandardFilters, handleStandardFilterCategoryChange, changeParamPage,
     openStandardDetail, backToStandardList, changeMaintenanceDocumentPage, applyMaintenanceDocumentFilters,
     changeReviewPage, applyReviewFilters, openChangeRoleDialog,
     regeneratePackage, copyParameter,

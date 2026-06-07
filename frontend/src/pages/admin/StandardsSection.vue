@@ -53,32 +53,52 @@
     </template>
 
     <template v-else>
-      <div class="panel-title">
-        <div>
-          <h3>{{ selectedStandard.category || '-' }} / {{ selectedStandard.software || '-' }}</h3>
-          <p class="muted">软件版本：{{ selectedStandard.softwareVersion || '-' }} · 版本：{{ selectedStandard.version || '-' }}</p>
+      <div class="section-toolbar">
+        <div class="filters">
+          <span class="detail-title">{{ selectedStandard.category || '-' }} / {{ selectedStandard.software || '-' }} · V{{ selectedStandard.version || '-' }}</span>
         </div>
-        <div class="admin-actions">
+        <div class="actions">
           <button type="button" class="ghost" @click="$emit('backToList')">返回列表</button>
           <button type="button" class="ghost" @click="$emit('downloadTemplate')">下载模板</button>
           <button v-if="selectedStandard.status !== 'PUBLISHED'" type="button" class="ghost" @click="$emit('importParams')">批量导入</button>
           <button v-if="selectedStandard.status !== 'PUBLISHED'" type="button" @click="$emit('createParam')">新增参数</button>
         </div>
       </div>
-      <div class="list-panel type-list-panel">
-        <div class="type-list">
-          <article v-for="param in parameters" :key="param.id" class="parameter-item">
-            <div>
-              <strong>{{ param.code }}</strong>
-              <span v-if="param.deploymentStandard" class="status ok" style="margin-left:8px;font-size:12px;">部署标准</span>
-              <p>{{ param.name }} = {{ param.value }}</p>
-              <p>{{ param.category || '未分类' }} · {{ param.description || '暂无说明' }}</p>
-            </div>
-            <button class="ghost" @click="$emit('copyParam', param)">复制占位符</button>
-            <button v-if="selectedStandard.status !== 'PUBLISHED'" class="ghost" @click="$emit('editParam', param)">编辑</button>
-          </article>
-          <p v-if="parameters.length === 0" class="empty-state">该标准暂未配置参数。</p>
+      <div class="list-panel">
+        <div class="table-wrap">
+          <table class="resource-table">
+            <thead>
+              <tr>
+                <th>参数编码</th>
+                <th>参数名称</th>
+                <th>参数值</th>
+                <th>分类</th>
+                <th>说明</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="param in parameters" :key="param.id">
+                <td>
+                  {{ param.code }}
+                  <span v-if="param.deploymentStandard" class="status ok deployment-badge">部署标准</span>
+                </td>
+                <td>{{ param.name }}</td>
+                <td>{{ param.value }}</td>
+                <td>{{ param.category || '-' }}</td>
+                <td>{{ param.description || '-' }}</td>
+                <td class="row-actions">
+                  <button class="ghost" @click="$emit('copyParam', param)">复制占位符</button>
+                  <button v-if="selectedStandard.status !== 'PUBLISHED'" class="ghost" @click="$emit('editParam', param)">编辑</button>
+                </td>
+              </tr>
+              <tr v-if="parameters.length === 0">
+                <td colspan="6" class="empty-state">该标准暂未配置参数</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
+        <Pagination :page="paramPageInfo" @change="(p) => $emit('changeParamPage', p)" />
       </div>
     </template>
   </section>
@@ -94,9 +114,10 @@ defineProps({
   filters: { type: Object, required: true },
   pageInfo: { type: Object, default: () => ({}) },
   selectedStandard: { type: Object, default: null },
-  parameters: { type: Array, default: () => [] }
+  parameters: { type: Array, default: () => [] },
+  paramPageInfo: { type: Object, default: () => ({}) }
 })
-defineEmits(['filterCategoryChange', 'openDetail', 'editStandard', 'submitReview', 'startModify', 'cancelModify', 'revisionHistory', 'deleteStandard', 'changePage', 'backToList', 'downloadTemplate', 'importParams', 'createParam', 'copyParam', 'editParam'])
+defineEmits(['filterCategoryChange', 'openDetail', 'editStandard', 'submitReview', 'startModify', 'cancelModify', 'revisionHistory', 'deleteStandard', 'changePage', 'backToList', 'downloadTemplate', 'importParams', 'createParam', 'copyParam', 'editParam', 'changeParamPage'])
 
 function statusClass(s) {
   if (s === 'DRAFT') return 'off'

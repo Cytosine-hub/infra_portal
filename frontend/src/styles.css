@@ -1649,6 +1649,13 @@ td.row-actions {
   background: var(--color-primary-light);
 }
 
+.deployment-badge {
+  margin-left: var(--space-sm);
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+}
+}
+
 .review-hint {
   color: var(--color-warning);
   cursor: help;
