@@ -47,7 +47,7 @@ app:
 # ========== 知识库 & Agent 配置 ==========
   ai:
     base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
-    api-key: ${AI_API_KEY}
+    api-key: ${AI_API_KEY:tp-c917uu165jgq2dosv8104vtxi7i8uaqb3wqkq5zxlbwm5haz}
     model: ${AI_MODEL:mimo-v2.5-pro}
     max-tokens: ${AI_MAX_TOKENS:4096}
     temperature: ${AI_TEMPERATURE:0.1}
@@ -79,7 +79,7 @@ langchain4j:
   open-ai:
     chat-model:
       base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
-      api-key: ${AI_API_KEY}
+      api-key: ${AI_API_KEY:tp-c917uu165jgq2dosv8104vtxi7i8uaqb3wqkq5zxlbwm5haz}
       model-name: ${AI_MODEL:mimo-v2.5-pro}
       max-tokens: ${AI_MAX_TOKENS:4096}
       temperature: ${AI_TEMPERATURE:0.1}

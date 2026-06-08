@@ -1,3 +1,36 @@
+# Release v1.0.9-20260608
+
+**日期**: 2026-06-08
+**分支**: feature/ops-agent
+**发布范围**: frontend / backend / db / docs
+
+**自上次发布以来的变更**:
+- feat: Agent 工具列表增加 description 字段
+- feat: Wiki 搜索工具集成到 Agent
+- feat: Wiki 知识图谱导出
+- fix: 智能排查 SSE 错误处理和加载状态
+- fix: Agent 会话 created_by 硬化
+- fix: Wiki 导出源引用修复
+- refactor: Wiki Ingest/Lint Agent 生产化加固
+- docs: Agent 排查计划文档
+
+## 文件清单
+
+| 文件 | 大小 |
+|------|------|
+
+| backend/middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar | 107M |
+| backend/application.yml.example | 4.0K |
+| frontend/favicon.svg | 4.0K |
+| frontend/index.html | 4.0K |
+| frontend/assets/index-CiXlGcCh.js | 644K |
+| frontend/assets/index-DZyOvTZI.css | 108K |
+| db/upgrade-v1.0.9.sql | 4.0K |
+| docs/startup-manual.md | 8.0K |
+| docs/production-deploy.md |  12K |
+
+---
+
 # Release v1.0.8-20260602
 
 **日期**: 2026-06-02
