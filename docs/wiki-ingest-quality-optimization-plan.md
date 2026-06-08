@@ -1,5 +1,39 @@
 # Wiki 文档编译质量优化方案
 
+## 实现进度（2026-06-08）
+
+当前方案仍以“质量专项设计”为主，尚未完整实现。现有代码已经具备部分基础能力，但还不能解决 BES 安装指南这类文档的章节覆盖问题。
+
+已完成：
+
+- 文档上传已支持在前端先选择分类和软件类型，再批量选择文件创建异步编译任务。
+- 后台 Ingest 任务已异步执行，分段失败会进入 `PARTIAL`，所有分段失败或零页面时会进入 `FAILED`，source 不再被错误标记为已编译。
+- 长文档切分已从纯字符切分升级为按 Markdown 标题和空行切分语义块，并保留 chunk overlap。
+- LLM 页面输出已有基础校验：页面数组非空、title/content 非空、title 长度、page_type 枚举、summary 长度。
+- 图谱已支持登录用户查看当前有权限的 DRAFT 页面，解决新编译草稿页面在图谱中为空的问题。
+- 图谱后端已有同源弱关联的雏形：当前按相同 `source_refs` 归组加边。
+
+部分完成：
+
+- `source_refs` 已写入 source id/title/type，但还没有章节路径、页码范围、section_ids 和 evidence_quotes。
+- 语义切分能减少硬截断，但还没有全文目录盘点，也没有把目录结构传给 LLM。
+- 社区检测已使用稳定节点顺序，但社区命名仍主要依赖 `software + category`，仍会出现多个同名社区。
+- 前端能显示图谱节点、连接和社区数量，但还没有编译覆盖率、缺失章节、质量报告和补编入口。
+
+未实现：
+
+- `DocumentOutlineExtractor`
+- Map-Reduce 编译：`section_facts -> page_plan -> pages`
+- `WikiIngestQualityGate`
+- 安装指南类固定页面模板强制覆盖
+- 输出 schema 中的 `coverage.section_ids`、`source_refs.sections/page_range`
+- 章节级合并、标题规范化、alias 管理
+- 缺失章节自动补编
+- 社区主题命名、同名社区去重、小社区合并
+- 图谱 API 返回 `communityTopic`、`communityNodeCount`、`communityEdgeCount`
+
+下一步建议先落地 P0：目录抽取、page_plan Prompt、覆盖率门禁和质量报告。否则继续优化单次 prompt 很可能只能改善个别样例，不能稳定解决长文档漏章节问题。
+
 ## 背景
 
 当前 LLM Wiki 已能把上传文档编译为 Wiki 页面并构建图谱，但从实际文档效果看，编译质量还不满足生产使用。以“宝兰德应用服务器软件微服务版 V9.5.5”文档为例，原文包含安装环境要求、安装方式、产品注册、使用场景、产品配置、Actuator 监控、JMX 监控等内容，但当前只生成了 3 个页面：
@@ -297,32 +331,35 @@ stable_key = software + "/" + topic + "/" + min(pageId)
 
 ### 第一步：先修质量门禁和 Prompt
 
-1. 新增 `DocumentOutlineExtractor`，先基于正则和 PDF 文本提取目录。
-2. 修改 `IngestPromptTemplates`，增加 `document_outline` 和 `page_plan`。
-3. 修改 `IngestAgent.validateGeneratedPages()`，校验 `source_refs`、`coverage.section_ids`、标题规范和正文长度。
-4. 新增 `WikiIngestQualityGate`，输出覆盖率报告。
-5. 任务结果增加质量信息，低覆盖率标记 `PARTIAL`。
+1. [ ] 新增 `DocumentOutlineExtractor`，先基于正则和 PDF 文本提取目录。
+2. [ ] 修改 `IngestPromptTemplates`，增加 `document_outline` 和 `page_plan`。
+3. [~] 修改 `IngestAgent.validateGeneratedPages()`，校验 `source_refs`、`coverage.section_ids`、标题规范和正文长度。
+   - 已完成：title/content/page_type/summary 基础校验。
+   - 未完成：source_refs/coverage/标题规范/正文质量校验。
+4. [ ] 新增 `WikiIngestQualityGate`，输出覆盖率报告。
+5. [ ] 任务结果增加质量信息，低覆盖率标记 `PARTIAL`。
 
 ### 第二步：重构长文档编译
 
-1. `IngestTaskService` 分段不直接生成页面，先生成 `section_facts`。
-2. `IngestAgent` 增加 `compileSectionFacts()` 和 `generatePagesFromPlan()`。
-3. 所有分段完成后统一生成页面，避免局部 chunk 抢先生成粗粒度页面。
-4. 失败分段进入补偿队列，允许只补编缺失章节。
+1. [ ] `IngestTaskService` 分段不直接生成页面，先生成 `section_facts`。
+2. [ ] `IngestAgent` 增加 `compileSectionFacts()` 和 `generatePagesFromPlan()`。
+3. [ ] 所有分段完成后统一生成页面，避免局部 chunk 抢先生成粗粒度页面。
+4. [ ] 失败分段进入补偿队列，允许只补编缺失章节。
 
 ### 第三步：修图谱社区
 
-1. `computeCommunityNames()` 引入 topic 提取和同名去重。
-2. Louvain 后增加同软件小社区合并后处理。
-3. 社区编号按稳定键重新映射。
-4. 图谱 API 返回 `communityTopic`、`communityNodeCount`、`communityEdgeCount`。
+1. [ ] `computeCommunityNames()` 引入 topic 提取和同名去重。
+2. [ ] Louvain 后增加同软件小社区合并后处理。
+3. [~] 社区编号按稳定键重新映射。
+   - 当前已有稳定节点顺序和重映射基础；仍需按 `software/topic/min(pageId)` 形成稳定业务键。
+4. [ ] 图谱 API 返回 `communityTopic`、`communityNodeCount`、`communityEdgeCount`。
 
 ### 第四步：前端展示质量
 
-1. 来源列表展示质量状态。
-2. 编译任务详情展示缺失章节。
-3. 图谱社区 legend 展示唯一名称和节点数。
-4. 增加“按软件分组/按主题聚类”切换。
+1. [ ] 来源列表展示质量状态。
+2. [ ] 编译任务详情展示缺失章节。
+3. [ ] 图谱社区 legend 展示唯一名称和节点数。
+4. [ ] 增加“按软件分组/按主题聚类”切换。
 
 ## 针对 BES 文档的验收样例
 

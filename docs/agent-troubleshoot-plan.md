@@ -574,21 +574,25 @@ services:
 
 ### Phase 1：Agent 核心（1.5 周）
 - [ ] 引入 AgentScope Java Maven 依赖
-- [ ] 实现 GLM-4.7 ChatModel 适配器
-- [ ] 配置 ReActAgent + BGE-large Embedding + Milvus 记忆
-- [ ] 实现 `KnowledgeSearchTool`（复用现有 KnowledgeService）
+- [x] 实现 OpenAI 兼容 ChatModel 配置，当前通过 LangChain4j 接入大模型
+- [~] 配置 Agent 对话 + BGE-large Embedding + Milvus 记忆
+  - 已完成：知识库向量检索、Milvus 启动加载、Agent 可调用知识搜索。
+  - 未完成：AgentScope/ReActAgent 尚未引入，仍是当前 Ops Agent 编排。
+- [x] 实现 `KnowledgeSearchTool`（复用现有 KnowledgeService）
 - [ ] 实现 `QueryMetricsTool`（对接 Prometheus HTTP API）
 - [ ] 实现 `SearchLogsTool`（对接 ES/Loki API）
-- [ ] 基础 Agent API（`/api/agent/chat`）
+- [x] 基础 Ops Agent API（当前为 `/api/ops-agent/chat`，含 SSE）
 
 ### Phase 2：Skill 系统（1 周）
-- [ ] 实现 `SkillLoader`（YAML 解析 + 关键词匹配）
-- [ ] 实现 `SkillRunner`（步骤编排 + Tool 调用 + 变量替换）
-- [ ] 编写 3-5 个基础排查 Skill YAML
+- [x] 实现 `SkillLoader`（YAML 解析 + 关键词匹配）
+- [~] 实现 `SkillRunner`（步骤编排 + Tool 调用 + 变量替换）
+  - 已完成：内置 Skill 加载、关键词触发、步骤级 SSE 事件和 ToolGateway 调用。
+  - 未完成：变量 schema、dry-run、版本治理和前端编辑闭环。
+- [x] 编写 3-5 个基础排查 Skill YAML
 - [ ] 告警 Webhook API（`/api/agent/webhook/alert`）
 
 ### Phase 3：前端 + 经验沉淀（1.5 周）
-- [ ] 前端智能排查面板（对话式排查 + 排查历史）
+- [x] 前端智能排查面板（对话式排查 + 排查历史）
 - [ ] Skill 管理界面（列表/编辑/新增/删除）
 - [ ] `SaveExperienceTool`（排查经验自动沉淀到知识库）
 - [ ] 记忆折叠机制（上下文过长时自动压缩）
@@ -843,6 +847,13 @@ public class OutputSafetyFilter {
 ### 10.0 实施进度更新（2026-06-08）
 
 本轮已先落地 P0 中“稳定和可观测”的第一批基础能力，提交为 `d8b9c96 Add agent tool gateway observability`。
+
+最新进度补充（截至 2026-06-08）：
+
+- 后端、前端已围绕 `/api/ops-agent/chat` 完成 SSE 回归，前端 loading 残留问题已修复。
+- 本地启动配置已补齐默认 MySQL 密码提交 `ed2e5a7 Set default MySQL password for local startup`，减少重启后端时因 `APP_DB_PASSWORD` 缺失导致的启动失败。
+- Tool/Skill 热插拔仍停留在设计和文档层，尚未形成前端可新增 Tool/Skill、dry-run、审核、启停、回滚的完整闭环。
+- 当前智能排查仍偏固定 Skill 编排，尚未具备“接 CMDB 自动补齐服务实例/日志索引/监控模板”的生产级上下文能力。
 
 已完成：
 
@@ -1470,7 +1481,9 @@ Skill 步骤参数应支持引用：
 
 - 实现 CMDB Tool：服务、实例、依赖、可观测配置。
 - 实现日志 Tool：Loki 或 Elasticsearch 先接一种。
-- 统一 Zabbix/Prometheus 监控结果结构。
+- [~] 统一 Zabbix/Prometheus 监控结果结构。
+  - 已完成：Zabbix Client、ZabbixTool、Zabbix 导出接口和内置 `zabbix-monitor` Skill。
+  - 未完成：Prometheus 接入、统一指标 schema、与 CMDB 自动补参联动。
 - Skill 参数可引用 CMDB 输出和上一步工具输出。
 
 验收标准：

@@ -1479,14 +1479,14 @@ Lint 面板：
 
 | 模块 | 当前状态 | 成熟度 | 主要缺口 |
 |---|---|---:|---|
-| 数据模型 | 核心表已建，状态和权限表已覆盖 | 75% | 缺少 lint fingerprint、导入包签名清单、部分一致性约束 |
-| Ingest 编译 | 两步编译、合并决策、链接解析、异步任务已接通 | 70% | LLM 输出 schema 校验不足、事务边界弱、长文档按字符切分 |
-| Query 查询 | Wiki 优先、向量 + FULLTEXT 并行、图扩展已接通 | 60% | 未接入权限过滤，分数融合粗糙，fallback 策略偏机械 |
-| 知识图谱/社区 | 加权图和简化 Louvain 已实现 | 60% | 共现信号未落地，无缓存，无权限过滤，社区结果可能不稳定 |
+| 数据模型 | 核心表已建，状态和权限表已覆盖，Ingest 任务/source 状态一致性已加固 | 78% | 缺少 lint fingerprint、导入包签名清单、部分一致性约束 |
+| Ingest 编译 | 两步编译、合并决策、链接解析、异步任务、批量上传元数据已接通 | 72% | 已有基础 schema 校验和语义块切分，但缺少目录覆盖率门禁、章节级合并和质量报告 |
+| Query 查询 | Wiki 优先、向量 + FULLTEXT 并行、图扩展和搜索权限过滤已接通 | 65% | 分数融合粗糙，fallback 策略偏机械，Agent 查询权限上下文仍需确认闭环 |
+| 知识图谱/社区 | 加权图、简化 Louvain、权限过滤、登录用户 DRAFT 可见已实现 | 68% | 共现信号未完全落地，无参数化缓存，社区命名重复/主题不稳定 |
 | Lint 审查 | 孤立、断链、过时、冲突状态检测已实现 | 45% | 不幂等，缺 GAP/语义矛盾/重复页面检测，审计不完整 |
-| 权限与审计 | 权限服务和部分审计写入已实现 | 50% | 读接口、搜索、图谱、Agent 未统一过滤，审计覆盖不全 |
+| 权限与审计 | 页面列表/详情/搜索/图谱/关联页/来源/导入导出已接入主要权限过滤和部分拒绝审计 | 68% | Agent Wiki 上下文、批量写接口、部分审计覆盖仍需补齐 |
 | 导入/导出 | ZIP 包生成和冲突标记已实现 | 45% | 无签名校验、无敏感扫描、无 sources/vectors、未做摆渡联调 |
-| 前端 Wiki | 浏览、编辑、审核、图谱、Lint 面板已接通 | 65% | 大量硬编码颜色，权限态、空态、错误态需要加固 |
+| 前端 Wiki | 浏览、编辑、审核、图谱、Lint 面板、上传前元数据弹窗和批量上传已接通 | 70% | 大量硬编码颜色，权限态、空态、错误态、质量报告展示需要加固 |
 | Research/经验沉淀 | 设计明确 | 10% | 尚未实现标准闭环 |
 
 ### 9.2 优先级原则
@@ -1503,13 +1503,16 @@ Lint 面板：
 
 目标：所有 Wiki 读路径都必须经过 `WikiPermissionService.canView()` 或等价 SQL 过滤。
 
-- [ ] `WikiSearchService.search()` 增加用户上下文参数，返回前过滤不可见页面。
+- [x] `WikiSearchService.search()` 增加用户上下文参数，返回前过滤不可见页面。
 - [ ] `TroubleshootAgent` 调用 Wiki 搜索时传入当前认证用户，确保 LLM 上下文不含越权页面。
-- [ ] `GET /api/wiki/pages`、`GET /api/wiki/pages/{id}`、`GET /api/wiki/pages/search` 接入权限过滤。
-- [ ] `GET /api/wiki/graph` 只返回可见节点，边两端都可见时才返回。
-- [ ] `GET /api/wiki/pages/{id}/links` 过滤不可见关联页面。
-- [ ] `GET /api/wiki/sources`、导入导出接口按系统管理员/分类管理员权限限制。
-- [ ] 对访问被拒绝的页面写入 `ACCESS_DENIED` 审计日志。
+- [x] `GET /api/wiki/pages`、`GET /api/wiki/pages/{id}`、`GET /api/wiki/pages/search` 接入权限过滤。
+- [x] `GET /api/wiki/graph` 只返回可见节点，边两端都可见时才返回。
+  - 补充：登录用户图谱已允许展示当前用户可见的 DRAFT/PENDING_REVIEW 页面，解决新编译草稿图谱为空问题。
+- [x] `GET /api/wiki/pages/{id}/links` 过滤不可见关联页面。
+- [x] `GET /api/wiki/sources`、导入导出接口按系统管理员/分类管理员权限限制。
+- [~] 对访问被拒绝的页面写入 `ACCESS_DENIED` 审计日志。
+  - 已覆盖：页面详情、关联页、来源详情、导入导出拒绝。
+  - 待补齐：批量写接口、部分列表类过滤无审计。
 
 验收标准：
 
@@ -1522,12 +1525,20 @@ Lint 面板：
 目标：LLM 输出只能作为候选数据，必须通过程序校验后才能写入正式表。
 
 - [ ] 引入 `WikiPageDraftDto`、`WikiLinkDraftDto`，替代直接读取 `JsonObject` 写库。
-- [ ] 校验 `page_type`、`status`、`link_type` 必须属于数据库枚举。
-- [ ] 校验 title/content 非空，summary 长度不超过 500，source_refs 格式合法。
+- [~] 校验 `page_type`、`status`、`link_type` 必须属于数据库枚举。
+  - 已完成：`page_type` 基础枚举校验。
+  - 未完成：`status`、`link_type` DTO/schema 级校验。
+- [~] 校验 title/content 非空，summary 长度不超过 500，source_refs 格式合法。
+  - 已完成：title/content 非空、title 长度、summary 长度。
+  - 未完成：source_refs 章节级格式校验。
 - [ ] 保存页面和链接放在事务内，失败时回滚本次编译产生的数据。
-- [ ] 向量化改为后置任务，失败只标记 `VECTOR_PENDING` 或写日志，不影响页面入库。
-- [ ] 长文档切分从字符切分升级为按 Markdown 标题/段落切分，并保留 chunk 序号和来源范围。
-- [ ] 分段编译失败时任务状态改为 `PARTIAL`，不要在用户界面显示为完全成功。
+- [~] 向量化改为后置任务，失败只标记 `VECTOR_PENDING` 或写日志，不影响页面入库。
+  - 当前向量化失败已降级为日志告警，不影响页面入库；后置任务和 `VECTOR_PENDING` 尚未实现。
+- [~] 长文档切分从字符切分升级为按 Markdown 标题/段落切分，并保留 chunk 序号和来源范围。
+  - 已完成：按 Markdown 标题/空行做语义块切分，保留重叠上下文。
+  - 未完成：chunk 序号、章节路径、页码范围进入 source_refs。
+- [x] 分段编译失败时任务状态改为 `PARTIAL`，不要在用户界面显示为完全成功。
+  - 已补充：所有分段失败或零页面时任务 `FAILED`，source 不再错误标记为 ingested。
 
 验收标准：
 
@@ -1571,10 +1582,13 @@ Lint 面板：
 
 目标：图谱可解释、可缓存、可权限过滤。
 
-- [ ] 实现共现信号：从 `source_refs` 或 `wiki_sources` 建立同源页面弱边。
+- [~] 实现共现信号：从 `source_refs` 或 `wiki_sources` 建立同源页面弱边。
+  - 当前图谱已按相同 `source_refs` 形成弱关联；仍需升级为明确的 source_id/章节级共现。
 - [ ] 同软件完全图设置上限，软件页面过多时只连接 overview、runbook、强引用页面。
-- [ ] 社区检测使用固定节点顺序或固定随机种子，保证结果可复现。
-- [ ] 增加图谱缓存，页面/链接/状态/权限变化时失效。
+- [x] 社区检测使用固定节点顺序或固定随机种子，保证结果可复现。
+- [~] 增加图谱缓存，页面/链接/状态/权限变化时失效。
+  - 已完成：匿名公共图谱 30 秒缓存。
+  - 未完成：按用户/过滤参数缓存和页面/链接变更失效。
 - [ ] 图谱 API 支持 `category/software/status/maxNodes` 过滤。
 - [ ] 社区命名加入页面类型优先级：OVERVIEW > ENTITY > RUNBOOK > CONCEPT。
 
@@ -1619,7 +1633,8 @@ Lint 面板：
 
 - [ ] `WikiPanel.vue` 颜色改为 `styles/tokens.css` 设计令牌，移除硬编码颜色。
 - [ ] 所有操作按钮按权限禁用或隐藏，不只依赖后端拒绝。
-- [ ] 图谱增加节点上限、加载中、空结果、权限过滤提示。
+- [~] 图谱增加节点上限、加载中、空结果、权限过滤提示。
+  - 后端已配置 `app.wiki.graph.max-nodes`；前端空态、加载中和权限过滤提示仍需加固。
 - [ ] Lint 面板增加 fingerprint、first_seen、last_seen、ignore 操作展示。
 - [ ] 导入增加 dry-run 结果页和签名校验状态。
 - [ ] 编辑器保存后自动触发链接校验并展示断链预警。
