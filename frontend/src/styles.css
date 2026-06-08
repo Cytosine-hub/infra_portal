@@ -148,9 +148,11 @@ label {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
+  width: 100%;
   min-height: 38px;
+  max-height: 38px;
   border: 1px solid var(--color-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--color-bg);
   overflow: hidden;
 }
@@ -1521,6 +1523,33 @@ manual-list button.ghost.related-document-link:hover {
 .checkline input {
   width: auto;
   min-height: auto;
+}
+
+.standard-package-field {
+  display: grid;
+  gap: 6px;
+}
+
+.field-label-spacer {
+  min-height: 20px;
+  color: transparent;
+  user-select: none;
+}
+
+.standard-package-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+}
+
+.standard-package-control input {
+  width: auto;
+  min-height: auto;
+  margin: 0;
+  accent-color: var(--color-primary);
 }
 
 .table-wrap {

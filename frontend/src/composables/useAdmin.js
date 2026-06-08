@@ -100,7 +100,7 @@ export function useAdmin(auth, notify, confirm) {
     return `${now.getFullYear()}-${month}-${day}`
   }
   function emptyPage(size) { return { content: [], page: 0, size, totalElements: 0, totalPages: 0, first: true, last: true } }
-  function defaultReleaseForm() { return { id: null, category: '', softwareTypeId: '', middlewareName: '', version: '', platform: '', description: '', releasedAt: todayString(), published: false, file: null, originalFileName: '', standardPackage: false, parameterStandardId: null } }
+  function defaultReleaseForm() { return { id: null, category: '', softwareTypeId: '', middlewareName: '', version: '', platform: '', platformList: [], description: '', releasedAt: todayString(), published: false, file: null, originalFileName: '', standardPackage: false, parameterStandardId: null } }
   function defaultImportForm() { return { sourceDirectory: '', category: '', softwareTypeId: '', middlewareName: '', platform: '', description: '', published: false, recursive: true } }
   function defaultTypeForm() { return { id: null, category: '中间件', name: '', description: '', active: true } }
   function defaultStandardForm() { return { id: null, category: '', softwareTypeId: '', softwareVersion: '', code: '', summary: '', content: '# 参数标准\n\n' } }
@@ -211,13 +211,15 @@ export function useAdmin(auth, notify, confirm) {
     if (release.published) { notify('已发布资源不能编辑，请先下架后再编辑', 'error'); return }
     const selectedType = findSoftwareType(release.softwareTypeId)
     editing.value = true
+    const platformStr = release.platform || ''
     Object.assign(releaseForm, {
       id: release.id,
       category: release.softwareTypeCategory || selectedType?.category || '',
       softwareTypeId: release.softwareTypeId || '',
       middlewareName: release.middlewareName,
       version: release.version,
-      platform: release.platform || '',
+      platform: platformStr,
+      platformList: platformStr ? platformStr.split(',').map(s => s.trim()).filter(Boolean) : [],
       description: release.description || '',
       releasedAt: release.releasedAt || '',
       published: release.published,
@@ -237,6 +239,7 @@ export function useAdmin(auth, notify, confirm) {
 
     const formData = new FormData()
     releaseForm.middlewareName = selectedType.name
+    releaseForm.platform = releaseForm.platformList.join(',')
     for (const key of ['middlewareName', 'version', 'platform', 'description', 'releasedAt', 'published']) {
       formData.append(key, releaseForm[key] ?? '')
     }

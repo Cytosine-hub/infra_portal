@@ -14,7 +14,9 @@
         </select>
       </label>
       <label>版本号<input v-model.trim="admin.releaseForm.version" required maxlength="60" /></label>
-      <label>平台<input v-model.trim="admin.releaseForm.platform" maxlength="60" /></label>
+      <label>平台
+        <BaseMultiSelect v-model="admin.releaseForm.platformList" :options="platformOptions" placeholder="请选择平台" />
+      </label>
       <label>发布日期<input v-model="admin.releaseForm.releasedAt" type="date" /></label>
       <label>关联标准
         <select v-model="admin.releaseForm.parameterStandardId" :disabled="!admin.releaseForm.category || !admin.releaseForm.softwareTypeId">
@@ -22,14 +24,20 @@
           <option v-for="ps in admin.releaseParameterStandardOptions.value" :key="ps.id" :value="ps.id">{{ admin.getStandardLabel(ps.id) }}</option>
         </select>
       </label>
-      <label class="file-field wide">安装包
+      <label class="file-field">安装包
         <span class="file-control">
           <input type="file" @change="admin.handleReleaseFileChange" />
           <span class="file-button">选择文件</span>
           <span class="file-name">{{ admin.releaseForm.file?.name || admin.releaseForm.originalFileName || '未选择文件' }}</span>
         </span>
       </label>
-      <label class="checkline"><input v-model="admin.releaseForm.standardPackage" type="checkbox" />标准包</label>
+      <label class="standard-package-field">
+        <span class="field-label-spacer">标准包</span>
+        <span class="standard-package-control">
+          <input v-model="admin.releaseForm.standardPackage" type="checkbox" />
+          <span>标准包</span>
+        </span>
+      </label>
       <label class="wide">说明<textarea v-model.trim="admin.releaseForm.description" maxlength="2000" /></label>
     </div>
     <div v-if="admin.uploading.value" class="upload-progress-bar">
@@ -39,7 +47,7 @@
       <span class="progress-text">上传中 {{ admin.uploadProgress.value }}%</span>
     </div>
     <template #actions>
-      <BaseButton type="submit" :loading="admin.uploading.value">{{ admin.uploading.value ? '上传中...' : '保存' }}</BaseButton>
+      <BaseButton variant="primary" :loading="admin.uploading.value" @click="admin.saveRelease()">{{ admin.uploading.value ? '上传中...' : '保存' }}</BaseButton>
       <BaseButton variant="ghost" @click="admin.cancelEdit()" :disabled="admin.uploading.value">取消</BaseButton>
     </template>
   </FormModal>
@@ -265,6 +273,7 @@ import { computed } from 'vue'
 import FormModal from './ui/FormModal.vue'
 import BaseModal from './ui/BaseModal.vue'
 import BaseButton from './ui/BaseButton.vue'
+import BaseMultiSelect from './ui/BaseMultiSelect.vue'
 import { renderMarkdown } from '../utils'
 
 const props = defineProps({
@@ -274,6 +283,8 @@ const props = defineProps({
   managedCategory: { type: String, default: '' },
   selectedReviewDiff: { type: String, default: '' }
 })
+
+const platformOptions = ['arm', 'x86', 'windows', 'linux']
 
 const diffLines = computed(() => (props.selectedReviewDiff || '').split('\n'))
 
