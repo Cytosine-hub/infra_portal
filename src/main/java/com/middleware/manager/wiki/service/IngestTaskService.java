@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.PostConstruct;
 import java.io.InputStream;
 import java.security.MessageDigest;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Semaphore;
@@ -101,7 +102,12 @@ public class IngestTaskService {
             source.setContentHash(hash);
             source.setCategory(category);
             source.setSoftware(software);
+            source.setCreatedBy(operatorId);
             sourceMapper.insert(source);
+        } else if ((source.getCategory() == null && category != null) || (source.getSoftware() == null && software != null)) {
+            if (source.getCategory() == null && category != null) source.setCategory(category);
+            if (source.getSoftware() == null && software != null) source.setSoftware(software);
+            sourceMapper.update(source);
         }
 
         IngestTask task = buildTask(title, source.getId(), content, operatorId);
@@ -147,6 +153,7 @@ public class IngestTaskService {
 
         // 保存原始状态，失败时恢复
         Boolean originalIngested = source.getIngested();
+        LocalDateTime originalIngestedAt = source.getIngestedAt();
 
         // 等待并发槽位
         try {
@@ -169,7 +176,7 @@ public class IngestTaskService {
                 taskMapper.updateProgress(taskId, 10, "LLM 分析文档结构...", 0);
                 IngestAgent.IngestResult result = ingestAgent.ingest(source, task.getOperatorId());
                 if ("FAILED".equals(result.getStatus())) {
-                    taskMapper.updateStatus(taskId, "FAILED", "LLM 编译失败");
+                    taskMapper.updateStatus(taskId, "FAILED", failureMessage(result, "LLM 编译失败"));
                     return;
                 }
                 taskMapper.updateResult(taskId, result.getPagesCreated(), result.getPagesUpdated());
@@ -178,6 +185,7 @@ public class IngestTaskService {
                 List<String> chunks = splitContent(content);
                 int totalCreated = 0, totalUpdated = 0;
                 boolean partialFailure = false;
+                List<String> failureMessages = new ArrayList<>();
 
                 for (int i = 0; i < chunks.size(); i++) {
                     int basePct = 10 + (i * 80 / totalChunks);
@@ -193,8 +201,10 @@ public class IngestTaskService {
                     );
 
                     if ("FAILED".equals(chunkResult.getStatus())) {
-                        log.warn("Chunk {} failed, continuing with next chunk", i + 1);
+                        String message = failureMessage(chunkResult, "分段编译失败");
+                        log.warn("Chunk {} failed, continuing with next chunk: {}", i + 1, message);
                         partialFailure = true;
+                        failureMessages.add(String.format("分段 %d: %s", i + 1, message));
                     } else {
                         totalCreated += chunkResult.getPagesCreated();
                         totalUpdated += chunkResult.getPagesUpdated();
@@ -206,14 +216,26 @@ public class IngestTaskService {
                 }
 
                 taskMapper.updateProgress(taskId, 95, "正在解析交叉引用...", totalChunks);
+                if (totalCreated + totalUpdated <= 0) {
+                    source.setIngested(false);
+                    source.setIngestedAt(null);
+                    sourceMapper.update(source);
+                    taskMapper.updateStatus(taskId, "FAILED",
+                            failureMessages.isEmpty()
+                                    ? "LLM 未生成任何 Wiki 页面"
+                                    : "所有分段编译失败，未生成 Wiki 页面；" + String.join("；", failureMessages));
+                    return;
+                }
                 taskMapper.updateResult(taskId, totalCreated, totalUpdated);
                 if (partialFailure) {
-                    taskMapper.updateStatus(taskId, "PARTIAL", "部分分段编译失败，请查看日志后重试");
+                    taskMapper.updateStatus(taskId, "PARTIAL",
+                            "部分分段编译失败：" + String.join("；", failureMessages));
                 }
             }
 
             // 标记 source 已编译
             source.setIngested(true);
+            source.setIngestedAt(LocalDateTime.now());
             sourceMapper.update(source);
 
             log.info("Ingest task {} completed: created={}, updated={}",
@@ -224,10 +246,18 @@ public class IngestTaskService {
             taskMapper.updateStatus(taskId, "FAILED", e.getMessage());
             // 恢复原始 ingested 状态
             source.setIngested(originalIngested);
+            source.setIngestedAt(originalIngestedAt);
             sourceMapper.update(source);
         } finally {
             compileSemaphore.release();
         }
+    }
+
+    private String failureMessage(IngestAgent.IngestResult result, String fallback) {
+        if (result == null || result.getErrorMessage() == null || result.getErrorMessage().isBlank()) {
+            return fallback;
+        }
+        return result.getErrorMessage();
     }
 
     /**

@@ -76,17 +76,20 @@ public class IngestAgent {
         private int linksCreated;
         private int contradictionsFound;
         private String status;
+        private String errorMessage;
 
         public int getPagesCreated() { return pagesCreated; }
         public int getPagesUpdated() { return pagesUpdated; }
         public int getLinksCreated() { return linksCreated; }
         public int getContradictionsFound() { return contradictionsFound; }
         public String getStatus() { return status; }
+        public String getErrorMessage() { return errorMessage; }
         public void setPagesCreated(int v) { this.pagesCreated = v; }
         public void setPagesUpdated(int v) { this.pagesUpdated = v; }
         public void setLinksCreated(int v) { this.linksCreated = v; }
         public void setContradictionsFound(int v) { this.contradictionsFound = v; }
         public void setStatus(String v) { this.status = v; }
+        public void setErrorMessage(String v) { this.errorMessage = v; }
     }
 
     @Transactional
@@ -125,6 +128,7 @@ public class IngestAgent {
             if (analysis == null) {
                 log.error("Failed to parse analysis JSON for source '{}'", source.getTitle());
                 result.setStatus("FAILED");
+                result.setErrorMessage("Failed to parse analysis JSON");
                 ingestLog.setStatus("FAILED");
                 ingestLog.setErrorDetail("Failed to parse analysis JSON");
                 ingestLog.setDurationMs((int)(System.currentTimeMillis() - startTime));
@@ -140,6 +144,7 @@ public class IngestAgent {
             if (pagesResult == null || !pagesResult.has("pages")) {
                 log.error("Failed to parse pages JSON for source '{}'", source.getTitle());
                 result.setStatus("FAILED");
+                result.setErrorMessage("Failed to parse pages JSON");
                 ingestLog.setStatus("FAILED");
                 ingestLog.setErrorDetail("Failed to parse pages JSON");
                 ingestLog.setDurationMs((int)(System.currentTimeMillis() - startTime));
@@ -243,6 +248,7 @@ public class IngestAgent {
         } catch (Exception e) {
             log.error("Ingest failed for source '{}': {}", source.getTitle(), e.getMessage(), e);
             result.setStatus("FAILED");
+            result.setErrorMessage(e.getMessage());
             ingestLog.setStatus("FAILED");
             ingestLog.setErrorDetail(e.getMessage());
             ingestLog.setDurationMs((int)(System.currentTimeMillis() - startTime));
@@ -276,6 +282,7 @@ public class IngestAgent {
             if (analysis == null) {
                 log.error("Failed to parse analysis JSON for '{}'", title);
                 result.setStatus("FAILED");
+                result.setErrorMessage("Failed to parse analysis JSON");
                 return result;
             }
 
@@ -287,6 +294,7 @@ public class IngestAgent {
             if (pagesResult == null || !pagesResult.has("pages")) {
                 log.error("Failed to parse pages JSON for '{}'", title);
                 result.setStatus("FAILED");
+                result.setErrorMessage("Failed to parse pages JSON");
                 return result;
             }
 
@@ -364,6 +372,7 @@ public class IngestAgent {
         } catch (Exception e) {
             log.error("IngestContent failed for '{}': {}", title, e.getMessage(), e);
             result.setStatus("FAILED");
+            result.setErrorMessage(e.getMessage());
         }
 
         return result;

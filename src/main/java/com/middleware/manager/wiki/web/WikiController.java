@@ -279,10 +279,12 @@ public class WikiController {
 
     @PostMapping("/ingest/upload")
     public ResponseEntity<IngestTask> ingestUpload(@RequestParam("file") MultipartFile file,
+                                                    @RequestParam(required = false) String category,
+                                                    @RequestParam(required = false) String software,
                                                     Authentication authentication) {
         try {
             Long operatorId = resolveActorId(authentication);
-            IngestTask task = taskService.createTask(file.getBytes(), file.getOriginalFilename(), null, null, operatorId);
+            IngestTask task = taskService.createTask(file.getBytes(), file.getOriginalFilename(), category, software, operatorId);
             taskService.executeTask(task.getId());
             return ResponseEntity.ok(task);
         } catch (Exception e) {
@@ -469,22 +471,7 @@ public class WikiController {
         if (source == null) return ResponseEntity.notFound().build();
         try {
             Long operatorId = resolveActorId(authentication);
-            // 创建编译任务
-            IngestTask task = new IngestTask();
-            task.setSourceId(source.getId());
-            task.setFileName(source.getTitle());
-            task.setStatus("PENDING");
-            task.setProgress(0);
-            task.setStep("等待处理");
-            int maxChars = 20000;
-            int totalChunks = (int) Math.ceil((double) source.getContent().length() / (maxChars - 500));
-            task.setTotalChunks(Math.max(totalChunks, 1));
-            task.setCompletedChunks(0);
-            task.setPagesCreated(0);
-            task.setPagesUpdated(0);
-            task.setOperatorId(operatorId);
-            // 用 IngestTaskService 的 mapper 插入
-            taskService.insertTask(task);
+            IngestTask task = taskService.createReingestTask(source.getId(), operatorId);
             taskService.executeTask(task.getId());
             return ResponseEntity.ok(task);
         } catch (Exception e) {
