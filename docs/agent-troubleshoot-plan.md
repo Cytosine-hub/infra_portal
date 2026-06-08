@@ -840,6 +840,39 @@ public class OutputSafetyFilter {
 
 ## 十、目标架构优化方案（2026-06-08）
 
+### 10.0 实施进度更新（2026-06-08）
+
+本轮已先落地 P0 中“稳定和可观测”的第一批基础能力，提交为 `d8b9c96 Add agent tool gateway observability`。
+
+已完成：
+
+- `ToolResult` 已落地，工具调用结果统一包含 `success`、`errorCode`、`summary`、`data`、`confidence`、`latencyMs`。
+- `ToolGateway` 已落地，现有 Skill 工具调用统一经过网关执行，并已支持工具异常收敛、调用审计、请求/响应脱敏和日志参数脱敏。
+- `agent_tool_invocations` 已落库，用于记录工具名、请求摘要、响应摘要、状态、耗时和调用人。
+- Ops Agent SSE 已增加步骤级事件：`run_started`、`step_started`、`tool_result`、`completed`。
+- 前端智能排查面板已展示步骤进度，并在 `result`、`completed`、`error`、用户停止时清理 loading 状态。
+- 已修复 SSE 异步响应完成后触发 Spring Security 二次拦截的问题，放行 `DispatcherType.ASYNC` 和 `DispatcherType.ERROR`。
+- 已补充回归测试：工具成功/失败事件、审计落库、敏感字段脱敏、Ops Agent 权限测试。
+- 已用 `mwadmin` 完成真实 SSE 回归，请求事件链为 `run_started -> step_started -> tool_result -> result -> completed`，审计表记录同步增加。
+
+部分完成：
+
+- `ToolGateway` 目前已覆盖执行、审计、脱敏和错误收敛；权限分级、参数 schema 校验、工具级超时和重试策略仍需继续实现。
+- `agent_tool_invocations` 已实现；`agent_runs`、`agent_steps`、`agent_evidence` 尚未实现，因此完整排查回放还没有闭环。
+- `knowledge_search` 已通过统一网关；`query_metrics`、`search_logs` 仍因缺少 `service` 上下文返回缺参，需要后续接入 CMDB/上下文抽取自动补齐。
+
+本轮验证结果：
+
+- `mvn -Dtest=AgentServiceTest,OpsAgentControllerSecurityTest test` 通过。
+- `npm run build` 通过，仅存在既有 chunk size warning。
+- `mvn clean package -DskipTests` 通过，仅存在既有 deprecation warning。
+- 后端 `8080`、前端 `5173` 已重启并通过 smoke 测试。
+
+遗留风险：
+
+- Milvus 搜索偶发 `Encountered end-of-stream mid-frame`，客户端重试后本轮请求可恢复完成；后续建议增加向量检索降级、超时和失败事件显式返回。
+- 当前 Skill 对服务名、环境、时间范围的抽取能力不足，用户只描述现象时，监控和日志工具无法自动补齐参数。
+
 ### 10.1 目标定位
 
 下一阶段的目标不是继续堆固定问答模板，而是把当前 Ops Agent 升级为一个可审计、可扩展、可热插拔的线上问题自动排查系统。
@@ -1416,17 +1449,22 @@ Skill 步骤参数应支持引用：
 
 #### P0：稳定和可观测
 
-- 新增 `agent_runs`、`agent_steps`、`agent_tool_invocations`、`agent_evidence`。
-- Tool 返回结构化 `ToolResult`。
-- ToolGateway 统一超时、重试、错误码、审计。
-- SSE 增加步骤级事件，前端展示执行进度。
-- 修复工具异常导致 SSE 无最终事件的问题。
+- [ ] 新增 `agent_runs`、`agent_steps`、`agent_tool_invocations`、`agent_evidence`。
+- [x] 新增 `agent_tool_invocations`，记录工具调用审计。
+- [x] Tool 返回结构化 `ToolResult`。
+- [~] ToolGateway 统一超时、重试、错误码、审计。
+  - 已完成：统一执行入口、异常收敛、调用审计、请求/响应脱敏、日志脱敏。
+  - 未完成：参数 schema 校验、工具级超时、重试策略、权限分级、人工确认。
+- [x] SSE 增加步骤级事件，前端展示执行进度。
+- [x] 修复工具异常或 SSE 流结束后前端残留 loading 的问题。
+- [x] 修复 SSE 异步响应完成后触发 Spring Security 二次拦截的问题。
 
 验收标准：
 
-- 任意工具失败都能返回明确 `error` 或步骤失败事件。
-- 每次排查可在数据库中回放。
-- 前端不会因为 SSE 未正常关闭而残留 loading。
+- [x] 任意工具失败都能返回明确步骤失败事件。
+- [ ] 每次排查可在数据库中完整回放。
+  - 当前只能回放工具调用审计，缺少 Run、Step、Evidence。
+- [x] 前端不会因为 SSE 未正常关闭而残留 loading。
 
 #### P1：接入真实数据源
 
@@ -1470,12 +1508,13 @@ Skill 步骤参数应支持引用：
 
 ### 10.14 推荐下一步
 
-建议下一轮优先做 P0，不急着继续增加日志或 CMDB API：
+P0 第一批能力已经完成。下一轮建议继续补齐 P0 剩余闭环，再进入 P1 数据源接入：
 
-1. 先定义 `ToolResult` 和 `ToolGateway`。
-2. 新增 Agent Run/Step/Invocation/Evidence 表。
-3. 改造现有 `knowledge_search`、`zabbix_query`、`search_logs`、`query_metrics` 走统一网关。
-4. SSE 改为步骤级事件。
-5. 前端展示排查步骤和工具结果。
+1. 新增 `agent_runs`、`agent_steps`、`agent_evidence`，把一次排查从会话消息升级为可回放的运行记录。
+2. 为 `ToolGateway` 补参数 schema 校验、工具级超时、重试策略、权限分级和人工确认。
+3. 增加 Incident Context 抽取，先从用户输入中解析 `service/env/timeRange/symptom`。
+4. 接入 CMDB 查询服务实例、日志索引、监控模板，用 CMDB 输出自动补齐 `query_metrics`、`search_logs` 参数。
+5. 给 Milvus/知识检索增加超时、降级和失败事件，避免外部向量库抖动拖慢整个 SSE。
+6. 再进入 Tool Registry 和前端 Tool/Skill 管理，实现 HTTP Tool 热插拔和 Skill dry-run 审核。
 
 这一步完成后，再接 CMDB、日志和监控会更稳，也更容易排查线上问题。
