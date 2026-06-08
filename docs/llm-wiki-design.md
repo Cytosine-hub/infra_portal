@@ -1645,7 +1645,7 @@ Lint 面板：
 | 查询融合粗糙 | 高质量页面排序不稳定，回答质量波动 | 分数归一化、精确匹配提权、向量/FULLTEXT 独立容错 |
 | 图谱全量重算 | 页面增长后接口变慢，前端卡顿 | 缓存 + 过滤参数 + 节点上限 + 变更失效 |
 | 导入包被篡改或含敏感信息 | 内外网摆渡存在合规风险 | manifest hash 清单 + 签名校验 + 敏感扫描 + dry-run |
-| 长文档字符切分破坏语义 | 页面重复、断章、冲突误判 | 按标题/段落切分 + chunk 来源范围 + PARTIAL 状态 |
+| 长文档缺少目录覆盖率门禁 | 页面过少、章节遗漏、安装/注册/配置等关键内容未生成 Wiki | 详见 `docs/wiki-ingest-quality-optimization-plan.md`：文档目录盘点 + Map-Reduce 编译 + 覆盖率质量门禁 |
 | 弱模型查询效果差 | 回答不完整或误读 Wiki | 查询读编译页面，必要时升级模型；无证据时禁止编造 |
 | Research 自动引入不可信知识 | 外部内容污染内部知识库 | Research 只产 DRAFT，来源可信度和人工审核必需 |
 
@@ -1658,3 +1658,9 @@ Lint 面板：
 | llm-wiki-agent（Agent Skill） | https://github.com/SamurAIGPT/llm-wiki-agent |
 | Chain-of-Thought 论文 | https://arxiv.org/abs/2201.11903 |
 | Louvain 社区检测算法 | https://en.wikipedia.org/wiki/Louvain_method |
+
+## 12. 质量专项方案
+
+针对实际文档编译质量偏低、安装指南章节遗漏、图谱社区同名重复的问题，新增专项优化方案：
+
+- [Wiki 文档编译质量优化方案](wiki-ingest-quality-optimization-plan.md)
