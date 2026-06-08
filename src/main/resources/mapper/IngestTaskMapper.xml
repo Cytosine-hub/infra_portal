@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.wiki.repository.IngestTaskMapper">
 
-    <resultMap id="taskResultMap" type="com.middleware.manager.wiki.entity.IngestTask">
+    <resultMap id="taskResultMap" type="IngestTask">
         <id property="id" column="id"/>
         <result property="sourceId" column="source_id"/>
         <result property="fileName" column="file_name"/>

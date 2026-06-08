@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.repository.StandardParameterMapper">
-    <select id="findById" resultType="com.middleware.manager.domain.StandardParameter">SELECT * FROM standard_parameters WHERE id = #{id}</select>
-    <select id="findByActiveTrueOrderByCategoryAscCodeAsc" resultType="com.middleware.manager.domain.StandardParameter">SELECT * FROM standard_parameters WHERE active = true ORDER BY category ASC, code ASC</select>
-    <select id="findByStandardDocumentIdAndActiveTrueOrderByCategoryAscCodeAsc" resultType="com.middleware.manager.domain.StandardParameter">SELECT * FROM standard_parameters WHERE standard_document_id = #{standardDocumentId} AND active = true ORDER BY category ASC, code ASC</select>
-    <select id="findByParameterStandardIdAndActiveTrueOrderByCategoryAscCodeAsc" resultType="com.middleware.manager.domain.StandardParameter">SELECT * FROM standard_parameters WHERE parameter_standard_id = #{parameterStandardId} AND active = true ORDER BY category ASC, code ASC</select>
+    <select id="findById" resultType="StandardParameter">SELECT * FROM standard_parameters WHERE id = #{id}</select>
+    <select id="findByActiveTrueOrderByCategoryAscCodeAsc" resultType="StandardParameter">SELECT * FROM standard_parameters WHERE active = true ORDER BY category ASC, code ASC</select>
+    <select id="findByStandardDocumentIdAndActiveTrueOrderByCategoryAscCodeAsc" resultType="StandardParameter">SELECT * FROM standard_parameters WHERE standard_document_id = #{standardDocumentId} AND active = true ORDER BY category ASC, code ASC</select>
+    <select id="findByParameterStandardIdAndActiveTrueOrderByCategoryAscCodeAsc" resultType="StandardParameter">SELECT * FROM standard_parameters WHERE parameter_standard_id = #{parameterStandardId} AND active = true ORDER BY category ASC, code ASC</select>
     <select id="existsByStandardDocumentIdAndCodeIgnoreCase" resultType="boolean">SELECT COUNT(*) > 0 FROM standard_parameters WHERE standard_document_id = #{standardDocumentId} AND LOWER(code) = LOWER(#{code})</select>
     <select id="existsByParameterStandardIdAndCodeIgnoreCase" resultType="boolean">SELECT COUNT(*) > 0 FROM standard_parameters WHERE parameter_standard_id = #{parameterStandardId} AND LOWER(code) = LOWER(#{code})</select>
-    <select id="findByStandardDocumentIdAndCodeIgnoreCase" resultType="com.middleware.manager.domain.StandardParameter">SELECT * FROM standard_parameters WHERE standard_document_id = #{standardDocumentId} AND LOWER(code) = LOWER(#{code})</select>
-    <select id="findByParameterStandardIdAndCodeIgnoreCase" resultType="com.middleware.manager.domain.StandardParameter">SELECT * FROM standard_parameters WHERE parameter_standard_id = #{parameterStandardId} AND LOWER(code) = LOWER(#{code})</select>
-    <select id="findWithFilter" resultType="com.middleware.manager.domain.StandardParameter">
+    <select id="findByStandardDocumentIdAndCodeIgnoreCase" resultType="StandardParameter">SELECT * FROM standard_parameters WHERE standard_document_id = #{standardDocumentId} AND LOWER(code) = LOWER(#{code})</select>
+    <select id="findByParameterStandardIdAndCodeIgnoreCase" resultType="StandardParameter">SELECT * FROM standard_parameters WHERE parameter_standard_id = #{parameterStandardId} AND LOWER(code) = LOWER(#{code})</select>
+    <select id="findWithFilter" resultType="StandardParameter">
         SELECT * FROM standard_parameters
         <where>
             <if test="standardDocumentId != null">AND standard_document_id = #{standardDocumentId}</if>

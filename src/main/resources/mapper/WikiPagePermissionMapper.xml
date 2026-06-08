@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.wiki.repository.WikiPagePermissionMapper">
 
-    <resultMap id="permissionResultMap" type="com.middleware.manager.wiki.entity.WikiPagePermission">
+    <resultMap id="permissionResultMap" type="WikiPagePermission">
         <id property="id" column="id"/>
         <result property="pageId" column="page_id"/>
         <result property="permissionType" column="permission_type"/>

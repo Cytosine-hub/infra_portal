@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.wiki.repository.LintResultMapper">
 
-    <resultMap id="lintResultMap" type="com.middleware.manager.wiki.entity.LintResult">
+    <resultMap id="lintResultMap" type="LintResult">
         <id property="id" column="id"/>
         <result property="lintType" column="lint_type"/>
         <result property="pageId" column="page_id"/>

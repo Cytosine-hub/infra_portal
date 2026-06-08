@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.wiki.repository.WikiIngestLogMapper">
 
-    <resultMap id="wikiIngestLogResultMap" type="com.middleware.manager.wiki.entity.WikiIngestLog">
+    <resultMap id="wikiIngestLogResultMap" type="WikiIngestLog">
         <id property="id" column="id"/>
         <result property="sourceId" column="source_id"/>
         <result property="operatorId" column="operator_id"/>

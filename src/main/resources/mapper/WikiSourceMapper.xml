@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.wiki.repository.WikiSourceMapper">
 
-    <resultMap id="wikiSourceResultMap" type="com.middleware.manager.wiki.entity.WikiSource">
+    <resultMap id="wikiSourceResultMap" type="WikiSource">
         <id property="id" column="id"/>
         <result property="title" column="title"/>
         <result property="sourceType" column="source_type"/>

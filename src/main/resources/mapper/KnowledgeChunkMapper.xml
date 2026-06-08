@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.knowledge.repository.KnowledgeChunkMapper">
 
-    <resultMap id="chunkResultMap" type="com.middleware.manager.knowledge.entity.KnowledgeChunk">
+    <resultMap id="chunkResultMap" type="KnowledgeChunk">
         <id property="id" column="id"/>
         <result property="content" column="content"/>
         <result property="sourceTitle" column="source_title"/>

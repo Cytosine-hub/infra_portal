@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.repository.StandardDocumentMapper">
-    <select id="findById" resultType="com.middleware.manager.domain.StandardDocument">SELECT * FROM standard_documents WHERE id = #{id}</select>
-    <select id="findByDocumentTypeAndStatusOrderByPublishedAtDescUpdatedAtDesc" resultType="com.middleware.manager.domain.StandardDocument">SELECT * FROM standard_documents WHERE document_type = #{documentType} AND status = #{status} ORDER BY published_at DESC, updated_at DESC</select>
-    <select id="findByRelatedStandardDocumentIdAndStatusOrderByPublishedAtDescUpdatedAtDesc" resultType="com.middleware.manager.domain.StandardDocument">SELECT * FROM standard_documents WHERE related_standard_document_id = #{relatedStandardDocumentId} AND status = #{status} ORDER BY published_at DESC, updated_at DESC</select>
-    <select id="findByRelatedStandardDocumentId" resultType="com.middleware.manager.domain.StandardDocument">SELECT * FROM standard_documents WHERE related_standard_document_id = #{relatedStandardDocumentId}</select>
-    <select id="findByStatusOrderByCategoryAscPublishedAtDesc" resultType="com.middleware.manager.domain.StandardDocument">SELECT * FROM standard_documents WHERE status = #{status} ORDER BY category ASC, published_at DESC</select>
-    <select id="findByStatusInOrderByUpdatedAtDesc" resultType="com.middleware.manager.domain.StandardDocument">SELECT * FROM standard_documents WHERE status IN <foreach collection="statuses" item="s" open="(" separator="," close=")">#{s}</foreach> ORDER BY updated_at DESC</select>
-    <select id="findWithFilter" resultType="com.middleware.manager.domain.StandardDocument">
+    <select id="findById" resultType="StandardDocument">SELECT * FROM standard_documents WHERE id = #{id}</select>
+    <select id="findByDocumentTypeAndStatusOrderByPublishedAtDescUpdatedAtDesc" resultType="StandardDocument">SELECT * FROM standard_documents WHERE document_type = #{documentType} AND status = #{status} ORDER BY published_at DESC, updated_at DESC</select>
+    <select id="findByRelatedStandardDocumentIdAndStatusOrderByPublishedAtDescUpdatedAtDesc" resultType="StandardDocument">SELECT * FROM standard_documents WHERE related_standard_document_id = #{relatedStandardDocumentId} AND status = #{status} ORDER BY published_at DESC, updated_at DESC</select>
+    <select id="findByRelatedStandardDocumentId" resultType="StandardDocument">SELECT * FROM standard_documents WHERE related_standard_document_id = #{relatedStandardDocumentId}</select>
+    <select id="findByStatusOrderByCategoryAscPublishedAtDesc" resultType="StandardDocument">SELECT * FROM standard_documents WHERE status = #{status} ORDER BY category ASC, published_at DESC</select>
+    <select id="findByStatusInOrderByUpdatedAtDesc" resultType="StandardDocument">SELECT * FROM standard_documents WHERE status IN <foreach collection="statuses" item="s" open="(" separator="," close=")">#{s}</foreach> ORDER BY updated_at DESC</select>
+    <select id="findWithFilter" resultType="StandardDocument">
         SELECT * FROM standard_documents
         <where>
             <if test="keyword != null and keyword != ''">AND (title LIKE CONCAT('%',#{keyword},'%') OR summary LIKE CONCAT('%',#{keyword},'%') OR category LIKE CONCAT('%',#{keyword},'%') OR software LIKE CONCAT('%',#{keyword},'%'))</if>

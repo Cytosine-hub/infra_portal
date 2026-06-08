@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.wiki.repository.WikiLinkMapper">
 
-    <resultMap id="wikiLinkResultMap" type="com.middleware.manager.wiki.entity.WikiLink">
+    <resultMap id="wikiLinkResultMap" type="WikiLink">
         <id property="id" column="id"/>
         <result property="fromPageId" column="from_page_id"/>
         <result property="toPageId" column="to_page_id"/>

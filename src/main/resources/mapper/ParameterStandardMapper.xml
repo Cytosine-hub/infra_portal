@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.repository.ParameterStandardMapper">
-    <select id="findById" resultType="com.middleware.manager.domain.ParameterStandard">SELECT * FROM parameter_standards WHERE id = #{id}</select>
-    <select id="findByStatusOrderByCreatedAtDesc" resultType="com.middleware.manager.domain.ParameterStandard">SELECT * FROM parameter_standards WHERE status = #{status} ORDER BY created_at DESC</select>
-    <select id="findByStatusInOrderByPublishedAtDesc" resultType="com.middleware.manager.domain.ParameterStandard">SELECT * FROM parameter_standards WHERE status IN <foreach collection="statuses" item="s" open="(" separator="," close=")">#{s}</foreach> ORDER BY published_at DESC</select>
-    <select id="findAllByOrderByCreatedAtDesc" resultType="com.middleware.manager.domain.ParameterStandard">SELECT * FROM parameter_standards ORDER BY created_at DESC</select>
-    <select id="findWithFilter" resultType="com.middleware.manager.domain.ParameterStandard">
+    <select id="findById" resultType="ParameterStandard">SELECT * FROM parameter_standards WHERE id = #{id}</select>
+    <select id="findByStatusOrderByCreatedAtDesc" resultType="ParameterStandard">SELECT * FROM parameter_standards WHERE status = #{status} ORDER BY created_at DESC</select>
+    <select id="findByStatusInOrderByPublishedAtDesc" resultType="ParameterStandard">SELECT * FROM parameter_standards WHERE status IN <foreach collection="statuses" item="s" open="(" separator="," close=")">#{s}</foreach> ORDER BY published_at DESC</select>
+    <select id="findAllByOrderByCreatedAtDesc" resultType="ParameterStandard">SELECT * FROM parameter_standards ORDER BY created_at DESC</select>
+    <select id="findWithFilter" resultType="ParameterStandard">
         SELECT * FROM parameter_standards
         <where>
             <if test="keyword != null and keyword != ''">AND (title LIKE CONCAT('%',#{keyword},'%') OR category LIKE CONCAT('%',#{keyword},'%') OR software LIKE CONCAT('%',#{keyword},'%') OR software_version LIKE CONCAT('%',#{keyword},'%'))</if>

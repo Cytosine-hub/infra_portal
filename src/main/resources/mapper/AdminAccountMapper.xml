@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.repository.AdminAccountMapper">
-    <select id="findById" resultType="com.middleware.manager.domain.AdminAccount">SELECT * FROM admin_accounts WHERE id = #{id}</select>
-    <select id="findByUsername" resultType="com.middleware.manager.domain.AdminAccount">SELECT * FROM admin_accounts WHERE username = #{username}</select>
-    <select id="findAllByOrderByCreatedAtAsc" resultType="com.middleware.manager.domain.AdminAccount">SELECT * FROM admin_accounts ORDER BY created_at ASC</select>
+    <select id="findById" resultType="AdminAccount">SELECT * FROM admin_accounts WHERE id = #{id}</select>
+    <select id="findByUsername" resultType="AdminAccount">SELECT * FROM admin_accounts WHERE username = #{username}</select>
+    <select id="findAllByOrderByCreatedAtAsc" resultType="AdminAccount">SELECT * FROM admin_accounts ORDER BY created_at ASC</select>
     <select id="countByRole" resultType="long">SELECT COUNT(*) FROM admin_accounts WHERE role = #{role}</select>
     <select id="count" resultType="long">SELECT COUNT(*) FROM admin_accounts</select>
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">INSERT INTO admin_accounts (username, display_name, password_hash, role, created_at, updated_at) VALUES (#{username}, #{displayName}, #{passwordHash}, #{role}, #{createdAt}, #{updatedAt})</insert>

@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.repository.ReleaseAssetMapper">
-    <select id="findById" resultType="com.middleware.manager.domain.ReleaseAsset">SELECT * FROM release_assets WHERE id = #{id}</select>
-    <select id="findByDownloadTokenAndPublishedTrue" resultType="com.middleware.manager.domain.ReleaseAsset">SELECT * FROM release_assets WHERE download_token = #{downloadToken} AND published = true</select>
+    <select id="findById" resultType="ReleaseAsset">SELECT * FROM release_assets WHERE id = #{id}</select>
+    <select id="findByDownloadTokenAndPublishedTrue" resultType="ReleaseAsset">SELECT * FROM release_assets WHERE download_token = #{downloadToken} AND published = true</select>
     <select id="existsByStoredFileNameIgnoreCase" resultType="boolean">SELECT COUNT(*) > 0 FROM release_assets WHERE LOWER(stored_file_name) = LOWER(#{storedFileName})</select>
     <select id="existsBySoftwareTypeId" resultType="boolean">SELECT COUNT(*) > 0 FROM release_assets WHERE software_type_id = #{softwareTypeId}</select>
     <select id="existsByMiddlewareNameIgnoreCaseAndVersionIgnoreCaseAndOriginalFileNameIgnoreCase" resultType="boolean">SELECT COUNT(*) > 0 FROM release_assets WHERE LOWER(middleware_name) = LOWER(#{middlewareName}) AND LOWER(version) = LOWER(#{version}) AND LOWER(original_file_name) = LOWER(#{originalFileName})</select>
-    <select id="findWithFilter" resultType="com.middleware.manager.domain.ReleaseAsset">
+    <select id="findWithFilter" resultType="ReleaseAsset">
         SELECT ra.* FROM release_assets ra
         <if test="category != null and category != ''">
             INNER JOIN software_types st ON ra.software_type_id = st.id
@@ -32,10 +32,10 @@
     <update id="update">
         UPDATE release_assets SET middleware_name=#{middlewareName}, software_type_id=#{softwareTypeId}, version=#{version}, platform=#{platform}, description=#{description}, released_at=#{releasedAt}, published=#{published}, download_token=#{downloadToken}, original_file_name=#{originalFileName}, stored_file_name=#{storedFileName}, content_type=#{contentType}, file_size=#{fileSize}, standard_document_id=#{standardDocumentId}, standard_package=#{standardPackage}, parameter_standard_id=#{parameterStandardId}, package_status=#{packageStatus}, package_error=#{packageError}, updated_at=#{updatedAt} WHERE id=#{id}
     </update>
-    <select id="findByParameterStandardId" resultType="com.middleware.manager.domain.ReleaseAsset">
+    <select id="findByParameterStandardId" resultType="ReleaseAsset">
         SELECT * FROM release_assets WHERE parameter_standard_id = #{parameterStandardId} AND standard_package = true
     </select>
-    <select id="findByMiddlewareNameAndOriginalFileNameAndPublishedTrue" resultType="com.middleware.manager.domain.ReleaseAsset">
+    <select id="findByMiddlewareNameAndOriginalFileNameAndPublishedTrue" resultType="ReleaseAsset">
         SELECT * FROM release_assets WHERE LOWER(middleware_name) = LOWER(#{middlewareName}) AND LOWER(original_file_name) = LOWER(#{originalFileName}) AND published = true LIMIT 1
     </select>
     <delete id="deleteById">DELETE FROM release_assets WHERE id=#{id}</delete>

@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.knowledge.agent.ChatMessageMapper">
 
-    <resultMap id="messageResultMap" type="com.middleware.manager.knowledge.agent.ChatMessage">
+    <resultMap id="messageResultMap" type="ChatMessage">
         <id property="id" column="id"/>
         <result property="sessionId" column="session_id"/>
         <result property="role" column="role"/>

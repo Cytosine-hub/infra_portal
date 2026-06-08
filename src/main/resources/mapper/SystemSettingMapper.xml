@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.middleware.manager.repository.SystemSettingMapper">
-    <select id="findByKey" resultType="com.middleware.manager.domain.SystemSetting">
+    <select id="findByKey" resultType="SystemSetting">
         SELECT setting_key AS settingKey, setting_value AS settingValue, description, updated_at AS updatedAt
         FROM system_settings WHERE setting_key = #{key}
     </select>
 
-    <select id="findAll" resultType="com.middleware.manager.domain.SystemSetting">
+    <select id="findAll" resultType="SystemSetting">
         SELECT setting_key AS settingKey, setting_value AS settingValue, description, updated_at AS updatedAt
         FROM system_settings ORDER BY setting_key
     </select>
