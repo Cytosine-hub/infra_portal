@@ -1220,7 +1220,177 @@ SSE 事件建议：
 
 前端收到 `final/error/completed` 任一事件后必须清理 loading 状态。
 
-### 10.11 安全和合规要求
+### 10.11 前端 Tool / Skill 管理设计
+
+为了让运维人员可以在前端页面新增 Tool 和 Skill，建议把当前 Diagnostics 页里的 Skill 管理升级为独立的“Agent 能力中心”。它不只是 YAML 编辑器，而是面向生产排查能力的配置、测试、审核和发布入口。
+
+#### 10.11.1 页面结构
+
+建议新增或拆分以下页面：
+
+| 页面 | 用途 | 主要用户 |
+|------|------|----------|
+| `Tool 管理` | 注册、测试、启停外部 Tool | 系统管理员、专业管理员 |
+| `Skill 编排` | 用可视化步骤编排排查流程 | 专业管理员 |
+| `发布审核` | 审核 Tool / Skill 变更 | 系统管理员、分类管理员 |
+| `运行记录` | 查看 Agent Run、Step、Tool 调用和证据 | 运维人员、管理员 |
+| `能力市场` | 查看已启用 Tool 和 Skill，支持复制为新版本 | 全部登录用户只读 |
+
+#### 10.11.2 Tool 管理表单
+
+Tool 新增不应要求写 Java 代码。前端优先支持 HTTP Tool，后续再支持 MCP Tool 和受控 Script Tool。
+
+Tool 表单字段：
+
+| 字段 | 说明 |
+|------|------|
+| `name` | 工具唯一名，如 `query_loki_logs` |
+| `displayName` | 页面展示名 |
+| `version` | 版本号 |
+| `executorType` | `HTTP` / `MCP` / `SCRIPT` / `JAVA` |
+| `description` | 给 LLM 和管理员看的说明 |
+| `permissionLevel` | `READ_PUBLIC` / `READ_INTERNAL` / `READ_SENSITIVE` / `WRITE_SAFE` / `WRITE_RISKY` |
+| `endpoint` | HTTP Tool 的 URL |
+| `method` | `GET` / `POST` |
+| `authType` | `NONE` / `BASIC` / `BEARER` / `HEADER` |
+| `timeoutMs` | 超时时间 |
+| `retryPolicy` | 重试次数和退避 |
+| `inputSchema` | JSON Schema，生成动态参数表单 |
+| `outputSchema` | JSON Schema，约束工具输出 |
+| `requestTemplate` | 请求模板，引用输入参数 |
+| `responseMapping` | 响应映射，提取 summary/data/evidence |
+| `maskRules` | 敏感字段脱敏规则 |
+| `enabled` | 是否启用 |
+
+HTTP Tool 示例：
+
+```yaml
+name: query_loki_logs
+displayName: Loki 日志查询
+version: 1.0.0
+executorType: HTTP
+permissionLevel: READ_SENSITIVE
+endpoint: https://loki.example.com/loki/api/v1/query_range
+method: GET
+timeoutMs: 10000
+inputSchema:
+  type: object
+  required: [service, query, timeRange]
+  properties:
+    service:
+      type: string
+      title: 服务名
+    query:
+      type: string
+      title: 查询关键字
+    timeRange:
+      type: string
+      title: 时间范围
+      default: 1h
+requestTemplate:
+  query: '{service="{{service}}"} |= "{{query}}"'
+  limit: 100
+responseMapping:
+  summary: "$.data.result[*].stream"
+  records: "$.data.result[*].values"
+maskRules:
+  - field: records
+    pattern: "(?i)(password|token|secret)=\\S+"
+```
+
+#### 10.11.3 Tool 测试与发布流程
+
+前端保存 Tool 之前必须提供 dry-run：
+
+1. 管理员填写 Tool 基本信息和 schema。
+2. 点击“测试调用”，前端根据 `inputSchema` 生成参数表单。
+3. 后端通过 ToolGateway 执行 dry-run，返回结构化 `ToolResult`。
+4. 页面展示请求摘要、响应摘要、脱敏后原始响应、耗时和错误码。
+5. 通过 dry-run 后才能提交审核。
+6. 审核通过后状态从 `DRAFT` 变为 `ACTIVE`。
+
+Tool 状态机：
+
+```text
+DRAFT -> TESTED -> PENDING_REVIEW -> ACTIVE
+   |         |             |
+   v         v             v
+FAILED    DISABLED      REJECTED
+```
+
+#### 10.11.4 Skill 可视化编排器
+
+Skill 不建议继续只暴露 YAML。前端应提供步骤编排器：
+
+- 左侧：可用 Tool 列表，按 CMDB、监控、日志、知识库、自动化分类。
+- 中间：排查流程画布或步骤列表。
+- 右侧：当前步骤参数配置。
+- 底部：dry-run、保存草稿、提交审核、发布、回滚。
+
+步骤类型：
+
+| 类型 | 用途 |
+|------|------|
+| `TOOL` | 调用 ToolRegistry 中的工具 |
+| `PROMPT` | 基于前面证据做 LLM 总结 |
+| `ASK_USER` | 缺少参数时向用户追问 |
+| `CONDITION` | 根据上一步结果分支 |
+| `APPROVAL` | 高风险操作前人工确认 |
+
+Skill 步骤参数应支持引用：
+
+```text
+{{input.service}}                  用户输入
+{{context.env}}                    CMDB 补齐上下文
+{{steps.query_cpu_metric.max}}     上一步工具结果
+{{evidence.logs.errorCount}}       证据摘要
+```
+
+#### 10.11.5 Skill 校验规则
+
+提交 Skill 前必须校验：
+
+- 名称、版本、owner、适用分类不能为空。
+- 所有引用的 Tool 必须存在且已启用。
+- 所有 Tool 参数必须满足 `inputSchema`。
+- `{{...}}` 引用必须可解析，或标记为运行时必填。
+- 高风险 Tool 前必须有 `APPROVAL` 步骤。
+- 最终必须有 `PROMPT` 或 `SUMMARY` 步骤。
+- dry-run 必须至少覆盖一个样例输入。
+
+#### 10.11.6 前端接口建议
+
+建议新增 API：
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/ops-agent/tools` | 查询 Tool 列表 |
+| `POST` | `/api/ops-agent/tools` | 新建 Tool 草稿 |
+| `PUT` | `/api/ops-agent/tools/{name}` | 更新 Tool 草稿 |
+| `POST` | `/api/ops-agent/tools/{name}/dry-run` | Tool 测试调用 |
+| `POST` | `/api/ops-agent/tools/{name}/submit` | 提交审核 |
+| `POST` | `/api/ops-agent/tools/{name}/approve` | 审核通过 |
+| `POST` | `/api/ops-agent/tools/{name}/disable` | 禁用 Tool |
+| `GET` | `/api/ops-agent/skills` | 查询 Skill 列表 |
+| `POST` | `/api/ops-agent/skills` | 新建 Skill 草稿 |
+| `PUT` | `/api/ops-agent/skills/{name}/versions/{version}` | 更新 Skill 版本 |
+| `POST` | `/api/ops-agent/skills/{name}/dry-run` | Skill 测试运行 |
+| `POST` | `/api/ops-agent/skills/{name}/submit` | 提交审核 |
+| `POST` | `/api/ops-agent/skills/{name}/approve` | 审核通过 |
+| `POST` | `/api/ops-agent/skills/{name}/rollback` | 回滚版本 |
+
+#### 10.11.7 前端权限
+
+| 能力 | 普通用户 | 专业管理员 | 系统管理员 |
+|------|----------|------------|------------|
+| 查看 Tool / Skill | 允许 | 允许 | 允许 |
+| dry-run 只读 Tool | 禁止 | 允许 | 允许 |
+| 新建/编辑 Skill 草稿 | 禁止 | 允许本分类 | 允许全部 |
+| 新建/编辑 Tool 草稿 | 禁止 | 允许本分类只读 Tool | 允许全部 |
+| 发布审核 | 禁止 | 允许本分类 | 允许全部 |
+| 高风险 Tool | 禁止 | 提交审批 | 审批后执行 |
+
+### 10.12 安全和合规要求
 
 工具权限分级：
 
@@ -1242,7 +1412,7 @@ SSE 事件建议：
 - 高风险操作二次确认。
 - Prompt Injection 检测和工具指令隔离。
 
-### 10.12 分阶段实施路线
+### 10.13 分阶段实施路线
 
 #### P0：稳定和可观测
 
@@ -1276,12 +1446,14 @@ SSE 事件建议：
 - 支持 HTTP Tool 热注册。
 - Skill 支持版本、启停、审核、dry-run 和回滚。
 - 前端 Skill 编辑器改为工具选择 + 参数表单。
+- 前端 Tool 管理支持 HTTP Tool 新增、测试、提交审核、启停。
 
 验收标准：
 
 - 新增一个 HTTP Tool 不需要重启后端。
 - 新增 Skill 必须通过 dry-run 才能启用。
 - 禁用 Skill 后不影响历史排查回放。
+- 管理员可以在前端新增一个只读 HTTP Tool，并在 Skill 编排器中引用它完成 dry-run。
 
 #### P3：智能规划和经验沉淀
 
@@ -1296,7 +1468,7 @@ SSE 事件建议：
 - 最终回答包含根因候选、证据、置信度和下一步动作。
 - 经验沉淀必须经过人工审核。
 
-### 10.13 推荐下一步
+### 10.14 推荐下一步
 
 建议下一轮优先做 P0，不急着继续增加日志或 CMDB API：
 
