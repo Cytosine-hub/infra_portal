@@ -403,7 +403,7 @@ onBeforeUnmount(destroyScrollSpy)
 .doc-card-meta { font-size: var(--text-xs); color: var(--color-text-tertiary); }
 .doc-empty-hint { padding: var(--space-md) 0; }
 .public-word-container {
-  flex: 1; overflow-y: auto; background: var(--color-bg-secondary);
+  background: var(--color-bg-secondary);
   border-radius: var(--radius-md); min-height: 400px;
 }
 .public-word-container :deep(.docx-render) {
