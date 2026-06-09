@@ -362,9 +362,10 @@ onMounted(() => {
 /* ── body ── */
 .editor-body {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .editor-pane,
@@ -372,6 +373,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .editor-pane { border-right: 1px solid #e3e9f1; }
@@ -416,13 +419,26 @@ onMounted(() => {
 .preview-content {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 14px 18px;
   border: none;
   border-radius: 0;
-  max-height: none;
-  background: #fafbfc;
+  background: var(--color-bg-secondary);
   line-height: 1.85;
-  font-size: 14px;
+  font-size: var(--text-base);
+  word-break: break-word;
+}
+.preview-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 8px 0;
+  border-radius: var(--radius-sm);
+}
+.preview-content :deep(table) {
+  max-width: 100%;
+  overflow-x: auto;
+  display: block;
 }
 
 /* ── meta dialog ── */
