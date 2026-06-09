@@ -28,7 +28,8 @@
     <div class="editor-body">
       <div class="editor-pane">
         <div class="pane-label">Markdown</div>
-        <textarea class="editor-textarea" v-model="documentForm.content" :disabled="!documentForm.canEdit" :placeholder="documentForm.canEdit ? '使用 Markdown 编写文档内容，支持 {{参数名}} 占位符，可直接粘贴图片' : '当前状态不可编辑'" @input="onContentChange" @keydown="onEditorKeydown" @paste="onEditorPaste"></textarea>
+        <MarkdownToolbar :textarea="editorRef" :disabled="!documentForm.canEdit" />
+        <textarea ref="editorRef" class="editor-textarea" v-model="documentForm.content" :disabled="!documentForm.canEdit" :placeholder="documentForm.canEdit ? '使用 Markdown 编写文档内容，支持 {{参数名}} 占位符，可直接粘贴图片' : '当前状态不可编辑'" @input="onContentChange" @keydown="onEditorKeydown" @paste="onEditorPaste"></textarea>
       </div>
       <div class="preview-pane">
         <div class="pane-label">预览</div>
@@ -83,12 +84,14 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { request } from '../api'
 import MarkdownHelp from './MarkdownHelp.vue'
+import MarkdownToolbar from './MarkdownToolbar.vue'
 import { handleEditorKeydown, handleEditorPaste } from '../editor-utils'
 
 const onEditorKeydown = handleEditorKeydown
 const onEditorPaste = (e) => handleEditorPaste(e, (msg) => props.notify(msg, 'error'))
 
 const showHelp = ref(false)
+const editorRef = ref(null)
 
 const props = defineProps({
   auth: { type: Object, required: true },

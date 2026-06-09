@@ -1,6 +1,6 @@
 import { request } from './api'
 
-function insertAtCursor(textarea, text) {
+export function insertAtCursor(textarea, text) {
   const start = textarea.selectionStart
   const end = textarea.selectionEnd
   textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end)

@@ -25,7 +25,8 @@
     <div class="editor-body">
       <div class="editor-pane">
         <div class="pane-label">Markdown</div>
-        <textarea class="editor-textarea" v-model="form.content" placeholder="使用 Markdown 编写文章内容...可直接粘贴图片" @input="onContentChange" @keydown="onEditorKeydown" @paste="onEditorPaste"></textarea>
+        <MarkdownToolbar :textarea="editorRef" />
+        <textarea ref="editorRef" class="editor-textarea" v-model="form.content" placeholder="使用 Markdown 编写文章内容...可直接粘贴图片" @input="onContentChange" @keydown="onEditorKeydown" @paste="onEditorPaste"></textarea>
       </div>
       <div class="preview-pane">
         <div class="pane-label">预览</div>
@@ -40,12 +41,14 @@
 import { onMounted, reactive, ref, watch } from 'vue'
 import { request } from '../api'
 import MarkdownHelp from './MarkdownHelp.vue'
+import MarkdownToolbar from './MarkdownToolbar.vue'
 import { handleEditorKeydown, handleEditorPaste } from '../editor-utils'
 
 const onEditorKeydown = handleEditorKeydown
 const onEditorPaste = handleEditorPaste
 
 const showHelp = ref(false)
+const editorRef = ref(null)
 
 const props = defineProps({ auth: Object, postId: [String, Number], markdown: Object, notify: { type: Function, default: (msg, type) => type === 'error' ? alert(msg) : null } })
 const emit = defineEmits(['saved', 'cancel'])
