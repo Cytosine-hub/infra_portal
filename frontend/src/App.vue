@@ -47,11 +47,17 @@
       <WordPreview
         v-else-if="route.name === 'wordPreview' && uploadResult?.storedFileName"
         :stored-file-name="uploadResult.storedFileName"
-        :title="uploadResult.title"
+        :doc-id="uploadResult.docId"
+        :is-new-doc="uploadResult.isNewDoc"
+        :initial-content="uploadResult.content"
+        :initial-title="uploadResult.title"
         :original-file-name="uploadResult.originalFileName"
+        :software-type-categories="softwareTypeCategories"
+        :software-types="softwareTypes"
+        :standard-document-options="allParameterStandards"
         :notify="notify"
         @back="onDocumentEditorCancel"
-        @editInfo="onWordPreviewEditInfo"
+        @saved="onWordPreviewSaved"
       />
       <template v-else>
       <HomePage
@@ -474,8 +480,9 @@ function openUploadAndEdit() {
   openUploadDialog()
 }
 
-function onWordPreviewEditInfo() {
-  goDocumentEditor()
+function onWordPreviewSaved() {
+  loadStandardDocuments()
+  onDocumentEditorCancel()
 }
 
 
@@ -488,7 +495,14 @@ function previewDocument(document) {
   }
 }
 function previewWordDocument(doc) {
-  uploadResult.value = { storedFileName: doc.storedFileName, title: doc.title, originalFileName: doc.originalFileName }
+  uploadResult.value = {
+    storedFileName: doc.storedFileName,
+    docId: doc.id,
+    isNewDoc: false,
+    title: doc.title,
+    originalFileName: doc.originalFileName,
+    content: doc.content || ''
+  }
   window.location.hash = HASH_WORD_PREVIEW
 }
 function closePreviewDocument() { selectedPreviewDocument.value = null }

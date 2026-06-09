@@ -12,6 +12,12 @@ import com.middleware.manager.web.api.dto.StandardDocumentRequest;
 import com.middleware.manager.web.api.dto.DocumentPreviewResponse;
 import com.middleware.manager.web.api.dto.DocumentUploadResponse;
 import com.middleware.manager.web.api.dto.StandardDocumentResponse;
+import org.springframework.core.io.PathResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,13 +31,21 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
+
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/admin/standard-documents")
 public class AdminStandardDocumentApiController {
+
+    private static final String DOCX_EXT = "docx";
+    private static final MediaType DOCX_MEDIA_TYPE =
+            MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document");
     private final StandardDocumentService service;
     private final DocumentConversionService conversionService;
     private final PermissionService permissionService;
@@ -79,6 +93,20 @@ public class AdminStandardDocumentApiController {
     public DocumentPreviewResponse preview(@RequestParam("storedFileName") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 255) String storedFileName) {
         String html = conversionService.renderAsHtml(storedFileName);
         return new DocumentPreviewResponse(html);
+    }
+
+    @GetMapping("/raw")
+    public ResponseEntity<Resource> raw(@RequestParam("storedFileName") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 255) String storedFileName) {
+        log.info("获取原始文档文件 storedFileName={}", storedFileName);
+        Path filePath = conversionService.getDocumentPath(storedFileName);
+        Resource resource = new PathResource(filePath);
+        int dot = storedFileName.lastIndexOf('.');
+        String ext = dot >= 0 ? storedFileName.substring(dot + 1).toLowerCase() : "";
+        MediaType mediaType = DOCX_EXT.equals(ext) ? DOCX_MEDIA_TYPE : MediaType.APPLICATION_OCTET_STREAM;
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(mediaType);
+        headers.setContentDisposition(ContentDisposition.inline().filename(storedFileName).build());
+        return ResponseEntity.ok().headers(headers).body(resource);
     }
 
     @PutMapping("/{id}")

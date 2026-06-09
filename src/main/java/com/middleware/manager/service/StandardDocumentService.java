@@ -309,8 +309,21 @@ public class StandardDocumentService {
             document.setSoftwareVersion(ps.getSoftwareVersion());
         }
 
-        document.setContent(requireText(request.getContent(), "文档内容不能为空"));
+        applyContentAndFile(document, request);
         document.setCode(trimToNull(request.getCode()));
+    }
+
+    private void applyContentAndFile(StandardDocument document, StandardDocumentRequest request) {
+        if (StringUtils.hasText(request.getStoredFileName())) {
+            document.setContent(request.getContent() != null ? request.getContent() : "");
+            document.setStoredFileName(trimToNull(request.getStoredFileName()));
+            document.setOriginalFileName(trimToNull(request.getOriginalFileName()));
+            log.debug("设置Word文档内容 storedFileName={}, originalFileName={}", document.getStoredFileName(), document.getOriginalFileName());
+        } else {
+            document.setContent(requireText(request.getContent(), "文档内容不能为空"));
+            document.setStoredFileName(null);
+            document.setOriginalFileName(null);
+        }
     }
 
     private String normalizeDocumentType(String documentType) {

@@ -92,3 +92,18 @@ export async function request(path, options = {}) {
   }
   return JSON.parse(text)
 }
+
+export async function fetchBinary(path) {
+  const token = localStorage.getItem(TOKEN_KEY)
+  const headers = new Headers()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const response = await fetch(path, { headers })
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearAuth()
+      window.dispatchEvent(new Event('auth:logout'))
+    }
+    throw new Error(`文件加载失败 (${response.status})`)
+  }
+  return response.arrayBuffer()
+}

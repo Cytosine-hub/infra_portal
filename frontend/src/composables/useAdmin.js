@@ -464,14 +464,11 @@ export function useAdmin(auth, notify, confirm) {
       fd.append('file', uploadFile.value)
       fd.append('convertToMarkdown', uploadConverting.value)
       const result = await request('/api/admin/standard-documents/upload', { method: 'POST', body: fd })
-      uploadResult.value = result
+      uploadResult.value = result.storedFileName
+        ? { ...result, isNewDoc: true, docId: null }
+        : result
       showUploadDialog.value = false
-      if (result.storedFileName) {
-        notify('文档已上传', 'success')
-      } else {
-        notify('文档已上传，请完善文档信息后保存', 'success')
-      }
-      // 直接导航，不依赖 watch/callback
+      notify('文档已上传，请完善文档信息后保存', 'success')
       await nextTick()
       window.location.hash = result.storedFileName ? HASH_WORD_PREVIEW : HASH_DOCUMENT_EDITOR
       return result

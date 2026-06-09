@@ -34,8 +34,13 @@ public class StandardDocumentRequest {
     @Size(max = 20)
     private String code;
 
-    @NotBlank
     private String content;
+
+    @Size(max = 255)
+    private String storedFileName;
+
+    @Size(max = 255)
+    private String originalFileName;
 
     public String getTitle() { return title; }
     public void setTitle(String title) { this.title = title; }
@@ -59,4 +64,8 @@ public class StandardDocumentRequest {
     public void setCode(String code) { this.code = code; }
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
+    public String getStoredFileName() { return storedFileName; }
+    public void setStoredFileName(String storedFileName) { this.storedFileName = storedFileName; }
+    public String getOriginalFileName() { return originalFileName; }
+    public void setOriginalFileName(String originalFileName) { this.originalFileName = originalFileName; }
 }

@@ -380,6 +380,26 @@ public class DocumentConversionService {
     }
 
     /**
+     * 获取存储的原始文档路径，用于直接下载/预览
+     * @param storedFileName 存储文件名（UUID.ext 格式）
+     * @return 文件路径
+     */
+    public Path getDocumentPath(String storedFileName) {
+        if (!storedFileName.matches("[a-f0-9\\-]+\\.[a-zA-Z0-9]+")) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.DOCUMENT_FORMAT_NOT_SUPPORTED);
+        }
+        Path filePath = documentsStoragePath.resolve(storedFileName).normalize();
+        if (!filePath.startsWith(documentsStoragePath)) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.DOCUMENT_FORMAT_NOT_SUPPORTED);
+        }
+        if (!Files.exists(filePath)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, ErrorMessages.DOCUMENT_NOT_FOUND);
+        }
+        log.debug("获取文档路径 storedFileName={}", storedFileName);
+        return filePath;
+    }
+
+    /**
      * 将存储的 Word 文档渲染为 HTML 用于预览
      * @param storedFileName 存储的文件名（UUID.ext 格式）
      * @return HTML 内容
