@@ -258,7 +258,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import { request } from './api'
 import { useAuth } from './composables/useAuth'
@@ -447,12 +447,15 @@ function openDetail(token) {
   window.location.hash = `#/downloads/${token}`
 }
 
+const HASH_WORD_PREVIEW = '#/admin/word-preview'
+const HASH_DOCUMENT_EDITOR = '#/admin/document-editor'
+
 function goDocumentEditor() {
-  window.location.hash = '#/admin/document-editor'
+  window.location.hash = HASH_DOCUMENT_EDITOR
 }
 
 function goDocumentEditorEdit(id) {
-  window.location.hash = `#/admin/document-editor/${id}`
+  window.location.hash = `${HASH_DOCUMENT_EDITOR}/${id}`
 }
 
 function onDocumentEditorSaved() {
@@ -464,20 +467,14 @@ function onDocumentEditorCancel() {
 }
 
 function openUploadAndEdit() {
-  openUploadDialog()
+  openUploadDialog((result) => {
+    if (result.storedFileName) {
+      window.location.hash = HASH_WORD_PREVIEW
+    } else {
+      goDocumentEditor()
+    }
+  })
 }
-
-// 监听上传结果，自动导航到对应页面
-watch(() => uploadResult.value, (result) => {
-  if (!result) return
-  if (result.storedFileName) {
-    // Word 文档未转换：跳转预览页
-    window.location.hash = '#/admin/word-preview'
-  } else {
-    // Markdown 或已转换：跳转编辑器
-    goDocumentEditor()
-  }
-})
 
 function onWordPreviewEditInfo() {
   goDocumentEditor()
