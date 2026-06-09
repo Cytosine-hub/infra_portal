@@ -55,7 +55,6 @@ export function useAdmin(auth, notify, confirm) {
   const uploadConverting = ref(true)
   const uploadLoading = ref(false)
   const uploadResult = ref(null)
-  let onUploadedCallback = null
 
   // 审核管理
   const selectedReview = ref(null)
@@ -445,7 +444,7 @@ export function useAdmin(auth, notify, confirm) {
   function applyMaintenanceDocumentFilters() { maintenanceDocumentFilters.page = 0 }
 
   // ── 文档上传 ──
-  function openUploadDialog(onUploaded) { uploadFile.value = null; uploadConverting.value = true; showUploadDialog.value = true; onUploadedCallback = onUploaded || null }
+  function openUploadDialog() { uploadFile.value = null; uploadConverting.value = true; showUploadDialog.value = true }
   function closeUploadDialog() { showUploadDialog.value = false; uploadFile.value = null }
   function handleUploadFileChange(e) { uploadFile.value = e.target.files[0] || null }
   async function uploadDocument() {
@@ -466,13 +465,10 @@ export function useAdmin(auth, notify, confirm) {
       uploadResult.value = result
       showUploadDialog.value = false
       if (result.storedFileName) {
-        // Word 文档未转换：跳转预览页
         notify('文档已上传', 'success')
       } else {
-        // Markdown 或已转换：跳转编辑器预填内容
         notify('文档已上传，请完善文档信息后保存', 'success')
       }
-      if (onUploadedCallback) onUploadedCallback(result)
       return result
     } catch (e) { notify(e.message || '上传失败', 'error') }
     finally { uploadLoading.value = false }

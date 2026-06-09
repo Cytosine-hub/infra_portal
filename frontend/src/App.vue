@@ -258,7 +258,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import MarkdownIt from 'markdown-it'
 import { request } from './api'
 import { useAuth } from './composables/useAuth'
@@ -464,16 +464,20 @@ function onDocumentEditorCancel() {
 }
 
 function openUploadAndEdit() {
-  openUploadDialog((result) => {
-    if (result.storedFileName) {
-      // Word 文档未转换：跳转预览页（通过 uploadResult 共享数据）
-      window.location.hash = '#/admin/word-preview'
-    } else {
-      // Markdown 或已转换：跳转编辑器
-      goDocumentEditor()
-    }
-  })
+  openUploadDialog()
 }
+
+// 监听上传结果，自动导航到对应页面
+watch(() => uploadResult.value, (result) => {
+  if (!result) return
+  if (result.storedFileName) {
+    // Word 文档未转换：跳转预览页
+    window.location.hash = '#/admin/word-preview'
+  } else {
+    // Markdown 或已转换：跳转编辑器
+    goDocumentEditor()
+  }
+})
 
 function onWordPreviewEditInfo() {
   goDocumentEditor()
