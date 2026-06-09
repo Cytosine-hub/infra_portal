@@ -9,6 +9,7 @@ import com.middleware.manager.service.AdminAccountService;
 import com.middleware.manager.service.DocumentConversionService;
 import com.middleware.manager.service.StandardDocumentService;
 import com.middleware.manager.web.api.dto.StandardDocumentRequest;
+import com.middleware.manager.web.api.dto.DocumentPreviewResponse;
 import com.middleware.manager.web.api.dto.DocumentUploadResponse;
 import com.middleware.manager.web.api.dto.StandardDocumentResponse;
 import org.springframework.security.core.Authentication;
@@ -70,10 +71,14 @@ public class AdminStandardDocumentApiController {
 
     @PostMapping("/upload")
     public DocumentUploadResponse upload(@RequestParam("file") MultipartFile file,
-                                         @RequestParam(value = "convertToMarkdown", defaultValue = "true") boolean convertToMarkdown,
-                                         @RequestParam(value = "title", required = false) String title,
-                                         @RequestParam(value = "documentType", defaultValue = StandardDocumentService.DOC_TYPE_MANUAL) String documentType) {
-        return conversionService.convertAndCreate(file, convertToMarkdown, title, documentType);
+                                         @RequestParam(value = "convertToMarkdown", defaultValue = "true") boolean convertToMarkdown) {
+        return conversionService.convert(file, convertToMarkdown);
+    }
+
+    @GetMapping("/preview")
+    public DocumentPreviewResponse preview(@RequestParam("storedFileName") @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max = 255) String storedFileName) {
+        String html = conversionService.renderAsHtml(storedFileName);
+        return new DocumentPreviewResponse(html);
     }
 
     @PutMapping("/{id}")

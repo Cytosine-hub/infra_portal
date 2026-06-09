@@ -44,6 +44,15 @@
         @saved="onDocumentEditorSaved"
         @cancel="onDocumentEditorCancel"
       />
+      <WordPreview
+        v-else-if="route.name === 'wordPreview' && uploadResult?.storedFileName"
+        :stored-file-name="uploadResult.storedFileName"
+        :title="uploadResult.title"
+        :original-file-name="uploadResult.originalFileName"
+        :notify="notify"
+        @back="onDocumentEditorCancel"
+        @editInfo="onWordPreviewEditInfo"
+      />
       <template v-else>
       <HomePage
         v-if="route.name === 'home'"
@@ -256,6 +265,7 @@ import { useAuth } from './composables/useAuth'
 import { useNotify } from './composables/useNotify'
 import { useRoute } from './composables/useRoute'
 import DocumentEditor from './components/DocumentEditor.vue'
+import WordPreview from './components/WordPreview.vue'
 import ForumPostList from './components/ForumPostList.vue'
 import ForumPostDetail from './components/ForumPostDetail.vue'
 import ForumPostEditor from './components/ForumPostEditor.vue'
@@ -454,7 +464,19 @@ function onDocumentEditorCancel() {
 }
 
 function openUploadAndEdit() {
-  openUploadDialog(() => goDocumentEditor())
+  openUploadDialog((result) => {
+    if (result.storedFileName) {
+      // Word 文档未转换：跳转预览页（通过 uploadResult 共享数据）
+      window.location.hash = '#/admin/word-preview'
+    } else {
+      // Markdown 或已转换：跳转编辑器
+      goDocumentEditor()
+    }
+  })
+}
+
+function onWordPreviewEditInfo() {
+  goDocumentEditor()
 }
 
 

@@ -12,6 +12,7 @@ import org.apache.poi.xwpf.usermodel.*;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.sax.BodyContentHandler;
+import org.apache.tika.sax.ToXMLContentHandler;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -20,6 +21,7 @@ import org.xml.sax.SAXException;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -41,12 +43,20 @@ import java.util.UUID;
 @Slf4j
 public class DocumentConversionService {
 
-    private static final Set<String> WORD_EXTENSIONS = new HashSet<>(Arrays.asList(".doc", ".docx"));
+    private static final String DOCX_EXTENSION = ".docx";
+    private static final String DOC_EXTENSION = ".doc";
+    private static final String DEFAULT_IMAGE_EXT = ".png";
+    private static final Set<String> WORD_EXTENSIONS = new HashSet<>(Arrays.asList(DOC_EXTENSION, DOCX_EXTENSION));
     private static final Set<String> MARKDOWN_EXTENSIONS = new HashSet<>(Arrays.asList(".md", ".markdown"));
     private static final String IMAGE_URL_PREFIX = "/files/images/";
     private static final String IMAGES_SUBDIR = "images";
     private static final String DOCUMENTS_SUBDIR = "documents";
     private static final String EMPTY_CONTENT = "";
+    private static final String BULLET_FORMAT = "bullet";
+    private static final String HEADING_STYLE_PREFIX_LOWER = "heading";
+    private static final String HEADING_STYLE_PREFIX_UPPER = "Heading";
+    private static final String HEADING_1_PREFIX = "# ";
+    private static final String HEADING_2_PREFIX = "## ";
     private static final int MAX_FILE_SIZE = 20 * 1024 * 1024;
     private static final int MAX_TITLE_LENGTH = 50;
     private static final int MAX_LIST_INDENT = 3;
@@ -85,9 +95,9 @@ public class DocumentConversionService {
         try {
             if (MARKDOWN_EXTENSIONS.contains(ext)) {
                 return convertMarkdown(file);
-            } else if (".docx".equals(ext)) {
+            } else if (DOCX_EXTENSION.equals(ext)) {
                 return convertDocx(file, convertToMarkdown);
-            } else if (".doc".equals(ext)) {
+            } else if (DOC_EXTENSION.equals(ext)) {
                 // .doc 格式始终保存原始文件，不支持 Markdown 转换
                 return convertDoc(file);
             } else {
@@ -101,40 +111,13 @@ public class DocumentConversionService {
         }
     }
 
-    /**
-     * 转换文档并在不转换模式下自动创建文档记录
-     * @param file 上传的文件
-     * @param convertToMarkdown 是否转换为 Markdown
-     * @param title 文档标题（可选，从文件提取）
-     * @param documentType 文档类型
-     * @return 转换结果；不转换时包含 documentId
-     */
-    public DocumentUploadResponse convertAndCreate(MultipartFile file, boolean convertToMarkdown,
-                                                    String title, String documentType) {
-        DocumentUploadResponse result = convert(file, convertToMarkdown);
 
-        if (!convertToMarkdown) {
-            // 不转换：创建文档记录，保存原始文件引用
-            StandardDocumentRequest request = new StandardDocumentRequest();
-            request.setTitle(title != null && !title.isBlank() ? title : result.getTitle());
-            request.setDocumentType(documentType);
-            request.setContent(result.getContent() != null ? result.getContent() : EMPTY_CONTENT);
-            StandardDocument doc = documentService.create(request);
-            doc.setStoredFileName(result.getStoredFileName());
-            doc.setOriginalFileName(result.getOriginalFileName());
-            documentService.save(doc);
-            result.setDocumentId(doc.getId());
-            log.info("上传文档已创建（未转换） documentId={}, fileName={}", doc.getId(), file.getOriginalFilename());
-        }
-
-        return result;
-    }
 
     /** Markdown 文件：直接读取 */
     private DocumentUploadResponse convertMarkdown(MultipartFile file) {
         String content;
         try {
-            content = new String(file.getBytes(), "UTF-8");
+            content = new String(file.getBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             log.error("Markdown 文件读取失败 fileName={}", file.getOriginalFilename(), e);
             throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, ErrorMessages.DOCUMENT_PARSE_FAILED);
@@ -216,7 +199,7 @@ public class DocumentConversionService {
         for (XWPFPictureData picture : doc.getAllPictures()) {
             String fileName = picture.getFileName();
             String ext = getExtension(fileName);
-            if (ext.isEmpty()) ext = ".png";
+            if (ext.isEmpty()) ext = DEFAULT_IMAGE_EXT;
 
             String storedName = UUID.randomUUID() + ext;
             Path target = imageStoragePath.resolve(storedName);
@@ -239,8 +222,8 @@ public class DocumentConversionService {
 
         // 检查是否为列表项
         String numFmt = para.getNumFmt();
-        boolean isBullet = "bullet".equals(numFmt);
-        boolean isNumber = numFmt != null && !numFmt.equals("bullet") && !numFmt.isEmpty();
+        boolean isBullet = BULLET_FORMAT.equals(numFmt);
+        boolean isNumber = numFmt != null && !numFmt.equals(BULLET_FORMAT) && !numFmt.isEmpty();
 
         // 处理列表缩进
         String indent = "";
@@ -334,7 +317,7 @@ public class DocumentConversionService {
     /** 从样式名提取标题级别 */
     private int getHeadingLevel(String style) {
         if (style == null) return 0;
-        if (style.startsWith("Heading") || style.startsWith("heading")) {
+        if (style.startsWith(HEADING_STYLE_PREFIX_UPPER) || style.startsWith(HEADING_STYLE_PREFIX_LOWER)) {
             try {
                 return Integer.parseInt(style.replaceAll("[^0-9]", ""));
             } catch (NumberFormatException e) {
@@ -348,8 +331,8 @@ public class DocumentConversionService {
     private String extractFirstHeading(String content) {
         for (String line : content.split("\\n")) {
             String trimmed = line.trim();
-            if (trimmed.startsWith("# ")) return trimmed.substring(2).trim();
-            if (trimmed.startsWith("## ")) return trimmed.substring(3).trim();
+            if (trimmed.startsWith(HEADING_1_PREFIX)) return trimmed.substring(HEADING_1_PREFIX.length()).trim();
+            if (trimmed.startsWith(HEADING_2_PREFIX)) return trimmed.substring(HEADING_2_PREFIX.length()).trim();
         }
         return content.length() > MAX_TITLE_LENGTH ? content.substring(0, MAX_TITLE_LENGTH).trim() : content;
     }
@@ -394,5 +377,34 @@ public class DocumentConversionService {
 
     private DocumentUploadResponse buildResult(String content, String title, List<String> images) {
         return new DocumentUploadResponse(content, title, images);
+    }
+
+    /**
+     * 将存储的 Word 文档渲染为 HTML 用于预览
+     * @param storedFileName 存储的文件名（UUID.ext 格式）
+     * @return HTML 内容
+     */
+    public String renderAsHtml(String storedFileName) {
+        // 路径遍历防护：仅允许 UUID 格式的文件名
+        if (!storedFileName.matches("[a-f0-9\\-]+\\.[a-zA-Z0-9]+")) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.DOCUMENT_FORMAT_NOT_SUPPORTED);
+        }
+        Path filePath = documentsStoragePath.resolve(storedFileName).normalize();
+        if (!filePath.startsWith(documentsStoragePath)) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.DOCUMENT_FORMAT_NOT_SUPPORTED);
+        }
+        if (!Files.exists(filePath)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, ErrorMessages.DOCUMENT_NOT_FOUND);
+        }
+
+        ToXMLContentHandler handler = new ToXMLContentHandler();
+        Metadata metadata = new Metadata();
+        try (InputStream is = Files.newInputStream(filePath)) {
+            tikaParser.parse(is, handler, metadata);
+            return handler.toString();
+        } catch (Exception e) {
+            log.error("文档预览渲染失败 storedFileName={}", storedFileName, e);
+            throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, ErrorMessages.DOCUMENT_PARSE_FAILED);
+        }
     }
 }

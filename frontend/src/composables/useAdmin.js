@@ -465,16 +465,14 @@ export function useAdmin(auth, notify, confirm) {
       const result = await request('/api/admin/standard-documents/upload', { method: 'POST', body: fd })
       uploadResult.value = result
       showUploadDialog.value = false
-      if (result.documentId) {
-        // 未转换：文档已自动创建，刷新列表
+      if (result.storedFileName) {
+        // Word 文档未转换：跳转预览页
         notify('文档已上传', 'success')
-        await loadStandardDocuments()
-        if (onUploadedCallback) onUploadedCallback(result)
       } else {
-        // 已转换：跳转编辑器预填内容
+        // Markdown 或已转换：跳转编辑器预填内容
         notify('文档已上传，请完善文档信息后保存', 'success')
-        if (onUploadedCallback) onUploadedCallback(result)
       }
+      if (onUploadedCallback) onUploadedCallback(result)
       return result
     } catch (e) { notify(e.message || '上传失败', 'error') }
     finally { uploadLoading.value = false }

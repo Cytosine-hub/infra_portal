@@ -17,7 +17,8 @@ const routeNames = {
   DIAGNOSTICS: 'diagnostics',
   COMMANDS: 'commands',
   ADMIN: 'admin',
-  DOCUMENT_EDITOR: 'documentEditor'
+  DOCUMENT_EDITOR: 'documentEditor',
+  WORD_PREVIEW: 'wordPreview'
 }
 
 function parseRoute() {
@@ -27,6 +28,7 @@ function parseRoute() {
     const editorMatch = hash.match(/^\/admin\/document-editor\/(\d+)$/)
     return { name: 'documentEditor', documentId: editorMatch ? editorMatch[1] : null }
   }
+  if (hash.startsWith('/admin/word-preview')) return { name: 'wordPreview' }
   if (hash.startsWith('/admin')) return { name: 'admin', token: null }
   if (hash === '/forum/mine') return { name: 'forumMine', postId: null }
   if (hash.startsWith('/forum/new')) return { name: 'forumEditor', postId: null }
