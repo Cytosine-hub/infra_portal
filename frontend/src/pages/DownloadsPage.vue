@@ -102,17 +102,18 @@ onMounted(loadData)
 .release-list-container {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 180px);
+  gap: var(--space-md);
 }
-.release-list-container .release-grid {
-  flex: 1;
+.release-list-container :deep(.release-grid) {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  height: calc(100vh - 220px);
+}
+.release-list-container :deep(.release-card) {
+  min-height: unset;
 }
 .release-pagination {
   display: flex;
   justify-content: flex-end;
-  padding: var(--space-md) 0;
-  position: sticky;
-  bottom: 0;
-  background: var(--color-bg);
 }
 </style>
