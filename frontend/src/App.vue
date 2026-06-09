@@ -258,7 +258,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import MarkdownIt from 'markdown-it'
 import { request } from './api'
 import { useAuth } from './composables/useAuth'
@@ -309,7 +309,7 @@ const {
   startCreate, startEdit, togglePublish, openDeleteReleaseDialog, regeneratePackage,
   openImportPage, openCreateCategoryDialog, openCreateTypeDialog, openEditTypeDialog, deleteType,
   openCreateStandardDialog, openEditStandardDialog,
-  submitForReview, startModify, cancelModify, confirmDeleteDoc, openUploadDialog, uploadResult,
+  submitForReview, startModify, cancelModify, confirmDeleteDoc, openUploadDialog, uploadResult, uploadNavigateTo,
   openCreateParameterDialog, openEditParameterDialog, downloadParameterTemplate, copyParameter,
   openReviewDetail, openRevisionHistory,
   openCreateUserDialog, changeUserRole, deleteUserAccount, resetUserPassword, openChangeRoleDialog,
@@ -467,14 +467,18 @@ function onDocumentEditorCancel() {
 }
 
 function openUploadAndEdit() {
-  openUploadDialog((result) => {
-    if (result.storedFileName) {
-      window.location.hash = HASH_WORD_PREVIEW
-    } else {
-      goDocumentEditor()
-    }
-  })
+  openUploadDialog()
 }
+
+watch(uploadNavigateTo, (target) => {
+  if (!target) return
+  if (target === 'preview') {
+    window.location.hash = HASH_WORD_PREVIEW
+  } else if (target === 'editor') {
+    window.location.hash = HASH_DOCUMENT_EDITOR
+  }
+  uploadNavigateTo.value = null
+})
 
 function onWordPreviewEditInfo() {
   goDocumentEditor()
