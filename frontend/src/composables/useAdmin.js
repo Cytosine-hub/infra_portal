@@ -2,12 +2,14 @@
  * 管理后台状态和逻辑 composable
  * 从 App.vue 提取，包含文件管理、类型管理、标准管理、用户管理等
  */
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, nextTick } from 'vue'
 import { request } from '../api'
 import { formatTime } from '../utils'
 
 const ALLOWED_UPLOAD_EXTS = ['.doc', '.docx', '.md', '.markdown']
 const MAX_UPLOAD_FILE_SIZE = 20 * 1024 * 1024
+const HASH_WORD_PREVIEW = '#/admin/word-preview'
+const HASH_DOCUMENT_EDITOR = '#/admin/document-editor'
 
 async function sha256Hash(str) {
   try {
@@ -55,7 +57,6 @@ export function useAdmin(auth, notify, confirm) {
   const uploadConverting = ref(true)
   const uploadLoading = ref(false)
   const uploadResult = ref(null)
-  const uploadNavigateTo = ref(null) // 'editor' | 'preview' | null
 
   // 审核管理
   const selectedReview = ref(null)
@@ -445,7 +446,7 @@ export function useAdmin(auth, notify, confirm) {
   function applyMaintenanceDocumentFilters() { maintenanceDocumentFilters.page = 0 }
 
   // ── 文档上传 ──
-  function openUploadDialog() { uploadFile.value = null; uploadConverting.value = true; showUploadDialog.value = true; uploadNavigateTo.value = null }
+  function openUploadDialog() { uploadFile.value = null; uploadConverting.value = true; showUploadDialog.value = true }
   function closeUploadDialog() { showUploadDialog.value = false; uploadFile.value = null }
   function handleUploadFileChange(e) { uploadFile.value = e.target.files[0] || null }
   async function uploadDocument() {
@@ -465,13 +466,14 @@ export function useAdmin(auth, notify, confirm) {
       const result = await request('/api/admin/standard-documents/upload', { method: 'POST', body: fd })
       uploadResult.value = result
       showUploadDialog.value = false
-      // 根据结果设置导航目标，由 App.vue watch 处理跳转
-      uploadNavigateTo.value = result.storedFileName ? 'preview' : 'editor'
       if (result.storedFileName) {
         notify('文档已上传', 'success')
       } else {
         notify('文档已上传，请完善文档信息后保存', 'success')
       }
+      // 直接导航，不依赖 watch/callback
+      await nextTick()
+      window.location.hash = result.storedFileName ? HASH_WORD_PREVIEW : HASH_DOCUMENT_EDITOR
       return result
     } catch (e) { notify(e.message || '上传失败', 'error') }
     finally { uploadLoading.value = false }
@@ -793,7 +795,7 @@ export function useAdmin(auth, notify, confirm) {
     showTypeDialog, showCategoryDialog, softwareCategories, softwareTypes,
     showStandardDialog, showParameterDialog, showParamImportDialog, paramImporting, paramImportResult, paramImportFile,
     allParameterStandards, standardDocuments, standardParameters, selectedStandard,
-    showUploadDialog, uploadFile, uploadConverting, uploadLoading, uploadResult, uploadNavigateTo,
+    showUploadDialog, uploadFile, uploadConverting, uploadLoading, uploadResult,
     selectedReview, selectedReviewDiff, reviewComment, allReviews, showRevisionModal, revisionList, revisionDocTitle,
     showUserDialog, showRoleDialog, userFormTarget, userList, allRoles, systemSettings,
     adminFilters, typeFilters, standardFilters, parameterFilters, maintenanceDocumentFilters, reviewFilters, reviewPage,
