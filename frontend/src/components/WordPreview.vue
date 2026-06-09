@@ -12,7 +12,7 @@
     </div>
     <div v-if="loading" class="preview-loading">加载中...</div>
     <div v-else-if="error" class="preview-error">{{ error }}</div>
-    <div v-else class="preview-body markdown-preview" v-html="htmlContent"></div>
+    <div v-else class="preview-body word-html-content" v-html="htmlContent"></div>
   </section>
 </template>
 
@@ -75,4 +75,19 @@ onMounted(async () => {
   flex: 1; overflow-y: auto; padding: 24px 32px;
   line-height: 1.85; font-size: var(--text-base);
 }
+.word-html-content :deep(h1) { font-size: var(--text-2xl); font-weight: 700; margin: var(--space-lg) 0 var(--space-sm); color: var(--color-text); }
+.word-html-content :deep(h2) { font-size: var(--text-xl); font-weight: 700; margin: var(--space-lg) 0 var(--space-sm); color: var(--color-text); }
+.word-html-content :deep(h3) { font-size: var(--text-lg); font-weight: 600; margin: var(--space-md) 0 var(--space-sm); color: var(--color-text); }
+.word-html-content :deep(h4) { font-size: var(--text-base); font-weight: 600; margin: var(--space-md) 0 var(--space-xs); color: var(--color-text); }
+.word-html-content :deep(p) { margin: var(--space-sm) 0; }
+.word-html-content :deep(table) { border-collapse: collapse; margin: var(--space-md) 0; width: 100%; max-width: 100%; }
+.word-html-content :deep(th), .word-html-content :deep(td) { border: 1px solid var(--color-border); padding: var(--space-sm) var(--space-md); text-align: left; font-size: var(--text-sm); }
+.word-html-content :deep(th) { background: var(--color-bg-secondary); font-weight: 600; }
+.word-html-content :deep(img) { max-width: 100%; height: auto; margin: var(--space-sm) 0; border-radius: var(--radius-sm); }
+.word-html-content :deep(ul), .word-html-content :deep(ol) { padding-left: var(--space-xl); margin: var(--space-sm) 0; }
+.word-html-content :deep(li) { margin: var(--space-xs) 0; }
+.word-html-content :deep(blockquote) { border-left: 3px solid var(--color-primary); padding-left: var(--space-md); margin: var(--space-md) 0; color: var(--color-text-secondary); }
+.word-html-content :deep(pre) { background: var(--color-bg-secondary); padding: var(--space-md); border-radius: var(--radius-md); overflow-x: auto; font-size: var(--text-sm); }
+.word-html-content :deep(code) { background: var(--color-bg-secondary); padding: var(--space-xs) var(--space-sm); border-radius: var(--radius-sm); font-size: var(--text-sm); }
+.word-html-content :deep(hr) { border: none; border-top: 1px solid var(--color-border); margin: var(--space-lg) 0; }
 </style>

@@ -30,6 +30,8 @@ public class StandardDocumentResponse {
     private LocalDateTime publishedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+    private String storedFileName;
+    private String originalFileName;
     private boolean canEdit;
     private boolean hasDiff;
     private Long pendingReviewRecordId;
@@ -58,6 +60,8 @@ public class StandardDocumentResponse {
         response.setReviewedAt(document.getReviewedAt());
         response.setReviewedBy(document.getReviewedBy());
         response.setPublishedAt(document.getPublishedAt());
+        response.setStoredFileName(document.getStoredFileName());
+        response.setOriginalFileName(document.getOriginalFileName());
         response.setCreatedAt(document.getCreatedAt());
         response.setUpdatedAt(document.getUpdatedAt());
         String docStatus = document.getStatus() != null ? document.getStatus() : "DRAFT";
@@ -160,4 +164,8 @@ public class StandardDocumentResponse {
     public void setAvailableActions(List<String> availableActions) { this.availableActions = availableActions; }
     public Long getPendingReviewRecordId() { return pendingReviewRecordId; }
     public void setPendingReviewRecordId(Long pendingReviewRecordId) { this.pendingReviewRecordId = pendingReviewRecordId; }
+    public String getStoredFileName() { return storedFileName; }
+    public void setStoredFileName(String storedFileName) { this.storedFileName = storedFileName; }
+    public String getOriginalFileName() { return originalFileName; }
+    public void setOriginalFileName(String originalFileName) { this.originalFileName = originalFileName; }
 }
