@@ -28,23 +28,27 @@
     </div>
 
     <template v-else>
-      <div class="release-grid">
-        <article v-for="release in page.content" :key="release.downloadToken" class="release-card">
-          <div>
-            <h2>{{ release.middlewareName }}</h2>
-            <p>{{ release.version }} · {{ release.platform || '通用平台' }}</p>
-          </div>
-          <p class="description">{{ release.description || '暂无版本说明。' }}</p>
-          <div class="card-footer">
-            <span>{{ formatBytes(release.fileSize) }}</span>
-            <div class="card-actions">
-              <button class="ghost" @click="openDetail(release.downloadToken)">详情</button>
-              <a class="download-button" href="#" @click.prevent="handleDownload(release.downloadUrl, release.originalFileName)">下载</a>
+      <div class="release-list-container">
+        <div class="release-grid">
+          <article v-for="release in page.content" :key="release.downloadToken" class="release-card">
+            <div>
+              <h2>{{ release.middlewareName }}</h2>
+              <p>{{ release.version }} · {{ release.platform || '通用平台' }}</p>
             </div>
-          </div>
-        </article>
+            <p class="description">{{ release.description || '暂无版本说明。' }}</p>
+            <div class="card-footer">
+              <span>{{ formatBytes(release.fileSize) }}</span>
+              <div class="card-actions">
+                <button class="ghost" @click="openDetail(release.downloadToken)">详情</button>
+                <a class="download-button" href="#" @click.prevent="handleDownload(release.downloadUrl, release.originalFileName)">下载</a>
+              </div>
+            </div>
+          </article>
+        </div>
+        <div class="release-pagination">
+          <Pagination :page="page" @change="changePage" />
+        </div>
       </div>
-      <Pagination :page="page" @change="changePage" />
     </template>
   </section>
 </template>
@@ -93,3 +97,22 @@ async function handleDownload(url, fileName) {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.release-list-container {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 180px);
+}
+.release-list-container .release-grid {
+  flex: 1;
+}
+.release-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-md) 0;
+  position: sticky;
+  bottom: 0;
+  background: var(--color-bg);
+}
+</style>
