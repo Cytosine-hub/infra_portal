@@ -89,7 +89,17 @@
 
         <!-- 标准文档详情：显示文档内容 -->
         <template v-else>
-          <div class="markdown-preview public-document" v-html="docHtml"></div>
+          <!-- Word 文档 -->
+          <template v-if="selectedDoc.storedFileName">
+            <div v-if="wordLoading" class="loading-panel"><div class="spinner"></div><p>加载中...</p></div>
+            <div v-else-if="wordError" class="error-hint muted">{{ wordError }}</div>
+            <template v-else>
+              <div v-if="isDocxDoc" ref="wordContainer" class="public-word-container"></div>
+              <div v-else class="markdown-preview public-document" v-html="docWordHtml"></div>
+            </template>
+          </template>
+          <!-- Markdown 文档 -->
+          <div v-else class="markdown-preview public-document" v-html="docHtml"></div>
         </template>
       </article>
 
@@ -122,7 +132,7 @@
                 </button>
                 <div class="manual-list">
                   <button v-for="doc in standard.relatedDocuments" :key="doc.id" type="button"
-                    class="ghost related-document-link" @click="openDocDetail(doc.id)">
+                    class="ghost related-document-link" @click="openDocFromList(standard, doc.id)">
                     {{ doc.title }}
                   </button>
                   <span v-if="!standard.relatedDocuments?.length" class="muted">暂无已发布标准文档</span>
@@ -138,11 +148,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { request } from '../api'
 import { formatDate, renderMarkdown } from '../utils'
 import MarkdownIt from 'markdown-it'
 import Pagination from '../components/Pagination.vue'
+
+const DOCX_RENDER_OPTIONS = {
+  className: 'docx-render', inWrapper: false, ignoreWidth: false,
+  ignoreHeight: false, breakPages: true, useBase64URL: true
+}
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
@@ -156,6 +171,16 @@ const paramSearch = ref('')
 const paramPage = reactive({ page: 0, size: 10, totalPages: 0, totalElements: 0, first: true, last: true })
 const loading = ref(false)
 const expanded = reactive({})
+
+// Word 文档渲染状态
+const wordContainer = ref(null)
+const wordLoading = ref(false)
+const wordError = ref('')
+const docWordHtml = ref('')
+
+const isDocxDoc = computed(() =>
+  selectedDoc.value?.storedFileName?.toLowerCase().endsWith('.docx') ?? false
+)
 
 let scrollHandler = null
 
@@ -282,6 +307,42 @@ function destroyScrollSpy() {
   if (scrollHandler) { window.removeEventListener('scroll', scrollHandler); scrollHandler = null }
 }
 
+// 从列表直接点文档：先建立标准上下文，再加载文档
+async function openDocFromList(standard, docId) {
+  selectedStandard.value = standard
+  expanded[standard.id] = true
+  await openDocDetail(docId)
+}
+
+// Watch selectedDoc: 当切换到 Word 文档时渲染
+watch(selectedDoc, async (doc) => {
+  wordLoading.value = false
+  wordError.value = ''
+  docWordHtml.value = ''
+  if (!doc?.storedFileName) return
+  wordLoading.value = true
+  try {
+    if (doc.storedFileName.toLowerCase().endsWith('.docx')) {
+      const { renderAsync } = await import('docx-preview')
+      const resp = await fetch(`/api/public/standards/raw?storedFileName=${encodeURIComponent(doc.storedFileName)}`)
+      if (!resp.ok) throw new Error('加载文档失败')
+      const buf = await resp.arrayBuffer()
+      wordLoading.value = false
+      await nextTick()
+      if (wordContainer.value) {
+        await renderAsync(buf, wordContainer.value, null, DOCX_RENDER_OPTIONS)
+      }
+    } else {
+      const result = await request(`/api/public/standards/preview?storedFileName=${encodeURIComponent(doc.storedFileName)}`, { token: null })
+      docWordHtml.value = result?.html || ''
+    }
+  } catch (e) {
+    wordError.value = e.message || '加载失败'
+  } finally {
+    wordLoading.value = false
+  }
+})
+
 onMounted(loadStandards)
 onBeforeUnmount(destroyScrollSpy)
 </script>
@@ -341,4 +402,12 @@ onBeforeUnmount(destroyScrollSpy)
 .doc-card-title { font-size: var(--text-base); font-weight: 500; color: var(--color-primary); }
 .doc-card-meta { font-size: var(--text-xs); color: var(--color-text-tertiary); }
 .doc-empty-hint { padding: var(--space-md) 0; }
+.public-word-container {
+  flex: 1; overflow-y: auto; background: var(--color-bg-secondary);
+  border-radius: var(--radius-md); min-height: 400px;
+}
+.public-word-container :deep(.docx-render) {
+  background: #fff; margin: 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.error-hint { padding: var(--space-md) 0; color: var(--color-danger); font-size: var(--text-sm); }
 </style>

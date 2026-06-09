@@ -29,6 +29,8 @@ public class PublicStandardDocumentResponse extends StandardDocumentResponse {
         response.setPublishedAt(base.getPublishedAt());
         response.setCreatedAt(base.getCreatedAt());
         response.setUpdatedAt(base.getUpdatedAt());
+        response.setStoredFileName(base.getStoredFileName());
+        response.setOriginalFileName(base.getOriginalFileName());
         response.setRelatedDocuments(relatedDocuments);
         return response;
     }
