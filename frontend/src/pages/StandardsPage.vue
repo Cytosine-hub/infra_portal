@@ -103,7 +103,7 @@
         </template>
       </article>
 
-      <aside class="post-toc-panel" v-if="tocItems.length">
+      <aside class="post-toc-panel" v-if="tocItems.length && !selectedDoc?.storedFileName">
         <h4 class="toc-title">文档大纲</h4>
         <button v-for="item in tocItems" :key="item.id"
           :class="['toc-link', { active: activeTocId === item.id }]"
