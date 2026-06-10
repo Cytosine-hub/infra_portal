@@ -152,12 +152,12 @@
         <span class="file-control">
           <input type="file" accept=".doc,.docx,.md,.markdown,.pdf" @change="onUploadFileChange" required />
           <span class="file-button">选择文件</span>
-          <span class="file-name">{{ admin.uploadFile.value?.name || '支持 .doc、.docx、.md 格式' }}</span>
+          <span class="file-name">{{ admin.uploadFile.value?.name || '支持 .doc、.docx、.md、.pdf 格式' }}</span>
         </span>
       </label>
-      <template v-if="isWordFile">
+      <template v-if="isConvertibleFile">
         <label class="checkline"><input v-model="admin.uploadConverting.value" type="checkbox" />转换为 Markdown</label>
-        <p class="muted upload-hint">勾选后将保留标题、列表、表格等格式和嵌入图片，不勾选仅保存源文件。</p>
+        <p class="muted upload-hint">勾选后转换为 Markdown，不勾选仅保存源文件并提供预览。</p>
       </template>
     </div>
     <template #actions>
@@ -402,18 +402,18 @@ const props = defineProps({
 })
 
 const platformOptions = ['arm', 'x86', 'windows', 'linux']
-const WORD_EXTENSIONS = ['.doc', '.docx']
+const CONVERTIBLE_EXTENSIONS = ['.doc', '.docx', '.pdf']
 
 const diffLines = computed(() => (props.selectedReviewDiff || '').split('\n'))
 
-const isWordFile = computed(() => {
+const isConvertibleFile = computed(() => {
   const name = props.admin.uploadFile.value?.name?.toLowerCase() || ''
-  return WORD_EXTENSIONS.some(ext => name.endsWith(ext))
+  return CONVERTIBLE_EXTENSIONS.some(ext => name.endsWith(ext))
 })
 
 function onUploadFileChange(e) {
   props.admin.handleUploadFileChange(e)
-  if (isWordFile.value) {
+  if (isConvertibleFile.value) {
     props.admin.uploadConverting.value = true
   }
 }

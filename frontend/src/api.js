@@ -105,5 +105,5 @@ export async function fetchBinary(path) {
     }
     throw new Error(`文件加载失败 (${response.status})`)
   }
-  return response.arrayBuffer()
+  return response.blob()
 }

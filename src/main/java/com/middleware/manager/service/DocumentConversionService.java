@@ -85,7 +85,7 @@ public class DocumentConversionService {
     /**
      * 转换文档
      * @param file 上传的文件
-     * @param convertToMarkdown 是否转换为 Markdown（仅 .docx 有效；.doc 始终保存原始文件；.md 直接读取）
+     * @param convertToMarkdown 是否转换为 Markdown（.doc/.docx/.pdf 有效；.md 直接读取）
      * @return 转换结果：content, title, images, storedFileName, originalFileName
      */
     public DocumentUploadResponse convert(MultipartFile file, boolean convertToMarkdown) {
@@ -99,11 +99,9 @@ public class DocumentConversionService {
             } else if (DOCX_EXTENSION.equals(ext)) {
                 return convertDocx(file, convertToMarkdown);
             } else if (DOC_EXTENSION.equals(ext)) {
-                // .doc 格式始终保存原始文件，不支持 Markdown 转换
-                return convertDoc(file);
+                return convertDoc(file, convertToMarkdown);
             } else if (PDF_EXTENSION.equals(ext)) {
-                // PDF 格式：直接保存原始文件，不做任何转换
-                return convertPdf(file);
+                return convertPdf(file, convertToMarkdown);
             } else {
                 throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.DOCUMENT_FORMAT_NOT_SUPPORTED);
             }
@@ -117,8 +115,22 @@ public class DocumentConversionService {
 
 
 
-    /** PDF 文件：直接保存原始文件，内容置空（由前端 iframe 渲染） */
-    private DocumentUploadResponse convertPdf(MultipartFile file) {
+    /** PDF 文件：可提取文本转换为 Markdown；不转换时保存原始文件由前端 iframe 渲染 */
+    private DocumentUploadResponse convertPdf(MultipartFile file, boolean convertToMarkdown) {
+        if (convertToMarkdown) {
+            BodyContentHandler handler = new BodyContentHandler(BODY_CONTENT_HANDLER_UNLIMITED);
+            Metadata metadata = new Metadata();
+            try (InputStream is = file.getInputStream()) {
+                tikaParser.parse(is, handler, metadata);
+            } catch (Exception e) {
+                log.error("PDF 文件解析失败 fileName={}", file.getOriginalFilename(), e);
+                throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, ErrorMessages.DOCUMENT_PARSE_FAILED);
+            }
+            String content = normalizeExtractedText(handler.toString());
+            String title = extractTitleFromText(content, file.getOriginalFilename());
+            log.info("PDF 文件已转换为 Markdown fileName={}, length={}", file.getOriginalFilename(), content.length());
+            return new DocumentUploadResponse(content, title, Collections.emptyList());
+        }
         String storedName = saveOriginalFile(file);
         log.info("PDF 文件已保存 fileName={}, storedName={}", file.getOriginalFilename(), storedName);
         return new DocumentUploadResponse("", "", Collections.emptyList(), storedName, file.getOriginalFilename());
@@ -181,13 +193,10 @@ public class DocumentConversionService {
         }
     }
 
-    /** .doc 处理：保存原始文件，提取纯文本用于参数替换 */
-    private DocumentUploadResponse convertDoc(MultipartFile file) {
+    /** .doc 处理：可提取纯文本转换为 Markdown；不转换时保存原始文件 */
+    private DocumentUploadResponse convertDoc(MultipartFile file, boolean convertToMarkdown) {
         List<String> images = new ArrayList<>();
         String originalName = file.getOriginalFilename();
-
-        // 始终保存原始文件（.doc 格式无法在前端编辑）
-        String storedFileName = saveOriginalFile(file);
 
         BodyContentHandler handler = new BodyContentHandler(BODY_CONTENT_HANDLER_UNLIMITED);
         Metadata metadata = new Metadata();
@@ -197,10 +206,16 @@ public class DocumentConversionService {
             log.error("DOC 文件解析失败 fileName={}", originalName, e);
             throw new BusinessException(ErrorCode.FILE_UPLOAD_FAILED, ErrorMessages.DOCUMENT_PARSE_FAILED);
         }
-        String content = handler.toString();
-        String title = content.length() > MAX_TITLE_LENGTH ? content.substring(0, MAX_TITLE_LENGTH).trim() : content;
+        String content = normalizeExtractedText(handler.toString());
+        String title = extractTitleFromText(content, originalName);
 
-        log.info("DOC 文件已处理 fileName={}, length={}", originalName, content.length());
+        if (convertToMarkdown) {
+            log.info("DOC 文件已转换为 Markdown fileName={}, length={}", originalName, content.length());
+            return new DocumentUploadResponse(content, title, images);
+        }
+
+        String storedFileName = saveOriginalFile(file);
+        log.info("DOC 文件已保存 fileName={}, storedName={}", originalName, storedFileName);
         return new DocumentUploadResponse(content, title, images, storedFileName, originalName);
     }
 
@@ -370,6 +385,33 @@ public class DocumentConversionService {
         if (fileName == null) return "";
         int dot = fileName.lastIndexOf('.');
         return dot >= 0 ? fileName.substring(dot).toLowerCase() : "";
+    }
+
+    private String normalizeExtractedText(String text) {
+        if (text == null) return EMPTY_CONTENT;
+        return text.replace("\r\n", "\n")
+                .replaceAll("[ \\t]+\\n", "\n")
+                .replaceAll("\\n{3,}", "\n\n")
+                .trim();
+    }
+
+    private String titleFromFileName(String fileName) {
+        if (fileName == null || fileName.isBlank()) return EMPTY_CONTENT;
+        int dot = fileName.lastIndexOf('.');
+        String title = dot > 0 ? fileName.substring(0, dot) : fileName;
+        return title.length() > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH).trim() : title.trim();
+    }
+
+    private String extractTitleFromText(String content, String fileName) {
+        if (content != null) {
+            for (String line : content.split("\\n")) {
+                String title = line.trim();
+                if (!title.isBlank()) {
+                    return title.length() > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH).trim() : title;
+                }
+            }
+        }
+        return titleFromFileName(fileName);
     }
 
     /** 保存原始文件到 documents 目录，返回存储文件名 */

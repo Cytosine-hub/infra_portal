@@ -53,6 +53,7 @@
         :initial-title="uploadResult.title"
         :original-file-name="uploadResult.originalFileName"
         :related-standard-document-id="uploadResult.relatedStandardDocumentId"
+        :can-manage="uploadResult.canManage !== false"
         :software-type-categories="softwareTypeCategories"
         :software-types="softwareTypes"
         :standard-document-options="allParameterStandards"
@@ -510,7 +511,8 @@ function previewWordDocument(doc) {
     title: doc.title,
     originalFileName: doc.originalFileName,
     content: doc.content || '',
-    relatedStandardDocumentId: doc.relatedStandardDocumentId || null
+    relatedStandardDocumentId: doc.relatedStandardDocumentId || null,
+    canManage: doc.canEdit !== false
   }
   window.location.hash = HASH_WORD_PREVIEW
 }

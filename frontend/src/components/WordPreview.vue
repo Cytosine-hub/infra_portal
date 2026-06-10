@@ -2,13 +2,13 @@
   <section class="word-preview-page">
     <div class="word-preview-toolbar">
       <div class="toolbar-left">
-        <span class="preview-title">{{ docInfo.title || originalFileName || '文档预览' }}</span>
-        <span v-if="originalFileName" class="preview-file-name muted">{{ originalFileName }}</span>
+        <span class="preview-title">{{ docInfo.title || effectiveOriginalFileName || '文档预览' }}</span>
+        <span v-if="effectiveOriginalFileName" class="preview-file-name muted">{{ effectiveOriginalFileName }}</span>
       </div>
       <div class="toolbar-actions">
         <button class="ghost" @click="$emit('back')">返回列表</button>
-        <button class="ghost" :disabled="replacing" @click="replaceFileInput.click()">{{ replacing ? '上传中...' : '替换文档' }}</button>
-        <button class="ghost" @click="openInfoDialog">编辑信息</button>
+        <button v-if="canManage" class="ghost" :disabled="replacing" @click="replaceFileInput.click()">{{ replacing ? '上传中...' : '替换文档' }}</button>
+        <button v-if="canManage" class="ghost" @click="openInfoDialog">编辑信息</button>
         <input ref="replaceFileInput" type="file" accept=".doc,.docx,.pdf" class="hidden-file-input" @change="replaceDocument" />
       </div>
     </div>
@@ -93,6 +93,7 @@ const props = defineProps({
   initialTitle: { type: String, default: '' },
   originalFileName: { type: String, default: '' },
   relatedStandardDocumentId: { type: [String, Number], default: null },
+  canManage: { type: Boolean, default: true },
   softwareTypeCategories: { type: Array, default: () => [] },
   softwareTypes: { type: Array, default: () => [] },
   standardDocumentOptions: { type: Array, default: () => [] },
@@ -276,6 +277,7 @@ async function loadPreview() {
 }
 
 async function replaceDocument(event) {
+  if (!props.canManage) return
   const file = event.target.files[0]
   if (!file) return
   replacing.value = true
@@ -320,13 +322,16 @@ onBeforeUnmount(() => {
 onMounted(async () => {
   await loadParameters()
   await loadPreview()
-  if (props.isNewDoc) {
+  if (props.canManage && props.isNewDoc) {
     infoForm.title = props.initialTitle || ''
     infoForm.documentType = 'MANUAL'
     showInfoDialog.value = true
   } else if (props.docId) {
     docInfo.id = props.docId
     docInfo.title = props.initialTitle
+    if (props.canManage) {
+      openInfoDialog()
+    }
   }
 })
 </script>

@@ -6,7 +6,7 @@ import { reactive, ref, computed, nextTick } from 'vue'
 import { request } from '../api'
 import { formatTime } from '../utils'
 
-const ALLOWED_UPLOAD_EXTS = ['.doc', '.docx', '.md', '.markdown']
+const ALLOWED_UPLOAD_EXTS = ['.doc', '.docx', '.md', '.markdown', '.pdf']
 const MAX_UPLOAD_FILE_SIZE = 20 * 1024 * 1024
 const HASH_WORD_PREVIEW = '#/admin/word-preview'
 const HASH_DOCUMENT_EDITOR = '#/admin/document-editor'
@@ -411,9 +411,12 @@ export function useAdmin(auth, notify, confirm) {
           title: updated.title || doc.title,
           originalFileName: updated.originalFileName || doc.originalFileName,
           content: updated.content || doc.content || '',
-          relatedStandardDocumentId: updated.relatedStandardDocumentId || doc.relatedStandardDocumentId || null
+          relatedStandardDocumentId: updated.relatedStandardDocumentId || doc.relatedStandardDocumentId || null,
+          canManage: updated.canEdit !== false
         }
         window.location.hash = HASH_WORD_PREVIEW
+      } else {
+        window.location.hash = `${HASH_DOCUMENT_EDITOR}/${updated.id || doc.id}`
       }
     } catch (error) { notify(error.message || '操作失败', 'error') }
   }
@@ -468,7 +471,7 @@ export function useAdmin(auth, notify, confirm) {
     if (!uploadFile.value) { notify('请选择文件', 'error'); return }
     const fileName = uploadFile.value.name.toLowerCase()
     if (!ALLOWED_UPLOAD_EXTS.some(ext => fileName.endsWith(ext))) {
-      notify('仅支持 .doc、.docx、.md 格式的文件', 'error'); return
+      notify('仅支持 .doc、.docx、.md、.pdf 格式的文件', 'error'); return
     }
     if (uploadFile.value.size > MAX_UPLOAD_FILE_SIZE) {
       notify(`文件大小不能超过 ${MAX_UPLOAD_FILE_SIZE / 1024 / 1024}MB`, 'error'); return
@@ -480,7 +483,7 @@ export function useAdmin(auth, notify, confirm) {
       fd.append('convertToMarkdown', uploadConverting.value)
       const result = await request('/api/admin/standard-documents/upload', { method: 'POST', body: fd })
       uploadResult.value = result.storedFileName
-        ? { ...result, isNewDoc: true, docId: null }
+        ? { ...result, isNewDoc: true, docId: null, canManage: true }
         : result
       showUploadDialog.value = false
       notify('文档已上传，请完善文档信息后保存', 'success')
@@ -595,7 +598,8 @@ export function useAdmin(auth, notify, confirm) {
         title: doc.title,
         originalFileName: doc.originalFileName,
         content: doc.content || '',
-        relatedStandardDocumentId: doc.relatedStandardDocumentId || null
+        relatedStandardDocumentId: doc.relatedStandardDocumentId || null,
+        canManage: doc.canEdit !== false
       }
       closeReviewDetail()
       window.location.hash = HASH_WORD_PREVIEW
