@@ -123,39 +123,33 @@ public class TroubleshootAgent {
             chatSessionMapper.update(session);
         }
 
-        // 2. Retrieve relevant knowledge — Wiki first, chunk fallback
+        // 2. Retrieve relevant knowledge — Wiki and vector/keyword knowledge are both used.
         List<Map<String, Object>> references = new ArrayList<>();
-        String contextMessage;
 
-        // Try Wiki search first
         List<WikiSearchService.WikiSearchResult> wikiResults = Collections.emptyList();
         if (wikiSearchService != null) {
             try {
                 wikiResults = wikiSearchService.search(userMessage, DEFAULT_SEARCH_TOP_K, authentication);
             } catch (Exception e) {
-                log.warn("Wiki search failed, falling back to chunk search: {}", e.getMessage());
+                log.warn("Wiki search failed: {}", e.getMessage());
             }
         }
 
-        if (!wikiResults.isEmpty()) {
-            // Wiki has sufficient results — use Wiki context
-            contextMessage = buildWikiContextMessage(userMessage, wikiResults);
-            for (WikiSearchService.WikiSearchResult r : wikiResults) {
+        List<SearchResult> searchResults = knowledgeService.search(userMessage, DEFAULT_SEARCH_TOP_K);
+        String contextMessage = buildHybridContextMessage(userMessage, wikiResults, searchResults);
+        for (WikiSearchService.WikiSearchResult r : wikiResults) {
+            Map<String, Object> ref = new HashMap<>();
+            ref.put("title", r.getPage().getTitle());
+            ref.put("wikiPageId", r.getPage().getId());
+            ref.put("source", "wiki");
+            references.add(ref);
+        }
+        for (SearchResult r : searchResults) {
+            if (r.getSourceTitle() != null) {
                 Map<String, Object> ref = new HashMap<>();
-                ref.put("title", r.getPage().getTitle());
-                ref.put("wikiPageId", r.getPage().getId());
+                ref.put("title", r.getSourceTitle());
+                ref.put("source", r.getSource());
                 references.add(ref);
-            }
-        } else {
-            // Fall back to existing chunk-based search
-            List<SearchResult> searchResults = knowledgeService.search(userMessage, DEFAULT_SEARCH_TOP_K);
-            contextMessage = buildContextMessage(userMessage, searchResults);
-            for (SearchResult r : searchResults) {
-                if (r.getSourceTitle() != null) {
-                    Map<String, Object> ref = new HashMap<>();
-                    ref.put("title", r.getSourceTitle());
-                    references.add(ref);
-                }
             }
         }
 
@@ -255,66 +249,60 @@ public class TroubleshootAgent {
         return chatSessionMapper.findAllByOrderByUpdatedAtDesc();
     }
 
-    /**
-     * Build a user message enriched with Wiki context.
-     */
-    private String buildWikiContextMessage(String userMessage,
-            List<WikiSearchService.WikiSearchResult> results) {
+    private String buildHybridContextMessage(String userMessage,
+            List<WikiSearchService.WikiSearchResult> wikiResults,
+            List<SearchResult> knowledgeResults) {
         StringBuilder sb = new StringBuilder();
         sb.append("用户问题：").append(userMessage).append("\n\n");
-        if (!results.isEmpty()) {
+        if (!wikiResults.isEmpty()) {
             sb.append("以下是 Wiki 知识库中的相关页面：\n\n");
-            int totalChars = sb.length();
-            for (int i = 0; i < results.size(); i++) {
-                WikiPage page = results.get(i).getPage();
-                String content = page.getContent();
-                if (content == null) content = "";
-
-                // Truncate if running out of budget
-                int remaining = MAX_CONTEXT_CHARS - totalChars - 200;
-                if (remaining <= 0) break;
-                if (content.length() > remaining) {
-                    content = content.substring(0, remaining) + "...(truncated)";
-                }
-
-                String entry = String.format("【Wiki %d】%s (类型:%s, 分类:%s)\n%s\n",
-                        i + 1,
-                        page.getTitle(),
-                        page.getPageType() != null ? page.getPageType() : "未知",
-                        page.getCategory() != null ? page.getCategory() : "通用",
-                        content);
-                sb.append(entry);
-                totalChars += entry.length();
-
-                // Show related page titles
-                List<String> related = results.get(i).getRelatedPageTitles();
-                if (related != null && !related.isEmpty()) {
-                    String relatedLine = "关联页面: " + String.join(", ", related) + "\n\n";
-                    sb.append(relatedLine);
-                    totalChars += relatedLine.length();
-                } else {
-                    sb.append("\n");
-                }
+            appendWikiContext(sb, wikiResults);
+        }
+        if (!knowledgeResults.isEmpty()) {
+            sb.append("以下是向量/关键词知识库中的相关内容：\n");
+            for (int i = 0; i < knowledgeResults.size(); i++) {
+                SearchResult r = knowledgeResults.get(i);
+                sb.append(String.format("【知识库 %d】来源：%s\n%s\n\n",
+                        i + 1, r.getSourceTitle(), r.getContent()));
             }
+        }
+        if (wikiResults.isEmpty() && knowledgeResults.isEmpty()) {
+            sb.append("知识库中未找到相关内容。\n");
         }
         return sb.toString();
     }
 
-    /**
-     * Build a user message enriched with knowledge context.
-     */
-    private String buildContextMessage(String userMessage, List<SearchResult> results) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("用户问题：").append(userMessage).append("\n\n");
-        if (!results.isEmpty()) {
-            sb.append("以下是知识库中的相关内容：\n");
-            for (int i = 0; i < results.size(); i++) {
-                SearchResult r = results.get(i);
-                sb.append(String.format("【知识%d】来源：%s\n%s\n\n",
-                        i + 1, r.getSourceTitle(), r.getContent()));
+    private void appendWikiContext(StringBuilder sb, List<WikiSearchService.WikiSearchResult> results) {
+        int totalChars = sb.length();
+        for (int i = 0; i < results.size(); i++) {
+            WikiPage page = results.get(i).getPage();
+            String content = page.getContent();
+            if (content == null) content = "";
+
+            int remaining = MAX_CONTEXT_CHARS - totalChars - 200;
+            if (remaining <= 0) break;
+            if (content.length() > remaining) {
+                content = content.substring(0, remaining) + "...(truncated)";
+            }
+
+            String entry = String.format("【Wiki %d】%s (类型:%s, 分类:%s)\n%s\n",
+                    i + 1,
+                    page.getTitle(),
+                    page.getPageType() != null ? page.getPageType() : "未知",
+                    page.getCategory() != null ? page.getCategory() : "通用",
+                    content);
+            sb.append(entry);
+            totalChars += entry.length();
+
+            List<String> related = results.get(i).getRelatedPageTitles();
+            if (related != null && !related.isEmpty()) {
+                String relatedLine = "关联页面: " + String.join(", ", related) + "\n\n";
+                sb.append(relatedLine);
+                totalChars += relatedLine.length();
+            } else {
+                sb.append("\n");
             }
         }
-        return sb.toString();
     }
 
     /**

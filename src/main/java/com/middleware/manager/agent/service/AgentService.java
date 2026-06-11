@@ -27,9 +27,11 @@ public class AgentService {
             可用工具：%s
 
             回复要求：
-            - 先分析问题，再调用工具获取数据
+            - 系统会预先提供一次知识库检索结果；先基于检索结果回答
+            - 不要在回复正文中输出 <tool_call>、JSON 工具调用或伪代码工具调用
             - 综合所有数据给出结论
             - 结论包含：根因、影响范围、修复建议
+            - 如果用户是在询问产品、概念或配置说明，可以按“概述、关键能力、适用场景、参考来源”组织
             - 如果需要执行操作，明确说明操作步骤和风险
             """;
 
@@ -78,7 +80,7 @@ public class AgentService {
         } else {
             // 2. General reasoning with tool awareness
             emit(onEvent, AgentEvent.of("run_started", Map.of("skill", "")));
-            response = generalChat(userMessage, onRetry);
+            response = generalChat(userMessage, onRetry, toolsUsed, sessionId, actorId, onEvent);
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -156,16 +158,52 @@ public class AgentService {
         }
     }
 
-    private String generalChat(String userMessage, Consumer<String> onRetry) {
+    private String generalChat(String userMessage, Consumer<String> onRetry, List<String> toolsUsed,
+                               Long sessionId, Long actorId, Consumer<AgentEvent> onEvent) {
         String toolDesc = toolMap.values().stream()
                 .map(t -> "- " + t.name() + ": " + t.description())
                 .collect(Collectors.joining("\n"));
+        String knowledgeContext = autoSearchKnowledge(userMessage, toolsUsed, sessionId, actorId, onEvent);
 
         List<Message> messages = List.of(
                 Message.system(String.format(SYSTEM_PROMPT, toolDesc)),
-                Message.user(userMessage)
+                Message.user("用户问题：\n" + userMessage + "\n\n"
+                        + "系统已自动执行 knowledge_search，检索结果如下：\n"
+                        + knowledgeContext + "\n\n"
+                        + "请直接基于以上 Wiki 和知识库内容回答。不要输出 <tool_call>。")
         );
-        return chatModel.generate(messages, onRetry);
+        String answer = removeToolCallMarkup(chatModel.generate(messages, onRetry));
+        if (answer.isBlank()) {
+            return "已检索 Wiki 和知识库，相关内容如下：\n\n" + knowledgeContext;
+        }
+        return answer;
+    }
+
+    private String autoSearchKnowledge(String userMessage, List<String> toolsUsed, Long sessionId, Long actorId,
+                                       Consumer<AgentEvent> onEvent) {
+        Tool tool = toolMap.get("knowledge_search");
+        if (tool == null) {
+            return "knowledge_search 工具不可用";
+        }
+        String stepName = "检索 Wiki 和向量知识库";
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("query", userMessage);
+        args.put("top_k", 6);
+        emit(onEvent, AgentEvent.stepStarted(stepName, tool.name()));
+        ToolResult result = callTool(tool, args, sessionId, actorId, stepName);
+        toolsUsed.add(tool.name());
+        emit(onEvent, AgentEvent.toolResult(stepName, tool.name(), result.isSuccess(),
+                result.getSummary(), result.getLatencyMs()));
+        return result.toPromptText();
+    }
+
+    private String removeToolCallMarkup(String response) {
+        if (response == null) {
+            return "";
+        }
+        return response
+                .replaceAll("(?s)<tool_call>.*?</tool_call>", "")
+                .trim();
     }
 
     private Map<String, Object> resolveArgs(Map<String, String> template, Map<String, String> context) {

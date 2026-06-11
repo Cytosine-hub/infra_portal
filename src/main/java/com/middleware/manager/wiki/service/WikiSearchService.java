@@ -208,6 +208,8 @@ public class WikiSearchService {
             }
         }
 
+        results = preferExplicitProductMatches(query, results);
+
         // 限制结果数：取调用方请求的 topK 和配置上限的较小值
         int limit = Math.min(topK, maxContextPages);
         if (results.size() > limit) {
@@ -215,6 +217,54 @@ public class WikiSearchService {
         }
 
         return results;
+    }
+
+    private List<WikiSearchResult> preferExplicitProductMatches(String query, List<WikiSearchResult> results) {
+        if (query == null || results.size() <= 1) {
+            return results;
+        }
+        List<String> tokens = extractProductTokens(query);
+        if (tokens.isEmpty()) {
+            return results;
+        }
+        List<WikiSearchResult> matched = results.stream()
+                .filter(result -> matchesAnyToken(result.getPage(), tokens))
+                .toList();
+        if (matched.size() >= 2) {
+            return new ArrayList<>(matched);
+        }
+        return results;
+    }
+
+    private List<String> extractProductTokens(String query) {
+        List<String> tokens = new ArrayList<>();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("[A-Za-z][A-Za-z0-9_-]{1,}")
+                .matcher(query);
+        while (matcher.find()) {
+            String token = matcher.group().toLowerCase(Locale.ROOT);
+            if (!tokens.contains(token)) {
+                tokens.add(token);
+            }
+        }
+        return tokens;
+    }
+
+    private boolean matchesAnyToken(WikiPage page, List<String> tokens) {
+        if (page == null) {
+            return false;
+        }
+        String haystack = String.join(" ",
+                valueOrEmpty(page.getTitle()),
+                valueOrEmpty(page.getSoftware()),
+                valueOrEmpty(page.getCategory()),
+                valueOrEmpty(page.getSummary()),
+                valueOrEmpty(page.getContent()))
+                .toLowerCase(Locale.ROOT);
+        return tokens.stream().anyMatch(haystack::contains);
+    }
+
+    private String valueOrEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private List<WikiPage> safeGet(CompletableFuture<List<WikiPage>> future, String source) {

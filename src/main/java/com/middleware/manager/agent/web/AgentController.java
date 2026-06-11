@@ -4,6 +4,7 @@ import com.middleware.manager.agent.service.AgentService;
 import com.middleware.manager.agent.service.AgentEvent;
 import com.middleware.manager.agent.skill.Skill;
 import com.middleware.manager.agent.skill.SkillLoader;
+import com.middleware.manager.agent.tool.ToolContextHolder;
 import com.middleware.manager.constant.ErrorCode;
 import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.domain.AdminAccount;
@@ -80,13 +81,19 @@ public class AgentController {
                 chatMessageMapper.insert(userMsg);
 
                 // 调用 Agent（带重试回调）
-                Map<String, Object> result = agentService.chat(message, req.getContext(), retryMsg -> {
-                    try {
-                        emitter.send(SseEmitter.event()
-                                .name("retry")
-                                .data(Map.of("message", retryMsg)));
-                    } catch (IOException ignored) {}
-                }, session.getId(), actorId, event -> sendAgentEvent(emitter, event));
+                Map<String, Object> result;
+                try {
+                    ToolContextHolder.setAuthentication(authentication);
+                    result = agentService.chat(message, req.getContext(), retryMsg -> {
+                        try {
+                            emitter.send(SseEmitter.event()
+                                    .name("retry")
+                                    .data(Map.of("message", retryMsg)));
+                        } catch (IOException ignored) {}
+                    }, session.getId(), actorId, event -> sendAgentEvent(emitter, event));
+                } finally {
+                    ToolContextHolder.clear();
+                }
 
                 // 保存助手消息
                 ChatMessage assistantMsg = new ChatMessage();
