@@ -270,7 +270,8 @@ export function useAdmin(auth, notify, confirm, onSettingsSaved) {
     if (releaseForm.parameterStandardId) {
       formData.append('parameterStandardId', releaseForm.parameterStandardId)
     }
-    if (releaseForm.file) { formData.append('file', releaseForm.file) }
+    const hasFile = !!releaseForm.file
+    if (hasFile) { formData.append('file', releaseForm.file) }
 
     const url = releaseForm.id ? `/api/admin/releases/${releaseForm.id}` : '/api/admin/releases'
     const method = releaseForm.id ? 'PUT' : 'POST'
@@ -279,8 +280,10 @@ export function useAdmin(auth, notify, confirm, onSettingsSaved) {
     try {
       await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest()
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) uploadProgress.value = Math.round(e.loaded / e.total * 100)
+        if (hasFile) {
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) uploadProgress.value = Math.round(e.loaded / e.total * 100)
+          }
         }
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
