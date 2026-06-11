@@ -1,9 +1,11 @@
 package com.middleware.manager.wiki.service;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.wiki.entity.WikiLink;
 import com.middleware.manager.wiki.entity.WikiPage;
 import com.middleware.manager.wiki.repository.WikiLinkMapper;
@@ -189,12 +191,30 @@ public class WikiImportService {
                         com.middleware.manager.constant.ErrorCode.PARAM_INVALID, "导入包文件校验失败: " + name);
             }
         }
-        String expectedSignature = sha256(signatureSecret + gson.toJson(hashes));
+        String expectedSignature = sign(hashes);
+        String legacyPrettySignature = legacyPrettySign(hashes);
         String actualSignature = manifest.get("signature").getAsString();
-        if (!expectedSignature.equals(actualSignature)) {
+        if (!expectedSignature.equals(actualSignature) && !legacyPrettySignature.equals(actualSignature)) {
             throw new com.middleware.manager.exception.BusinessException(
-                    com.middleware.manager.constant.ErrorCode.PARAM_INVALID, "导入包签名校验失败");
+                    com.middleware.manager.constant.ErrorCode.PARAM_INVALID,
+                    ErrorMessages.WIKI_IMPORT_SIGNATURE_INVALID);
         }
+    }
+
+    private String sign(JsonObject hashes) {
+        return sha256(signatureSecret + canonicalHashPayload(hashes));
+    }
+
+    private String legacyPrettySign(JsonObject hashes) {
+        return sha256(signatureSecret + new GsonBuilder().setPrettyPrinting().create().toJson(hashes));
+    }
+
+    private String canonicalHashPayload(JsonObject hashes) {
+        Map<String, String> sorted = new TreeMap<>();
+        for (Map.Entry<String, JsonElement> entry : hashes.entrySet()) {
+            sorted.put(entry.getKey(), entry.getValue().getAsString());
+        }
+        return new Gson().toJson(sorted);
     }
 
     private String buildConflictNote(WikiPage existing, WikiPage imported) {

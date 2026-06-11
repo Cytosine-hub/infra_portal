@@ -1,5 +1,7 @@
 package com.middleware.manager.wiki.web;
 
+import com.middleware.manager.exception.BusinessException;
+import com.middleware.manager.web.api.dto.ApiError;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -11,6 +13,12 @@ import lombok.extern.slf4j.Slf4j;
 @RestControllerAdvice(basePackages = "com.middleware.manager.wiki.web")
 @Slf4j
 public class WikiExceptionHandler {
+
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ApiError> handleBusiness(BusinessException e) {
+        log.warn("Wiki business error code={} message={}", e.getCode(), e.getMessage());
+        return ResponseEntity.badRequest().body(new ApiError(400, e.getCode(), e.getMessage()));
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException e) {

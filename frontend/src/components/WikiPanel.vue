@@ -1065,7 +1065,7 @@ async function exportWiki() {
     const resp = await fetch('/api/wiki/export', {
       headers: { 'Authorization': `Bearer ${props.auth?.token || ''}` }
     })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    if (!resp.ok) throw new Error(await readWikiError(resp, '导出失败'))
     const blob = await resp.blob()
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -1093,7 +1093,7 @@ async function importWiki(event) {
       headers: { 'Authorization': `Bearer ${props.auth?.token || ''}` },
       body: formData
     })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    if (!resp.ok) throw new Error(await readWikiError(resp, '导入失败'))
     const result = await resp.json()
     const conflictList = (result.conflictDetails || []).map(c => `${c.title}(${c.pageType})`).join('、')
     importResult.value = {
@@ -1105,6 +1105,17 @@ async function importWiki(event) {
   } catch (e) {
     importResult.value = { success: false, message: '导入失败: ' + e.message }
   }
+}
+
+async function readWikiError(resp, fallback) {
+  try {
+    const payload = await resp.json()
+    const message = payload.message || payload.error
+    if (message) return message
+  } catch (e) {
+    console.warn('读取 Wiki 错误响应失败', e)
+  }
+  return `${fallback}（HTTP ${resp.status}）`
 }
 
 // --- Graph ---

@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -172,7 +173,7 @@ public class WikiExportService {
         JsonObject hashes = new JsonObject();
         entries.forEach((name, content) -> hashes.addProperty(name, sha256(content)));
         manifest.add("file_hashes", hashes);
-        manifest.addProperty("signature_algorithm", "sha256(secret + file_hashes)");
+        manifest.addProperty("signature_algorithm", "sha256(secret + canonical_file_hashes_v2)");
         manifest.addProperty("signature", sign(hashes));
 
         return manifest;
@@ -206,7 +207,15 @@ public class WikiExportService {
     }
 
     private String sign(JsonObject hashes) {
-        return sha256(signatureSecret + gson.toJson(hashes));
+        return sha256(signatureSecret + canonicalHashPayload(hashes));
+    }
+
+    private String canonicalHashPayload(JsonObject hashes) {
+        Map<String, String> sorted = new TreeMap<>();
+        for (Map.Entry<String, JsonElement> entry : hashes.entrySet()) {
+            sorted.put(entry.getKey(), entry.getValue().getAsString());
+        }
+        return new Gson().toJson(sorted);
     }
 
     private String sha256(String input) {

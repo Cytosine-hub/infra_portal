@@ -4,6 +4,7 @@ import com.middleware.manager.constant.ErrorCode;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.middleware.manager.domain.AdminAccount;
+import com.middleware.manager.exception.BusinessException;
 import com.middleware.manager.knowledge.loader.DocumentLoader;
 import com.middleware.manager.repository.AdminAccountMapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -345,6 +346,8 @@ public class WikiController {
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=wiki-export.zip")
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(zipBytes);
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Export failed: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().build();
@@ -371,6 +374,8 @@ public class WikiController {
                         request.getRemoteAddr(), detail);
             } catch (Exception e) { log.warn("Audit log failed: {}", e.getMessage()); }
             return ResponseEntity.ok(result);
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Import failed: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().build();

@@ -67,6 +67,8 @@ app:
       max-content-chars: ${WIKI_INGEST_MAX_CHARS:20000}
       chunk-overlap: ${WIKI_CHUNK_OVERLAP:500}
       parallel-chunks: ${WIKI_PARALLEL_CHUNKS:3}
+    export:
+      signature-secret: ${WIKI_EXPORT_SIGNATURE_SECRET:middleware-resource-manager}
   # Zabbix 监控配置
   zabbix:
     url: ${ZABBIX_URL:http://localhost:8080/api_jsonrpc.php}
