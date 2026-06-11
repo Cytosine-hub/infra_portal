@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @RestController("opsAgentController")
 @RequestMapping("/api/ops-agent")
@@ -59,6 +60,7 @@ public class AgentController {
     @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chat(@RequestBody ChatRequest req, Authentication authentication) {
         SseEmitter emitter = new SseEmitter(300_000L);
+        AtomicBoolean clientOpen = new AtomicBoolean(true);
 
         sseExecutor.submit(() -> {
             try {
@@ -85,12 +87,8 @@ public class AgentController {
                 try {
                     ToolContextHolder.setAuthentication(authentication);
                     result = agentService.chat(message, req.getContext(), retryMsg -> {
-                        try {
-                            emitter.send(SseEmitter.event()
-                                    .name("retry")
-                                    .data(Map.of("message", retryMsg)));
-                        } catch (IOException ignored) {}
-                    }, session.getId(), actorId, event -> sendAgentEvent(emitter, event));
+                        safeSend(emitter, clientOpen, "retry", Map.of("message", retryMsg));
+                    }, session.getId(), actorId, event -> sendAgentEvent(emitter, clientOpen, event));
                 } finally {
                     ToolContextHolder.clear();
                 }
@@ -111,32 +109,76 @@ public class AgentController {
                 }
 
                 result.put("sessionId", session.getId());
-                emitter.send(SseEmitter.event().name("result").data(result));
-                emitter.send(SseEmitter.event().name("completed").data(Map.of("sessionId", session.getId())));
-                emitter.complete();
+                if (clientOpen.get()) {
+                    safeSend(emitter, clientOpen, "result", result);
+                    safeSend(emitter, clientOpen, "completed", Map.of("sessionId", session.getId()));
+                }
+                completeQuietly(emitter);
             } catch (Exception e) {
+                if (!clientOpen.get() || isClientDisconnect(e)) {
+                    completeQuietly(emitter);
+                    return;
+                }
                 String msg = toClientError(e);
                 boolean isRetryFail = isRetryFailure(msg);
-                try {
-                    emitter.send(SseEmitter.event()
-                            .name("error")
-                            .data(Map.of("error", msg, "retryFailed", isRetryFail)));
-                } catch (IOException ignored) {}
-                emitter.complete();
+                safeSend(emitter, clientOpen, "error", Map.of("error", msg, "retryFailed", isRetryFail));
+                completeQuietly(emitter);
             }
         });
 
-        emitter.onTimeout(emitter::complete);
-        emitter.onError(t -> emitter.complete());
+        emitter.onCompletion(() -> clientOpen.set(false));
+        emitter.onTimeout(() -> {
+            clientOpen.set(false);
+            completeQuietly(emitter);
+        });
+        emitter.onError(t -> {
+            clientOpen.set(false);
+            completeQuietly(emitter);
+        });
         return emitter;
     }
 
-    private void sendAgentEvent(SseEmitter emitter, AgentEvent event) {
-        try {
-            emitter.send(SseEmitter.event().name(event.getType()).data(event.getPayload()));
-        } catch (IOException e) {
-            log.warn("Failed to send agent SSE event type={}: {}", event.getType(), e.getMessage());
+    private void sendAgentEvent(SseEmitter emitter, AtomicBoolean clientOpen, AgentEvent event) {
+        safeSend(emitter, clientOpen, event.getType(), event.getPayload());
+    }
+
+    private boolean safeSend(SseEmitter emitter, AtomicBoolean clientOpen, String eventName, Object data) {
+        if (!clientOpen.get()) {
+            return false;
         }
+        try {
+            emitter.send(SseEmitter.event().name(eventName).data(data));
+            return true;
+        } catch (IOException e) {
+            clientOpen.set(false);
+            if (!isClientDisconnect(e)) {
+                log.warn("Failed to send agent SSE event type={}: {}", eventName, e.getMessage());
+            }
+            return false;
+        } catch (IllegalStateException e) {
+            clientOpen.set(false);
+            return false;
+        }
+    }
+
+    private void completeQuietly(SseEmitter emitter) {
+        try {
+            emitter.complete();
+        } catch (IllegalStateException e) {
+            log.debug("SSE emitter already completed");
+        }
+    }
+
+    private boolean isClientDisconnect(Exception e) {
+        String message = e.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String lower = message.toLowerCase();
+        return lower.contains("broken pipe")
+                || lower.contains("connection reset")
+                || lower.contains("response body has already been written")
+                || lower.contains("async request");
     }
 
     private ChatSession createNewSession(Long createdBy) {

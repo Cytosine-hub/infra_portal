@@ -294,7 +294,9 @@
                 v-model="inputMessage"
                 placeholder="输入排查问题，按 Enter 发送（Shift+Enter 换行）"
                 rows="2"
-                @keydown="handleKeydown"
+                @compositionstart="isComposing = true"
+                @compositionend="isComposing = false"
+                @keydown.stop="handleKeydown"
               ></textarea>
               <div class="input-bottom-bar">
                 <button
@@ -336,6 +338,7 @@ const currentSessionId = ref(null)
 const messages = ref([])
 const inputMessage = ref('')
 const sending = ref(false)
+const isComposing = ref(false)
 const agentMode = ref('rag')
 const chatContainer = ref(null)
 const inputRef = ref(null)
@@ -636,6 +639,9 @@ function stopSending() {
 }
 
 function handleKeydown(event) {
+  if (event.isComposing || isComposing.value || event.keyCode === 229) {
+    return
+  }
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault()
     sendMessage()
