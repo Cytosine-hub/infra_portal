@@ -55,7 +55,8 @@ class IngestAgentTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         ingestAgent = new IngestAgent(chatModel, pageMapper, sourceMapper, logMapper,
-                linkResolver, embeddingService, vectorStore, softwareTypeMapper, 50000);
+                linkResolver, embeddingService, vectorStore, softwareTypeMapper,
+                new DocumentTypeClassifier(), new DocumentOutlineExtractor(), new WikiIngestQualityGate(), 50000);
     }
 
     @Nested

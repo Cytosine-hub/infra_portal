@@ -41,7 +41,7 @@ class IngestTaskServiceTest {
     }
 
     @Test
-    void allFailedChunksDoNotMarkSourceAsIngested() {
+    void failedPlannedIngestDoesNotMarkSourceAsIngested() {
         IngestTask task = new IngestTask();
         task.setId(9L);
         task.setSourceId(3L);
@@ -60,13 +60,13 @@ class IngestTaskServiceTest {
 
         when(taskMapper.findById(9L)).thenReturn(task);
         when(sourceMapper.findById(3L)).thenReturn(source);
-        when(ingestAgent.ingestContent(anyString(), eq(source.getTitle()), isNull(), isNull(), eq(1L)))
+        when(ingestAgent.ingestPlanned(eq(source), eq(1L)))
                 .thenReturn(failed);
 
         service.executeTask(9L);
 
         verify(taskMapper, never()).updateResult(eq(9L), anyInt(), anyInt());
-        verify(taskMapper).updateStatus(eq(9L), eq("FAILED"), contains("未生成 Wiki 页面"));
+        verify(taskMapper).updateStatus(eq(9L), eq("FAILED"), contains("Failed to parse pages JSON"));
         ArgumentCaptor<WikiSource> sourceCaptor = ArgumentCaptor.forClass(WikiSource.class);
         verify(sourceMapper).update(sourceCaptor.capture());
         assertFalse(Boolean.TRUE.equals(sourceCaptor.getValue().getIngested()));

@@ -116,6 +116,145 @@ public class IngestPromptTemplates {
               .replace("{{ANALYSIS_JSON}}", analysisJson);
     }
 
+    public static String buildSectionFactsPrompt(String outlineJson) {
+        return """
+            你是银行基础架构运维知识库的章节事实抽取器。根据文档目录和章节摘录抽取事实。
+
+            ## 文档目录和章节摘录
+            {{OUTLINE_JSON}}
+
+            ## 输出规则
+            1. 只抽取章节摘录中明确出现的事实，不要编造。
+            2. 每个 section_id 必须返回一条 section_facts。
+            3. 操作步骤、配置项、指标、故障处理、强制条款必须保留。
+            4. 输出必须是合法 JSON，不要包含任何其他文字。
+
+            ## 输出 JSON 格式
+            {
+              "section_facts": [
+                {
+                  "section_id": "sec-001",
+                  "section_path": "章节路径",
+                  "facts": ["事实1", "事实2"],
+                  "operations": [
+                    {"step": 1, "action": "操作", "command": "命令，如无则为空", "evidence": "原文短摘录"}
+                  ],
+                  "config_items": [
+                    {"name": "参数名", "default_value": "默认值", "description": "说明"}
+                  ],
+                  "warnings": ["注意事项"],
+                  "entities": ["实体1"]
+                }
+              ]
+            }
+            """.replace("{{OUTLINE_JSON}}", outlineJson);
+    }
+
+    public static String buildPagePlanPrompt(String outlineJson, String sectionFactsJson,
+                                             String existingPagesSummary, String softwareReference) {
+        return """
+            你是银行基础架构运维知识库的页面规划器。根据文档目录和章节事实生成 page_plan。
+
+            ## 文档目录
+            {{OUTLINE_JSON}}
+
+            ## 章节事实
+            {{SECTION_FACTS_JSON}}
+
+            ## 已有 Wiki 页面
+            {{EXISTING_PAGES}}
+
+            ## 已知软件分类参考
+            {{SOFTWARE_REFERENCE}}
+
+            ## 规划规则
+            1. 每个 required section 必须映射到至少一个页面。
+            2. 多个连续小节可以合并为一个页面，但不能把高价值章节压缩成泛泛概述。
+            3. 页面标题必须包含软件名和版本；无法识别版本时至少包含软件名。
+            4. 标题不能是“安装方式”“产品配置”“参数说明”“问题处理”这类泛标题。
+            5. 步骤类内容优先 RUNBOOK；参数和规范类内容优先 STANDARD；故障类内容优先 EXPERIENCE。
+            6. 输出必须是合法 JSON，不要包含任何其他文字。
+
+            ## 输出 JSON 格式
+            {
+              "pages": [
+                {
+                  "planned_title": "页面标题",
+                  "page_type": "ENTITY/CONCEPT/RUNBOOK/EXPERIENCE/STANDARD/OVERVIEW",
+                  "category": "中间件/数据库/主机/网络/安全",
+                  "software": "软件名",
+                  "version": "版本号",
+                  "covered_section_ids": ["sec-001"],
+                  "required": true,
+                  "merge_strategy": "CREATE_OR_PATCH",
+                  "expected_outline": ["一级小节", "二级小节"]
+                }
+              ]
+            }
+            """.replace("{{OUTLINE_JSON}}", outlineJson)
+              .replace("{{SECTION_FACTS_JSON}}", sectionFactsJson)
+              .replace("{{EXISTING_PAGES}}", existingPagesSummary)
+              .replace("{{SOFTWARE_REFERENCE}}", softwareReference);
+    }
+
+    public static String buildPlannedPageGenerationPrompt(String outlineJson, String sectionFactsJson,
+                                                          String pagePlanJson, String sourceMetaJson) {
+        return """
+            你是银行基础架构运维知识库的 Wiki 页面生成器。必须严格按照 page_plan 生成页面。
+
+            ## 来源信息
+            {{SOURCE_META_JSON}}
+
+            ## 文档目录
+            {{OUTLINE_JSON}}
+
+            ## 章节事实
+            {{SECTION_FACTS_JSON}}
+
+            ## 页面计划
+            {{PAGE_PLAN_JSON}}
+
+            ## 生成规则
+            1. 只能生成 page_plan 中列出的页面，不要自由新增泛化页面。
+            2. 页面内容必须使用 Markdown，并保留操作步骤、参数、指标、故障处理和注意事项。
+            3. 用 [[页面名]] 标记同一软件下的强相关页面。
+            4. 每个页面必须写入 source_refs.sections，section_id 必须来自 page_plan.covered_section_ids。
+            5. 每个页面必须写入 coverage.section_ids，必须等于或覆盖 page_plan.covered_section_ids。
+            6. 不要编造原文没有的配置项、命令、指标或故障原因。
+            7. 输出必须是合法 JSON，不要包含任何其他文字。
+
+            ## 输出 JSON 格式
+            {
+              "pages": [
+                {
+                  "title": "页面标题",
+                  "page_type": "ENTITY/CONCEPT/RUNBOOK/EXPERIENCE/STANDARD/OVERVIEW",
+                  "category": "中间件/数据库/主机/网络/安全",
+                  "software": "软件名",
+                  "version": "版本号",
+                  "summary": "一句话摘要",
+                  "content": "完整 Markdown 内容，含 [[wikilink]] 交叉引用",
+                  "source_refs": {
+                    "source_id": 12,
+                    "source_title": "来源标题",
+                    "source_type": "UPLOAD",
+                    "sections": [
+                      {"section_id": "sec-001", "section_path": "章节路径", "char_range": "0-1000"}
+                    ]
+                  },
+                  "coverage": {
+                    "section_ids": ["sec-001"],
+                    "evidence_quotes": ["原文短摘录，不超过 50 字"]
+                  }
+                }
+              ]
+            }
+            """.replace("{{SOURCE_META_JSON}}", sourceMetaJson)
+              .replace("{{OUTLINE_JSON}}", outlineJson)
+              .replace("{{SECTION_FACTS_JSON}}", sectionFactsJson)
+              .replace("{{PAGE_PLAN_JSON}}", pagePlanJson);
+    }
+
     /**
      * 合并决策 Prompt
      */

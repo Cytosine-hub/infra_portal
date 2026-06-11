@@ -44,6 +44,9 @@ public class IngestAgent {
     private final EmbeddingService embeddingService;
     private final VectorStore vectorStore;
     private final SoftwareTypeMapper softwareTypeMapper;
+    private final DocumentTypeClassifier documentTypeClassifier;
+    private final DocumentOutlineExtractor documentOutlineExtractor;
+    private final WikiIngestQualityGate qualityGate;
     private final Gson gson = new Gson();
     private final int maxContentChars;
 
@@ -58,6 +61,9 @@ public class IngestAgent {
                        EmbeddingService embeddingService,
                        VectorStore vectorStore,
                        SoftwareTypeMapper softwareTypeMapper,
+                       DocumentTypeClassifier documentTypeClassifier,
+                       DocumentOutlineExtractor documentOutlineExtractor,
+                       WikiIngestQualityGate qualityGate,
                        @Value("${app.wiki.ingest.max-content-chars:50000}") int maxContentChars) {
         this.chatModel = chatModel;
         this.pageMapper = pageMapper;
@@ -67,6 +73,9 @@ public class IngestAgent {
         this.embeddingService = embeddingService;
         this.vectorStore = vectorStore;
         this.softwareTypeMapper = softwareTypeMapper;
+        this.documentTypeClassifier = documentTypeClassifier;
+        this.documentOutlineExtractor = documentOutlineExtractor;
+        this.qualityGate = qualityGate;
         this.maxContentChars = maxContentChars;
     }
 
@@ -77,6 +86,7 @@ public class IngestAgent {
         private int contradictionsFound;
         private String status;
         private String errorMessage;
+        private String qualityReport;
 
         public int getPagesCreated() { return pagesCreated; }
         public int getPagesUpdated() { return pagesUpdated; }
@@ -84,12 +94,14 @@ public class IngestAgent {
         public int getContradictionsFound() { return contradictionsFound; }
         public String getStatus() { return status; }
         public String getErrorMessage() { return errorMessage; }
+        public String getQualityReport() { return qualityReport; }
         public void setPagesCreated(int v) { this.pagesCreated = v; }
         public void setPagesUpdated(int v) { this.pagesUpdated = v; }
         public void setLinksCreated(int v) { this.linksCreated = v; }
         public void setContradictionsFound(int v) { this.contradictionsFound = v; }
         public void setStatus(String v) { this.status = v; }
         public void setErrorMessage(String v) { this.errorMessage = v; }
+        public void setQualityReport(String v) { this.qualityReport = v; }
     }
 
     @Transactional
@@ -239,6 +251,116 @@ public class IngestAgent {
             logMapper.insert(ingestLog);
         }
 
+        return result;
+    }
+
+    @Transactional
+    public IngestResult ingestPlanned(WikiSource source, Long operatorId) {
+        long startTime = System.currentTimeMillis();
+        IngestResult result = new IngestResult();
+        WikiIngestLog ingestLog = new WikiIngestLog();
+        ingestLog.setSourceId(source.getId());
+        ingestLog.setOperatorId(operatorId);
+
+        try {
+            String content = source.getContent();
+            String hash = sha256(content);
+            if (hash.equals(source.getContentHash()) && Boolean.TRUE.equals(source.getIngested())) {
+                log.info("Source '{}' content unchanged, skipping planned ingest", source.getTitle());
+                result.setStatus("SKIPPED");
+                return result;
+            }
+
+            log.info("Planned ingest Step 0: Extracting outline for source '{}'", source.getTitle());
+            DocumentTypeClassifier.Classification classification =
+                    documentTypeClassifier.classify(source.getTitle(), content);
+            DocumentOutlineExtractor.DocumentOutline outline = documentOutlineExtractor.extract(
+                    source.getTitle(), content, source.getCategory(), source.getSoftware(), classification);
+            String outlineJson = gson.toJson(outline);
+
+            log.info("Planned ingest Step 1: Extracting section facts for source '{}'", source.getTitle());
+            String sectionFactsJson = callLlm(IngestPromptTemplates.buildSectionFactsPrompt(outlineJson));
+            JsonObject sectionFacts = parseJson(sectionFactsJson);
+            if (sectionFacts == null || !sectionFacts.has("section_facts")) {
+                return failPlanned(result, ingestLog, startTime, "章节事实抽取失败");
+            }
+
+            log.info("Planned ingest Step 2: Planning pages for source '{}'", source.getTitle());
+            String existingSummary = buildExistingPagesSummary(source.getCategory(), source.getSoftware());
+            String softwareRef = buildSoftwareReference();
+            String pagePlanJson = callLlm(IngestPromptTemplates.buildPagePlanPrompt(
+                    outlineJson, sectionFactsJson, existingSummary, softwareRef));
+            JsonObject pagePlan = parseJson(pagePlanJson);
+            if (pagePlan == null || !pagePlan.has("pages")) {
+                return failPlanned(result, ingestLog, startTime, "页面计划生成失败");
+            }
+
+            log.info("Planned ingest Step 3: Generating planned pages for source '{}'", source.getTitle());
+            String sourceMetaJson = buildSourceMetaJson(source);
+            String pagesJson = callLlm(IngestPromptTemplates.buildPlannedPageGenerationPrompt(
+                    outlineJson, sectionFactsJson, pagePlanJson, sourceMetaJson));
+            JsonObject pagesResult = parseJson(pagesJson);
+            if (pagesResult == null || !pagesResult.has("pages")) {
+                return failPlanned(result, ingestLog, startTime, "页面生成失败");
+            }
+
+            JsonArray pages = pagesResult.getAsJsonArray("pages");
+            enrichPagesWithPlan(pages, pagePlan.getAsJsonArray("pages"), outline, source);
+            validateGeneratedPages(pages);
+            WikiIngestQualityGate.QualityReport report = qualityGate.evaluate(outline, pages);
+            result.setQualityReport(gson.toJson(report));
+            if ("FAILED".equals(report.getStatus())) {
+                return failPlanned(result, ingestLog, startTime, "质量门禁失败：" + summarizeQuality(report));
+            }
+
+            SaveStats stats = savePages(pages, source);
+            int linksCreated = linkResolver.resolveLinks(stats.savedPages());
+            vectorizePages(stats.savedPages());
+
+            source.setContentHash(hash);
+            source.setIngested("SUCCESS".equals(report.getStatus()));
+            source.setIngestedAt("SUCCESS".equals(report.getStatus()) ? LocalDateTime.now() : null);
+            sourceMapper.update(source);
+
+            result.setPagesCreated(stats.created());
+            result.setPagesUpdated(stats.updated());
+            result.setContradictionsFound(stats.contradictions());
+            result.setLinksCreated(linksCreated);
+            result.setStatus(report.getStatus());
+            if ("PARTIAL".equals(report.getStatus())) {
+                result.setErrorMessage("质量门禁部分通过：" + summarizeQuality(report));
+            }
+
+            ingestLog.setPagesCreated(stats.created());
+            ingestLog.setPagesUpdated(stats.updated());
+            ingestLog.setLinksCreated(linksCreated);
+            ingestLog.setContradictionsFound(stats.contradictions());
+            ingestLog.setStatus(report.getStatus());
+            ingestLog.setErrorDetail(result.getErrorMessage());
+            ingestLog.setDurationMs((int)(System.currentTimeMillis() - startTime));
+            logMapper.insert(ingestLog);
+
+            log.info("Planned ingest completed for '{}': status={}, created={}, updated={}, links={}",
+                    source.getTitle(), result.getStatus(), stats.created(), stats.updated(), linksCreated);
+        } catch (Exception e) {
+            log.error("Planned ingest failed for source '{}': {}", source.getTitle(), e.getMessage(), e);
+            result.setStatus("FAILED");
+            result.setErrorMessage(e.getMessage());
+            ingestLog.setStatus("FAILED");
+            ingestLog.setErrorDetail(e.getMessage());
+            ingestLog.setDurationMs((int)(System.currentTimeMillis() - startTime));
+            logMapper.insert(ingestLog);
+        }
+        return result;
+    }
+
+    private IngestResult failPlanned(IngestResult result, WikiIngestLog ingestLog, long startTime, String message) {
+        result.setStatus("FAILED");
+        result.setErrorMessage(message);
+        ingestLog.setStatus("FAILED");
+        ingestLog.setErrorDetail(message);
+        ingestLog.setDurationMs((int)(System.currentTimeMillis() - startTime));
+        logMapper.insert(ingestLog);
         return result;
     }
 
@@ -416,6 +538,150 @@ public class IngestAgent {
         return elem != null && !elem.isJsonNull() ? elem.getAsString() : null;
     }
 
+    private String buildSourceMetaJson(WikiSource source) {
+        JsonObject meta = new JsonObject();
+        meta.addProperty("source_id", source.getId());
+        meta.addProperty("source_title", source.getTitle());
+        meta.addProperty("source_type", source.getSourceType());
+        meta.addProperty("category", source.getCategory());
+        meta.addProperty("software", source.getSoftware());
+        return gson.toJson(meta);
+    }
+
+    private void enrichPagesWithPlan(JsonArray pages, JsonArray plans,
+                                     DocumentOutlineExtractor.DocumentOutline outline, WikiSource source) {
+        if (pages == null || plans == null) return;
+        Map<String, JsonObject> planByTitle = new HashMap<>();
+        for (JsonElement planElement : plans) {
+            if (!planElement.isJsonObject()) continue;
+            JsonObject plan = planElement.getAsJsonObject();
+            String plannedTitle = getAsString(plan, "planned_title");
+            if (plannedTitle != null) {
+                planByTitle.put(plannedTitle, plan);
+            }
+        }
+        Map<String, DocumentOutlineExtractor.DocumentSection> sections = new HashMap<>();
+        for (DocumentOutlineExtractor.DocumentSection section : outline.getSections()) {
+            sections.put(section.getId(), section);
+        }
+
+        for (int i = 0; i < pages.size(); i++) {
+            if (!pages.get(i).isJsonObject()) continue;
+            JsonObject page = pages.get(i).getAsJsonObject();
+            JsonObject plan = planByTitle.get(getAsString(page, "title"));
+            if (plan == null && i < plans.size() && plans.get(i).isJsonObject()) {
+                plan = plans.get(i).getAsJsonObject();
+            }
+            if (plan == null) continue;
+
+            JsonArray sectionIds = plan.has("covered_section_ids") && plan.get("covered_section_ids").isJsonArray()
+                    ? plan.getAsJsonArray("covered_section_ids") : new JsonArray();
+            if (!page.has("coverage") || !page.get("coverage").isJsonObject()) {
+                JsonObject coverage = new JsonObject();
+                coverage.add("section_ids", sectionIds.deepCopy());
+                coverage.add("evidence_quotes", new JsonArray());
+                page.add("coverage", coverage);
+            }
+            if (!page.has("source_refs") || !page.get("source_refs").isJsonObject()) {
+                page.add("source_refs", buildSourceRefs(source, sectionIds, sections));
+            }
+            if (!page.has("category") || page.get("category").isJsonNull()) {
+                page.addProperty("category", getAsString(plan, "category"));
+            }
+            if (!page.has("software") || page.get("software").isJsonNull()) {
+                page.addProperty("software", getAsString(plan, "software"));
+            }
+            if (!page.has("version") || page.get("version").isJsonNull()) {
+                page.addProperty("version", getAsString(plan, "version"));
+            }
+        }
+    }
+
+    private JsonObject buildSourceRefs(WikiSource source, JsonArray sectionIds,
+                                       Map<String, DocumentOutlineExtractor.DocumentSection> sections) {
+        JsonObject refs = new JsonObject();
+        refs.addProperty("source_id", source.getId());
+        refs.addProperty("source_title", source.getTitle());
+        refs.addProperty("source_type", source.getSourceType());
+        JsonArray refsSections = new JsonArray();
+        for (JsonElement idElement : sectionIds) {
+            if (idElement.isJsonNull()) continue;
+            String sectionId = idElement.getAsString();
+            DocumentOutlineExtractor.DocumentSection section = sections.get(sectionId);
+            JsonObject sectionRef = new JsonObject();
+            sectionRef.addProperty("section_id", sectionId);
+            if (section != null) {
+                sectionRef.addProperty("section_path", section.getPath());
+                sectionRef.addProperty("char_range", section.getCharStart() + "-" + section.getCharEnd());
+            }
+            refsSections.add(sectionRef);
+        }
+        refs.add("sections", refsSections);
+        return refs;
+    }
+
+    private SaveStats savePages(JsonArray pages, WikiSource source) {
+        int created = 0, updated = 0, contradictions = 0;
+        List<WikiPage> savedPages = new ArrayList<>();
+        for (JsonElement elem : pages) {
+            JsonObject pageObj = elem.getAsJsonObject();
+            String title = getAsString(pageObj, "title");
+            String pageType = getAsString(pageObj, "page_type");
+
+            if (title == null || pageType == null) continue;
+
+            WikiPage existing = pageMapper.findByTitleAndType(title, pageType);
+            if (existing != null) {
+                String mergeDecision = callLlm(IngestPromptTemplates.buildMergeDecisionPrompt(
+                        existing.getContent(), getAsString(pageObj, "content")));
+                JsonObject decision = parseJson(mergeDecision);
+                String action = decision != null ? getAsString(decision, "action") : "APPEND";
+
+                if ("CONTRADICT".equals(action)) {
+                    existing.setStatus("CONTRADICTED");
+                    existing.setContradictionNote(decision != null ? getAsString(decision, "reason") : "与新文档内容矛盾");
+                    pageMapper.update(existing);
+                    contradictions++;
+                } else if ("OVERWRITE".equals(action)) {
+                    updatePageFromJson(existing, pageObj, source);
+                    pageMapper.update(existing);
+                    updated++;
+                    savedPages.add(existing);
+                } else {
+                    String newContent = getAsString(pageObj, "content");
+                    if (newContent != null) {
+                        existing.setContent(existing.getContent() + "\n\n---\n\n" + newContent);
+                    }
+                    String newSummary = getAsString(pageObj, "summary");
+                    if (newSummary != null) existing.setSummary(newSummary);
+                    existing.setSourceRefs(sourceRefsFromPage(pageObj, source));
+                    existing.setCompiledBy("ingest-agent");
+                    existing.setCompiledAt(LocalDateTime.now());
+                    pageMapper.update(existing);
+                    updated++;
+                    savedPages.add(existing);
+                }
+            } else {
+                WikiPage newPage = new WikiPage();
+                updatePageFromJson(newPage, pageObj, source);
+                pageMapper.insert(newPage);
+                created++;
+                savedPages.add(newPage);
+            }
+        }
+        return new SaveStats(created, updated, contradictions, savedPages);
+    }
+
+    private String summarizeQuality(WikiIngestQualityGate.QualityReport report) {
+        return String.format(Locale.ROOT, "coverage=%.2f, required=%d/%d, missing=%s",
+                report.getCoverageRatio(),
+                report.getRequiredSectionsCovered(),
+                report.getRequiredSectionsTotal(),
+                report.getMissingSections());
+    }
+
+    private record SaveStats(int created, int updated, int contradictions, List<WikiPage> savedPages) {}
+
     public void vectorizePages(List<WikiPage> pages) {
         if (!"milvus".equals(vectorType) || pages == null) {
             return;
@@ -492,20 +758,35 @@ public class IngestAgent {
         page.setTitle(getAsString(json, "title"));
         page.setPageType(getAsString(json, "page_type"));
         page.setCategory(getAsString(json, "category"));
-        if (page.getCategory() == null) page.setCategory(source.getCategory());
+        if (page.getCategory() == null && source != null) page.setCategory(source.getCategory());
         page.setSoftware(getAsString(json, "software"));
-        if (page.getSoftware() == null) page.setSoftware(source.getSoftware());
+        if (page.getSoftware() == null && source != null) page.setSoftware(source.getSoftware());
         page.setVersion(getAsString(json, "version"));
         page.setContent(getAsString(json, "content"));
         page.setSummary(getAsString(json, "summary"));
         page.setStatus("DRAFT");
         page.setCompiledBy("ingest-agent");
         page.setCompiledAt(LocalDateTime.now());
+        page.setSourceRefs(sourceRefsFromPage(json, source));
+    }
+
+    private String sourceRefsFromPage(JsonObject json, WikiSource source) {
+        if (json != null && json.has("source_refs") && json.get("source_refs").isJsonObject()) {
+            JsonObject refs = json.getAsJsonObject("source_refs");
+            if (!refs.has("source_id") && source != null) refs.addProperty("source_id", source.getId());
+            if (!refs.has("source_title") && source != null) refs.addProperty("source_title", source.getTitle());
+            if (!refs.has("source_type") && source != null) refs.addProperty("source_type", source.getSourceType());
+            return gson.toJson(refs);
+        }
+        if (source == null) {
+            return null;
+        }
         JsonObject ref = new JsonObject();
-        ref.addProperty("title", source.getTitle());
-        ref.addProperty("type", source.getSourceType());
-        ref.addProperty("id", source.getId());
-        page.setSourceRefs(gson.toJson(ref));
+        ref.addProperty("source_title", source.getTitle());
+        ref.addProperty("source_type", source.getSourceType());
+        ref.addProperty("source_id", source.getId());
+        ref.add("sections", new JsonArray());
+        return gson.toJson(ref);
     }
 
     private String buildExistingPagesSummary(String category, String software) {

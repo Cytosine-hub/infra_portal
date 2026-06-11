@@ -16,7 +16,6 @@ import jakarta.annotation.PostConstruct;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Semaphore;
 import lombok.extern.slf4j.Slf4j;
@@ -209,74 +208,34 @@ public class IngestTaskService {
         taskMapper.updateProgress(taskId, 5, "正在准备...", 0);
 
         try {
-            String content = source.getContent();
             int totalChunks = task.getTotalChunks();
 
-            if (totalChunks <= 1) {
-                // 短文档，直接编译
-                taskMapper.updateProgress(taskId, 10, "LLM 分析文档结构...", 0);
-                IngestAgent.IngestResult result = ingestAgent.ingest(source, task.getOperatorId());
-                if ("FAILED".equals(result.getStatus())) {
-                    taskMapper.updateStatus(taskId, "FAILED", failureMessage(result, "LLM 编译失败"));
-                    return;
-                }
-                taskMapper.updateResult(taskId, result.getPagesCreated(), result.getPagesUpdated());
-            } else {
-                // 长文档，串行分段编译（串行保证每段能看到前面段的结果，合并逻辑正确）
-                List<String> chunks = splitContent(content);
-                int totalCreated = 0, totalUpdated = 0;
-                boolean partialFailure = false;
-                List<String> failureMessages = new ArrayList<>();
-
-                for (int i = 0; i < chunks.size(); i++) {
-                    int basePct = 10 + (i * 80 / totalChunks);
-                    taskMapper.updateProgress(taskId, basePct,
-                            String.format("编译分段 %d/%d...", i + 1, totalChunks), i);
-
-                    IngestAgent.IngestResult chunkResult = ingestAgent.ingestContent(
-                            chunks.get(i),
-                            source.getTitle(),
-                            source.getCategory(),
-                            source.getSoftware(),
-                            task.getOperatorId()
-                    );
-
-                    if ("FAILED".equals(chunkResult.getStatus())) {
-                        String message = failureMessage(chunkResult, "分段编译失败");
-                        log.warn("Chunk {} failed, continuing with next chunk: {}", i + 1, message);
-                        partialFailure = true;
-                        failureMessages.add(String.format("分段 %d: %s", i + 1, message));
-                    } else {
-                        totalCreated += chunkResult.getPagesCreated();
-                        totalUpdated += chunkResult.getPagesUpdated();
-                    }
-
-                    int nextPct = 10 + ((i + 1) * 80 / totalChunks);
-                    taskMapper.updateProgress(taskId, nextPct,
-                            String.format("分段 %d/%d 完成", i + 1, totalChunks), i + 1);
-                }
-
-                taskMapper.updateProgress(taskId, 95, "正在解析交叉引用...", totalChunks);
-                if (totalCreated + totalUpdated <= 0) {
-                    source.setIngested(false);
-                    source.setIngestedAt(null);
-                    sourceMapper.update(source);
-                    taskMapper.updateStatus(taskId, "FAILED",
-                            failureMessages.isEmpty()
-                                    ? "LLM 未生成任何 Wiki 页面"
-                                    : "所有分段编译失败，未生成 Wiki 页面；" + String.join("；", failureMessages));
-                    return;
-                }
-                taskMapper.updateResult(taskId, totalCreated, totalUpdated);
-                if (partialFailure) {
-                    taskMapper.updateStatus(taskId, "PARTIAL",
-                            "部分分段编译失败：" + String.join("；", failureMessages));
-                }
+            taskMapper.updateProgress(taskId, 10, "正在抽取文档类型和目录结构...", 0);
+            taskMapper.updateProgress(taskId, 25, "正在生成章节事实和页面计划...", 0);
+            IngestAgent.IngestResult result = ingestAgent.ingestPlanned(source, task.getOperatorId());
+            if ("FAILED".equals(result.getStatus())) {
+                source.setIngested(false);
+                source.setIngestedAt(null);
+                sourceMapper.update(source);
+                taskMapper.updateStatus(taskId, "FAILED", failureMessage(result, "LLM 编译失败"));
+                return;
+            }
+            if (result.getPagesCreated() + result.getPagesUpdated() <= 0 && !"SKIPPED".equals(result.getStatus())) {
+                source.setIngested(false);
+                source.setIngestedAt(null);
+                sourceMapper.update(source);
+                taskMapper.updateStatus(taskId, "FAILED", "LLM 未生成任何 Wiki 页面");
+                return;
+            }
+            taskMapper.updateProgress(taskId, 90, "正在解析交叉引用并执行质量门禁...", totalChunks);
+            taskMapper.updateResult(taskId, result.getPagesCreated(), result.getPagesUpdated());
+            if ("PARTIAL".equals(result.getStatus())) {
+                taskMapper.updateStatus(taskId, "PARTIAL", failureMessage(result, "质量门禁部分通过"));
             }
 
             // 标记 source 已编译
-            source.setIngested(true);
-            source.setIngestedAt(LocalDateTime.now());
+            source.setIngested("SUCCESS".equals(result.getStatus()) || "SKIPPED".equals(result.getStatus()));
+            source.setIngestedAt(Boolean.TRUE.equals(source.getIngested()) ? LocalDateTime.now() : null);
             sourceMapper.update(source);
 
             log.info("Ingest task {} completed: created={}, updated={}",
@@ -299,67 +258,6 @@ public class IngestTaskService {
             return fallback;
         }
         return result.getErrorMessage();
-    }
-
-    /**
-     * 拆分内容为多个分段
-     */
-    private List<String> splitContent(String content) {
-        List<String> chunks = new ArrayList<>();
-        List<String> blocks = splitSemanticBlocks(content);
-        StringBuilder current = new StringBuilder();
-        String previousTail = "";
-
-        for (String block : blocks) {
-            if (block.length() > maxContentChars) {
-                if (!current.isEmpty()) {
-                    chunks.add(current.toString());
-                    previousTail = tail(current.toString());
-                    current.setLength(0);
-                }
-                int step = Math.max(1, maxContentChars - chunkOverlap);
-                int start = 0;
-                while (start < block.length()) {
-                    int end = Math.min(start + maxContentChars, block.length());
-                    String piece = block.substring(start, end);
-                    chunks.add(previousTail + piece);
-                    previousTail = tail(piece);
-                    start += step;
-                }
-                continue;
-            }
-
-            if (current.length() + block.length() > maxContentChars) {
-                chunks.add(current.toString());
-                previousTail = tail(current.toString());
-                current.setLength(0);
-                current.append(previousTail);
-            }
-            current.append(block);
-        }
-
-        if (!current.isEmpty()) {
-            chunks.add(current.toString());
-        }
-        return chunks;
-    }
-
-    private List<String> splitSemanticBlocks(String content) {
-        List<String> blocks = new ArrayList<>();
-        String[] parts = content.split("(?m)(?=^#{1,6}\\s)|\\n\\s*\\n");
-        for (String part : parts) {
-            if (part == null || part.isBlank()) continue;
-            blocks.add(part.endsWith("\n\n") ? part : part + "\n\n");
-        }
-        if (blocks.isEmpty()) {
-            blocks.add(content);
-        }
-        return blocks;
-    }
-
-    private String tail(String text) {
-        if (chunkOverlap <= 0 || text.length() <= chunkOverlap) return "";
-        return text.substring(text.length() - chunkOverlap);
     }
 
     public IngestTask getTask(Long id) {
