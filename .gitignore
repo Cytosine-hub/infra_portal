@@ -16,6 +16,7 @@
 /frontend/dist/
 /frontend/.vite/
 /release/
+/deploy/milvus-offline/dist/
 /tools/
 /mysql/
 /.m2/

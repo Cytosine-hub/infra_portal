@@ -61,6 +61,27 @@ chmod +x scripts/*.sh
 ./scripts/prepare-offline-package.sh
 ```
 
+如果 Docker Hub 拉取 `milvusdb/milvus` 时出现 `EOF`、`connection reset`、`timeout`，先编辑 `.env`：
+
+```bash
+cp .env.example .env
+vi .env
+```
+
+配置公司内可用的 Docker Hub 镜像代理：
+
+```bash
+DOCKER_HUB_MIRROR_PREFIX=registry.example.com/dockerhub
+DOCKER_PULL_RETRIES=5
+DOCKER_PLATFORM=linux/amd64
+```
+
+说明：
+
+- `DOCKER_HUB_MIRROR_PREFIX` 只用于 Docker Hub 镜像，例如 `milvusdb/milvus`、`minio/minio`。
+- `quay.io/coreos/etcd` 不走 Docker Hub 镜像代理。如果内网外网机器无法访问 quay.io，需要让网络侧放通 quay.io，或先在其他机器拉取后手工 `docker save`。
+- 如果生产服务器是 x86_64 Linux，Apple Silicon Mac 制包时建议保留 `DOCKER_PLATFORM=linux/amd64`。
+
 生成文件：
 
 ```text
