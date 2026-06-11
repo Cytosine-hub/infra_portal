@@ -174,7 +174,13 @@ public class MilvusVectorStore implements VectorStore {
                 .withConsistencyLevel(ConsistencyLevelEnum.BOUNDED)
                 .build();
 
-        R<SearchResults> result = client.search(param);
+        R<SearchResults> result;
+        try {
+            result = client.search(param);
+        } catch (Exception e) {
+            reconnectAfterRpcFailure(e);
+            return Collections.emptyList();
+        }
         if (result.getStatus() != R.Status.Success.getCode()) {
             log.error("Milvus search failed: {}", result.getMessage());
             return Collections.emptyList();
@@ -208,6 +214,28 @@ public class MilvusVectorStore implements VectorStore {
         }
 
         return results;
+    }
+
+    private synchronized void reconnectAfterRpcFailure(Exception e) {
+        log.warn("Milvus search RPC failed, reconnecting client: {}", e.getMessage());
+        try {
+            if (client != null) {
+                client.close();
+            }
+        } catch (Exception closeError) {
+            log.debug("Milvus client close failed during reconnect");
+        }
+        try {
+            client = new MilvusServiceClient(
+                    ConnectParam.newBuilder()
+                            .withHost(config.getVectorHost())
+                            .withPort(config.getVectorPort())
+                            .build()
+            );
+            createIndex();
+        } catch (Exception reconnectError) {
+            log.warn("Milvus reconnect failed: {}", reconnectError.getMessage());
+        }
     }
 
     @Override

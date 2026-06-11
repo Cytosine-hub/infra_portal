@@ -500,14 +500,12 @@ async function sendMessage() {
     const headers = { 'Content-Type': 'application/json' }
     if (auth?.token) headers['Authorization'] = `Bearer ${auth.token}`
 
-    console.log('[SSE] request:', url, 'token:', auth?.token ? 'present' : 'MISSING')
     const response = await fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
       signal: abortController.signal
     })
-    console.log('[SSE] response status:', response.status, 'content-type:', response.headers.get('content-type'))
 
     if (!response.ok) {
       if (response.status === 401) {
@@ -523,113 +521,137 @@ async function sendMessage() {
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
-    let currentEvent = { type: '', data: '' }
     let assistantStreamIdx = -1
+    let shouldFinish = false
+
+    const parseSseBlock = (block) => {
+      const event = { type: '', dataLines: [] }
+      for (const rawLine of block.split(/\r?\n/)) {
+        if (!rawLine || rawLine.startsWith(':')) continue
+        if (rawLine.startsWith('event:')) {
+          event.type = rawLine.slice(6).trim()
+        } else if (rawLine.startsWith('data:')) {
+          event.dataLines.push(rawLine.slice(5).replace(/^ /, ''))
+        }
+      }
+      if (event.dataLines.length === 0) return null
+      const dataText = event.dataLines.join('\n')
+      if (dataText === '[DONE]') return null
+      try {
+        return { type: event.type, data: JSON.parse(dataText) }
+      } catch {
+        throw new Error('流式响应格式异常')
+      }
+    }
+
+    const handleSseEvent = async ({ type: eventType, data }) => {
+      if (eventType === 'run_started') {
+        upsertProgress(data.skill ? `匹配排查 Skill：${data.skill}` : '正在规划排查步骤')
+      } else if (eventType === 'step_started') {
+        const toolLabel = data.toolName ? ` (${data.toolName})` : ''
+        upsertProgress(`正在执行：${data.stepName || '排查步骤'}${toolLabel}`)
+      } else if (eventType === 'tool_result') {
+        const status = data.success === false ? '失败' : '完成'
+        const summary = data.summary ? ` - ${compactText(data.summary)}` : ''
+        upsertProgress(`${status}：${data.stepName || data.toolName || '工具调用'}${summary}`)
+      } else if (eventType === 'delta') {
+        clearProgress()
+        if (retryMsgIdx >= 0) {
+          messages.value.splice(retryMsgIdx, 1)
+          retryMsgIdx = -1
+        }
+        if (assistantStreamIdx < 0) {
+          assistantStreamIdx = messages.value.length
+          messages.value.push({ role: 'assistant', content: '', references: [] })
+        }
+        messages.value[assistantStreamIdx].content += data.content || ''
+        scrollToBottom()
+      } else if (eventType === 'completed') {
+        clearProgress()
+        await loadSessions()
+        shouldFinish = true
+      } else if (data.message) {
+        if (retryMsgIdx >= 0) {
+          messages.value[retryMsgIdx].content = `⏳ ${data.message}`
+        } else {
+          retryMsgIdx = messages.value.length
+          messages.value.push({ role: 'assistant', content: `⏳ ${data.message}` })
+        }
+        scrollToBottom()
+      } else if (data.error) {
+        clearProgress()
+        if (retryMsgIdx >= 0) {
+          messages.value[retryMsgIdx].content = data.retryFailed
+            ? `⚠️ ${data.error}`
+            : `请求失败：${data.error}`
+        } else if (assistantStreamIdx >= 0) {
+          messages.value[assistantStreamIdx].content += `\n\n请求失败：${data.error}`
+        } else {
+          messages.value.push({
+            role: 'assistant',
+            content: data.retryFailed ? `⚠️ ${data.error}` : `请求失败：${data.error}`
+          })
+        }
+        await loadSessions()
+        shouldFinish = true
+      } else if (eventType === 'result' || data.response || data.answer || data.content) {
+        clearProgress()
+        if (retryMsgIdx >= 0) {
+          messages.value.splice(retryMsgIdx, 1)
+          retryMsgIdx = -1
+        }
+        if (agentMode.value === 'ops') {
+          messages.value.push({
+            role: 'assistant',
+            content: data.response || '',
+            skill: data.skill || null,
+            tools: data.toolsUsed || []
+          })
+        } else if (assistantStreamIdx >= 0) {
+          messages.value[assistantStreamIdx] = {
+            ...messages.value[assistantStreamIdx],
+            role: 'assistant',
+            content: data.answer || data.content || messages.value[assistantStreamIdx].content,
+            references: data.references || []
+          }
+        } else {
+          messages.value.push({
+            role: 'assistant',
+            content: data.answer || data.content || '',
+            references: data.references || []
+          })
+        }
+        if (data.sessionId && !currentSessionId.value) {
+          currentSessionId.value = data.sessionId
+        }
+        await loadSessions()
+        shouldFinish = true
+      }
+    }
+
+    const consumeSseBuffer = async (flush = false) => {
+      const blocks = buffer.split(/\r?\n\r?\n/)
+      const tailBlock = blocks.pop() || ''
+      buffer = flush ? '' : tailBlock
+      const readyBlocks = flush ? [...blocks, tailBlock].filter(block => block.trim()) : blocks
+      for (const block of readyBlocks) {
+        const event = parseSseBlock(block)
+        if (event) {
+          await handleSseEvent(event)
+          if (shouldFinish) return
+        }
+      }
+    }
 
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
-
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        if (line.startsWith('event:')) {
-          currentEvent.type = line.slice(6).trim()
-        } else if (line.startsWith('data:')) {
-          currentEvent.data = line.slice(5).trim()
-        } else if (line === '' && currentEvent.data) {
-          console.log('[SSE] event:', currentEvent.type, 'data:', currentEvent.data.substring(0, 100))
-          const eventType = currentEvent.type || ''
-          const data = JSON.parse(currentEvent.data)
-          currentEvent = { type: '', data: '' }
-
-          if (eventType === 'run_started') {
-            upsertProgress(data.skill ? `匹配排查 Skill：${data.skill}` : '正在规划排查步骤')
-          } else if (eventType === 'step_started') {
-            const toolLabel = data.toolName ? ` (${data.toolName})` : ''
-            upsertProgress(`正在执行：${data.stepName || '排查步骤'}${toolLabel}`)
-          } else if (eventType === 'tool_result') {
-            const status = data.success === false ? '失败' : '完成'
-            const summary = data.summary ? ` - ${compactText(data.summary)}` : ''
-            upsertProgress(`${status}：${data.stepName || data.toolName || '工具调用'}${summary}`)
-          } else if (eventType === 'delta') {
-            clearProgress()
-            if (retryMsgIdx >= 0) {
-              messages.value.splice(retryMsgIdx, 1)
-              retryMsgIdx = -1
-            }
-            if (assistantStreamIdx < 0) {
-              assistantStreamIdx = messages.value.length
-              messages.value.push({ role: 'assistant', content: '', references: [] })
-            }
-            messages.value[assistantStreamIdx].content += data.content || ''
-            scrollToBottom()
-          } else if (eventType === 'completed') {
-            clearProgress()
-            await loadSessions()
-            return
-          } else if (data.message) {
-            if (retryMsgIdx >= 0) {
-              messages.value[retryMsgIdx].content = `⏳ ${data.message}`
-            } else {
-              retryMsgIdx = messages.value.length
-              messages.value.push({ role: 'assistant', content: `⏳ ${data.message}` })
-            }
-            scrollToBottom()
-          } else if (data.error) {
-            clearProgress()
-            if (retryMsgIdx >= 0) {
-              messages.value[retryMsgIdx].content = data.retryFailed
-                ? `⚠️ ${data.error}`
-                : `请求失败：${data.error}`
-            } else if (assistantStreamIdx >= 0) {
-              messages.value[assistantStreamIdx].content += `\n\n请求失败：${data.error}`
-            } else {
-              messages.value.push({
-                role: 'assistant',
-                content: data.retryFailed ? `⚠️ ${data.error}` : `请求失败：${data.error}`
-              })
-            }
-            await loadSessions()
-            return
-          } else if (eventType === 'result' || data.response || data.answer || data.content) {
-            clearProgress()
-            if (retryMsgIdx >= 0) {
-              messages.value.splice(retryMsgIdx, 1)
-              retryMsgIdx = -1
-            }
-            if (agentMode.value === 'ops') {
-              messages.value.push({
-                role: 'assistant',
-                content: data.response || '',
-                skill: data.skill || null,
-                tools: data.toolsUsed || []
-              })
-            } else if (assistantStreamIdx >= 0) {
-              messages.value[assistantStreamIdx] = {
-                ...messages.value[assistantStreamIdx],
-                role: 'assistant',
-                content: data.answer || data.content || messages.value[assistantStreamIdx].content,
-                references: data.references || []
-              }
-            } else {
-              messages.value.push({
-                role: 'assistant',
-                content: data.answer || data.content || '',
-                references: data.references || []
-              })
-            }
-            if (data.sessionId && !currentSessionId.value) {
-              currentSessionId.value = data.sessionId
-            }
-            await loadSessions()
-            return
-          }
-        }
-      }
+      await consumeSseBuffer()
+      if (shouldFinish) return
     }
+    buffer += decoder.decode()
+    await consumeSseBuffer(true)
   } catch (error) {
     if (error.name === 'AbortError') {
       clearProgress()

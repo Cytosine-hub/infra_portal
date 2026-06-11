@@ -83,6 +83,7 @@ public class AgentController {
                 result.put("sessionId", finalSessionId);
                 if (clientOpen.get()) {
                     safeSend(emitter, clientOpen, "result", result);
+                    safeSend(emitter, clientOpen, "completed", Map.of("sessionId", finalSessionId));
                 }
                 completeQuietly(emitter);
             } catch (Exception e) {

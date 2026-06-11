@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
 
 @Service
@@ -46,6 +47,9 @@ public class WikiSearchService {
 
     @Value("${app.wiki.search.fulltext-top-k:5}")
     private int fulltextTopK;
+
+    @Value("${app.wiki.search.timeout-ms:3000}")
+    private long searchTimeoutMs;
 
     private ExecutorService searchExecutor;
 
@@ -99,8 +103,8 @@ public class WikiSearchService {
                     () -> pageMapper.fulltextSearch(query, fulltextTopK), searchExecutor);
 
             try {
-                vectorHits = safeGet(vectorFuture, "vector");
                 fulltextHits = safeGet(fulltextFuture, "fulltext");
+                vectorHits = safeGet(vectorFuture, "vector");
             } catch (Exception e) {
                 log.warn("Parallel search failed: {}", e.getMessage());
             }
@@ -269,7 +273,11 @@ public class WikiSearchService {
 
     private List<WikiPage> safeGet(CompletableFuture<List<WikiPage>> future, String source) {
         try {
-            return future.get();
+            return future.get(searchTimeoutMs, TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            future.cancel(true);
+            log.warn("{} search timed out after {} ms", source, searchTimeoutMs);
+            return Collections.emptyList();
         } catch (Exception e) {
             log.warn("{} search failed: {}", source, e.getMessage());
             return Collections.emptyList();
