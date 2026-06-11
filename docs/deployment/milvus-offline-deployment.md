@@ -290,6 +290,39 @@ MINIO_ROOT_PASSWORD=minioadmin
 
 如果环境里已经有正式数据，不要直接删除 `/data/milvus`，先备份并确认是否需要迁移对象存储账号。
 
+如果已经确认 `/data/milvus` 或整个 `/data` 都已删除并重新创建，旧 MinIO 口令不会继续影响启动。此时仍报同类错误，优先检查三件事：
+
+1. `.env` 是否仍写成了自定义账号密码，例如 `Abcd1234`。
+2. `docker compose config` 展开的 MinIO 和 standalone 账号是否一致。
+3. 旧容器是否没有被重建，导致仍在使用旧环境变量。
+
+推荐用下面命令强制回到已验证路径：
+
+```bash
+docker compose down
+docker rm -f milvus-standalone milvus-minio milvus-etcd 2>/dev/null || true
+sudo rm -rf /data/milvus
+```
+
+确认 `.env`：
+
+```bash
+MINIO_ROOT_USER=minioadmin
+MINIO_ROOT_PASSWORD=minioadmin
+```
+
+启动前检查展开配置：
+
+```bash
+docker compose config | grep -A25 -E 'minio:|standalone:|MINIO'
+```
+
+展开结果中 MinIO 和 standalone 侧的 `MINIO_*` 账号必须都是 `minioadmin`。确认一致后再执行：
+
+```bash
+./scripts/start.sh
+```
+
 ### 11.2 应用启动时报 Milvus 连接失败
 
 检查：
