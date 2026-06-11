@@ -206,39 +206,7 @@ public class IngestTaskService {
         taskMapper.updateProgress(taskId, 5, "正在准备...", 0);
 
         try {
-            int totalChunks = task.getTotalChunks();
-
-            taskMapper.updateProgress(taskId, 10, "正在抽取文档类型和目录结构...", 0);
-            taskMapper.updateProgress(taskId, 25, "正在生成章节事实和页面计划...", 0);
-            IngestAgent.IngestResult result = ingestAgent.ingestPlanned(source, task.getOperatorId());
-            if ("FAILED".equals(result.getStatus())) {
-                source.setIngested(false);
-                source.setIngestedAt(null);
-                sourceMapper.update(source);
-                taskMapper.updateStatus(taskId, "FAILED", failureMessage(result, ErrorMessages.WIKI_INGEST_FAILED));
-                return;
-            }
-            if (result.getPagesCreated() + result.getPagesUpdated() <= 0 && !"SKIPPED".equals(result.getStatus())) {
-                source.setIngested(false);
-                source.setIngestedAt(null);
-                sourceMapper.update(source);
-                taskMapper.updateStatus(taskId, "FAILED", ErrorMessages.WIKI_INGEST_EMPTY_RESULT);
-                return;
-            }
-            taskMapper.updateProgress(taskId, 90, "正在解析交叉引用并执行质量门禁...", totalChunks);
-            taskMapper.updateResult(taskId, result.getPagesCreated(), result.getPagesUpdated());
-            if ("PARTIAL".equals(result.getStatus())) {
-                taskMapper.updateStatus(taskId, "PARTIAL",
-                        failureMessage(result, ErrorMessages.WIKI_QUALITY_GATE_PARTIAL));
-            }
-
-            // 标记 source 已编译
-            source.setIngested("SUCCESS".equals(result.getStatus()) || "SKIPPED".equals(result.getStatus()));
-            source.setIngestedAt(Boolean.TRUE.equals(source.getIngested()) ? LocalDateTime.now() : null);
-            sourceMapper.update(source);
-
-            log.info("Ingest task {} completed: created={}, updated={}",
-                    taskId, task.getPagesCreated(), task.getPagesUpdated());
+            executePlannedTask(taskId, task, source);
 
         } catch (Exception e) {
             log.error("Ingest task {} failed: {}", taskId, e.getMessage(), e);
@@ -250,6 +218,46 @@ public class IngestTaskService {
         } finally {
             compileSemaphore.release();
         }
+    }
+
+    private void executePlannedTask(Long taskId, IngestTask task, WikiSource source) {
+        int totalChunks = task.getTotalChunks();
+
+        taskMapper.updateProgress(taskId, 10, "正在抽取文档类型和目录结构...", 0);
+        taskMapper.updateProgress(taskId, 25, "正在生成章节事实和页面计划...", 0);
+        IngestAgent.IngestResult result = ingestAgent.ingestPlanned(source, task.getOperatorId());
+        if ("FAILED".equals(result.getStatus())) {
+            markSourceNotIngested(source);
+            taskMapper.updateStatus(taskId, "FAILED", failureMessage(result, ErrorMessages.WIKI_INGEST_FAILED));
+            return;
+        }
+        if (result.getPagesCreated() + result.getPagesUpdated() <= 0 && !"SKIPPED".equals(result.getStatus())) {
+            markSourceNotIngested(source);
+            taskMapper.updateStatus(taskId, "FAILED", ErrorMessages.WIKI_INGEST_EMPTY_RESULT);
+            return;
+        }
+
+        taskMapper.updateProgress(taskId, 90, "正在解析交叉引用并执行质量门禁...", totalChunks);
+        taskMapper.updateResult(taskId, result.getPagesCreated(), result.getPagesUpdated());
+        if ("PARTIAL".equals(result.getStatus())) {
+            taskMapper.updateStatus(taskId, "PARTIAL",
+                    failureMessage(result, ErrorMessages.WIKI_QUALITY_GATE_PARTIAL));
+        }
+        markSourceCompiled(source, result);
+        log.info("Ingest task {} completed: created={}, updated={}",
+                taskId, result.getPagesCreated(), result.getPagesUpdated());
+    }
+
+    private void markSourceNotIngested(WikiSource source) {
+        source.setIngested(false);
+        source.setIngestedAt(null);
+        sourceMapper.update(source);
+    }
+
+    private void markSourceCompiled(WikiSource source, IngestAgent.IngestResult result) {
+        source.setIngested("SUCCESS".equals(result.getStatus()) || "SKIPPED".equals(result.getStatus()));
+        source.setIngestedAt(Boolean.TRUE.equals(source.getIngested()) ? LocalDateTime.now() : null);
+        sourceMapper.update(source);
     }
 
     private String failureMessage(IngestAgent.IngestResult result, String fallback) {
