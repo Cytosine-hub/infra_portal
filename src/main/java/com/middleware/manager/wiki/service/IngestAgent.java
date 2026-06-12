@@ -1170,8 +1170,8 @@ public class IngestAgent {
         }
 
         List<WikiPage> candidates = (category != null || software != null)
-                ? pageMapper.findByCategoryOrSoftware(category, software, 100)
-                : pageMapper.findAll();
+                ? pageMapper.findByCategoryOrSoftwareExcludingContent(category, software, 100)
+                : pageMapper.findAllExcludingContent();
         for (WikiPage candidate : candidates) {
             if (!pageType.equals(candidate.getPageType())) {
                 continue;
@@ -1541,8 +1541,8 @@ public class IngestAgent {
 
     private String buildExistingPagesSummary(String category, String software) {
         List<WikiPage> pages = (category != null || software != null)
-                ? pageMapper.findByCategoryOrSoftware(category, software, 20)
-                : pageMapper.findAll();
+                ? pageMapper.findByCategoryOrSoftwareExcludingContent(category, software, 20)
+                : pageMapper.findAllExcludingContent();
         StringBuilder sb = new StringBuilder();
         for (WikiPage p : pages) {
             sb.append("- ").append(p.getTitle());

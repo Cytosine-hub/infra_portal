@@ -24,6 +24,14 @@
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
+    <!-- 排除 content 大列的列集合，避免 ORDER BY 时 sort buffer 溢出 -->
+    <sql id="columnsExcludingContent">
+        id, title, page_type, category, software, version,
+        canonical_title, alias_titles, summary, source_refs,
+        status, contradiction_note, compiled_by, compiled_at,
+        reviewed_by, reviewed_at, created_at, updated_at
+    </sql>
+
     <select id="findById" resultMap="wikiPageResultMap">
         SELECT * FROM wiki_pages WHERE id = #{id}
     </select>
@@ -127,6 +135,28 @@
         <foreach collection="ids" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>
+    </select>
+
+    <select id="findAllExcludingContent" resultMap="wikiPageResultMap">
+        SELECT <include refid="columnsExcludingContent"/> FROM wiki_pages ORDER BY updated_at DESC
+    </select>
+
+    <select id="findByCategoryExcludingContent" resultMap="wikiPageResultMap">
+        SELECT <include refid="columnsExcludingContent"/> FROM wiki_pages WHERE category = #{category} ORDER BY title
+    </select>
+
+    <select id="findBySoftwareExcludingContent" resultMap="wikiPageResultMap">
+        SELECT <include refid="columnsExcludingContent"/> FROM wiki_pages WHERE software = #{software} ORDER BY title
+    </select>
+
+    <select id="findByStatusExcludingContent" resultMap="wikiPageResultMap">
+        SELECT <include refid="columnsExcludingContent"/> FROM wiki_pages WHERE status = #{status} ORDER BY updated_at DESC
+    </select>
+
+    <select id="findByCategoryOrSoftwareExcludingContent" resultMap="wikiPageResultMap">
+        SELECT <include refid="columnsExcludingContent"/> FROM wiki_pages
+        WHERE category = #{category} OR software = #{software}
+        ORDER BY updated_at DESC LIMIT #{limit}
     </select>
 
     <select id="findByCategoryOrSoftware" resultMap="wikiPageResultMap">

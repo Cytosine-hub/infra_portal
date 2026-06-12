@@ -64,7 +64,7 @@ public class WikiGraphService {
 
     public Map<String, Object> buildGraph(Authentication authentication) {
         boolean authenticated = isRealUser(authentication);
-        List<WikiPage> pages = pageMapper.findAll();
+        List<WikiPage> pages = pageMapper.findAllExcludingContent();
         if (authenticated) {
             pages = permissionService.filterVisiblePages(authentication, pages);
         }

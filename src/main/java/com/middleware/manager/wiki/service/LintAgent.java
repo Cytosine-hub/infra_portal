@@ -80,7 +80,7 @@ public class LintAgent {
 
         // Build a set of all existing page titles
         Set<String> existingTitles = new HashSet<>();
-        for (WikiPage p : pageMapper.findAll()) {
+        for (WikiPage p : pageMapper.findAllIdAndTitle()) {
             existingTitles.add(p.getTitle());
         }
 
@@ -141,7 +141,7 @@ public class LintAgent {
 
     public List<LintResult> detectMissingSourceRefs() {
         List<LintResult> results = new ArrayList<>();
-        for (WikiPage page : pageMapper.findAll()) {
+        for (WikiPage page : pageMapper.findAllExcludingContent()) {
             if (!"ACTIVE".equals(page.getStatus())) continue;
             if (page.getSourceRefs() == null || page.getSourceRefs().isBlank()) {
                 LintResult r = new LintResult();
@@ -185,7 +185,7 @@ public class LintAgent {
 
     public List<LintResult> detectDuplicateTitles() {
         Map<String, List<WikiPage>> groups = new HashMap<>();
-        for (WikiPage page : pageMapper.findAll()) {
+        for (WikiPage page : pageMapper.findAllExcludingContent()) {
             String key = normalize(page.getTitle()) + "|" + nullToEmpty(page.getSoftware()) + "|" + nullToEmpty(page.getVersion());
             groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(page);
         }

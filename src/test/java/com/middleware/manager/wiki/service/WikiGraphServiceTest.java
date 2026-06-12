@@ -46,7 +46,7 @@ class WikiGraphServiceTest {
         List<WikiPage> pages = List.of(entity, concept);
         TestingAuthenticationToken authentication = authentication();
 
-        when(pageMapper.findAll()).thenReturn(pages);
+        when(pageMapper.findAllExcludingContent()).thenReturn(pages);
         when(permissionService.filterVisiblePages(authentication, pages)).thenReturn(pages);
         when(linkMapper.findAll()).thenReturn(List.of(link(1L, 2L)));
 
@@ -59,7 +59,7 @@ class WikiGraphServiceTest {
     @Test
     @DisplayName("匿名图谱不展示草稿页面")
     void publicGraphExcludesDraftPages() {
-        when(pageMapper.findAll()).thenReturn(List.of(page(1L, "TongWeb", "ENTITY", "DRAFT")));
+        when(pageMapper.findAllExcludingContent()).thenReturn(List.of(page(1L, "TongWeb", "ENTITY", "DRAFT")));
         when(linkMapper.findAll()).thenReturn(List.of());
 
         Map<String, Object> graph = graphService.buildGraph(null);
@@ -75,7 +75,7 @@ class WikiGraphServiceTest {
         WikiPage besMonitor = page(2L, "BES 监控", "RUNBOOK", "ACTIVE", "中间件", "BES");
         WikiPage mysqlInstall = page(3L, "MySQL 安装", "RUNBOOK", "ACTIVE", "数据库", "MySQL");
 
-        when(pageMapper.findAll()).thenReturn(List.of(besInstall, besMonitor, mysqlInstall));
+        when(pageMapper.findAllExcludingContent()).thenReturn(List.of(besInstall, besMonitor, mysqlInstall));
         when(linkMapper.findAll()).thenReturn(List.of());
 
         Map<String, Object> graph = graphService.buildGraph(null);

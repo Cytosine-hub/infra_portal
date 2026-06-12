@@ -122,31 +122,31 @@ class WikiControllerTest {
         @Test
         @DisplayName("无参数时返回全部页面")
         void listAll() {
-            when(pageMapper.findAll()).thenReturn(Collections.emptyList());
+            when(pageMapper.findAllExcludingContent()).thenReturn(Collections.emptyList());
 
             controller.listPages(null, null, null);
 
-            verify(pageMapper).findAll();
+            verify(pageMapper).findAllExcludingContent();
         }
 
         @Test
         @DisplayName("按分类过滤")
         void filterByCategory() {
-            when(pageMapper.findByCategory("中间件")).thenReturn(Collections.emptyList());
+            when(pageMapper.findByCategoryExcludingContent("中间件")).thenReturn(Collections.emptyList());
 
             controller.listPages("中间件", null, null);
 
-            verify(pageMapper).findByCategory("中间件");
+            verify(pageMapper).findByCategoryExcludingContent("中间件");
         }
 
         @Test
         @DisplayName("按状态过滤")
         void filterByStatus() {
-            when(pageMapper.findByStatus("ACTIVE")).thenReturn(Collections.emptyList());
+            when(pageMapper.findByStatusExcludingContent("ACTIVE")).thenReturn(Collections.emptyList());
 
             controller.listPages(null, null, "ACTIVE");
 
-            verify(pageMapper).findByStatus("ACTIVE");
+            verify(pageMapper).findByStatusExcludingContent("ACTIVE");
         }
     }
 
@@ -157,7 +157,7 @@ class WikiControllerTest {
         @Test
         @DisplayName("统计数据包含所有计数字段")
         void statsContainsAllFields() {
-            when(pageMapper.findAll()).thenReturn(Collections.emptyList());
+            when(pageMapper.findAllExcludingContent()).thenReturn(Collections.emptyList());
             when(pageMapper.countByStatus("ACTIVE")).thenReturn(5);
             when(pageMapper.countByStatus("DRAFT")).thenReturn(3);
             when(pageMapper.countByStatus("CONTRADICTED")).thenReturn(1);

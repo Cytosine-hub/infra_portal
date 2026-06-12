@@ -120,10 +120,10 @@ public class WikiController {
                                     @RequestParam(required = false) String status,
                                     Authentication authentication) {
         List<WikiPage> pages;
-        if (category != null) pages = pageMapper.findByCategory(category);
-        else if (software != null) pages = pageMapper.findBySoftware(software);
-        else if (status != null) pages = pageMapper.findByStatus(status);
-        else pages = pageMapper.findAll();
+        if (category != null) pages = pageMapper.findByCategoryExcludingContent(category);
+        else if (software != null) pages = pageMapper.findBySoftwareExcludingContent(software);
+        else if (status != null) pages = pageMapper.findByStatusExcludingContent(status);
+        else pages = pageMapper.findAllExcludingContent();
         return filterVisible(authentication, pages);
     }
 
@@ -164,7 +164,7 @@ public class WikiController {
 
     @PostMapping("/pages/reindex")
     public ResponseEntity<Map<String, Object>> reindexPages() {
-        List<WikiPage> pages = pageMapper.findAll();
+        List<WikiPage> pages = pageMapper.findAllExcludingContent();
         int success = 0, failed = 0;
         for (WikiPage page : pages) {
             try {

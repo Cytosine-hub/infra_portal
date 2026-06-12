@@ -23,6 +23,15 @@ public interface WikiPageMapper {
     /** 仅查询 id 和 title，避免 SELECT * 携带大 content 列导致排序溢出 */
     List<WikiPage> findAllIdAndTitle();
 
+    /** 排除 content 大列的列表查询，避免 ORDER BY 时 sort buffer 溢出 */
+    List<WikiPage> findAllExcludingContent();
+
+    List<WikiPage> findByCategoryExcludingContent(@Param("category") String category);
+
+    List<WikiPage> findBySoftwareExcludingContent(@Param("software") String software);
+
+    List<WikiPage> findByStatusExcludingContent(@Param("status") String status);
+
     List<WikiPage> findByCategory(@Param("category") String category);
 
     List<WikiPage> findBySoftware(@Param("software") String software);
@@ -52,4 +61,8 @@ public interface WikiPageMapper {
     List<WikiPage> findByCategoryOrSoftware(@Param("category") String category,
                                             @Param("software") String software,
                                             @Param("limit") int limit);
+
+    List<WikiPage> findByCategoryOrSoftwareExcludingContent(@Param("category") String category,
+                                                             @Param("software") String software,
+                                                             @Param("limit") int limit);
 }
