@@ -523,7 +523,18 @@ export function useAdmin(auth, notify, confirm, onSettingsSaved) {
 
   async function copyParameter(parameter) {
     const text = `{{${parameter.code}}}`
-    await navigator.clipboard.writeText(text)
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
     notify(`已复制 ${text}`, 'success')
   }
 

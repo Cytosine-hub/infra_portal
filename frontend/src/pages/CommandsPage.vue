@@ -115,7 +115,21 @@ function canManageCmd(cmd) {
   return getTypeCategory(cmd) === props.managedCategory
 }
 function parseCats(cats) { if (!cats) return []; try { return JSON.parse(cats) } catch { return [] } }
-function copyCommand(text) { navigator.clipboard.writeText(text).then(() => props.notify('已复制到剪贴板')).catch(() => {}) }
+function copyCommand(text) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(() => props.notify('已复制到剪贴板')).catch(() => {})
+  } else {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+    props.notify('已复制到剪贴板')
+  }
+}
 
 function defaultForm() { return { id: null, softwareTypeId: '', commandFormat: '', briefDescription: '', detailedDescription: '', categories: '' } }
 function openCreateDialog() { Object.assign(form, defaultForm()); showDialog.value = true }
