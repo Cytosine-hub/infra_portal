@@ -12,6 +12,8 @@ import java.util.regex.Pattern;
 
 @Service
 public class DocumentOutlineExtractor {
+    private static final int LARGE_OUTLINE_SECTION_THRESHOLD = 240;
+    private static final int TITLE_ONLY_EXCERPT_MAX_LENGTH = 120;
     private static final Pattern MARKDOWN_HEADING = Pattern.compile("^(#{1,6})\\s+(.+?)\\s*$");
     private static final Pattern SETEXT_UNDERLINE = Pattern.compile("^\\s*(=+|-{2,})\\s*$");
     private static final String HORIZONTAL_SPACE = "[\\s\\u00A0\\u3000]";
@@ -49,7 +51,7 @@ public class DocumentOutlineExtractor {
         List<DocumentSection> sections = headings.isEmpty()
                 ? List.of(singleSection(safeContent, classification.getDocumentType()))
                 : buildSections(safeContent, headings, classification.getDocumentType());
-        outline.setSections(sections);
+        outline.setSections(optimizeSections(sections));
         return outline;
     }
 
@@ -182,6 +184,69 @@ public class DocumentOutlineExtractor {
         return sections;
     }
 
+    private List<DocumentSection> optimizeSections(List<DocumentSection> sections) {
+        if (sections.size() <= LARGE_OUTLINE_SECTION_THRESHOLD) {
+            return sections;
+        }
+
+        List<DocumentSection> optimized = new ArrayList<>();
+        for (DocumentSection section : sections) {
+            if (shouldKeepInLargeOutline(section)) {
+                optimized.add(section);
+            }
+        }
+        renumberSections(optimized);
+        return optimized.isEmpty() ? sections : optimized;
+    }
+
+    private boolean shouldKeepInLargeOutline(DocumentSection section) {
+        if (section.getLevel() <= 2) {
+            return true;
+        }
+        if (section.isRequired() && !isTitleOnlySection(section)) {
+            return true;
+        }
+        if (section.getConfidence() >= 0.9 && !isTitleOnlySection(section)) {
+            return true;
+        }
+        return hasRichBlocks(section) || hasHighValueExcerpt(section);
+    }
+
+    private boolean isTitleOnlySection(DocumentSection section) {
+        String excerpt = section.getExcerpt();
+        if (excerpt == null || excerpt.isBlank() || excerpt.length() > TITLE_ONLY_EXCERPT_MAX_LENGTH) {
+            return false;
+        }
+        String normalizedExcerpt = normalizeHeadingKey(excerpt);
+        String normalizedTitle = normalizeHeadingKey(lastPathSegment(section.getPath()));
+        return !normalizedExcerpt.isBlank()
+                && !normalizedTitle.isBlank()
+                && (normalizedExcerpt.equals(normalizedTitle) || normalizedExcerpt.endsWith(normalizedTitle));
+    }
+
+    private boolean hasRichBlocks(DocumentSection section) {
+        List<String> blocks = section.getBlocks();
+        return blocks != null && (blocks.contains("table") || blocks.contains("code") || blocks.contains("list"));
+    }
+
+    private boolean hasHighValueExcerpt(DocumentSection section) {
+        String excerpt = section.getExcerpt();
+        if (excerpt == null) {
+            return false;
+        }
+        String text = excerpt.toLowerCase(Locale.ROOT);
+        return text.length() > TITLE_ONLY_EXCERPT_MAX_LENGTH
+                || containsAny(text, "必须", "禁止", "默认值", "参数", "命令", "执行", "验证", "故障", "异常", "端口", "路径");
+    }
+
+    private void renumberSections(List<DocumentSection> sections) {
+        for (int i = 0; i < sections.size(); i++) {
+            DocumentSection section = sections.get(i);
+            section.setId("sec-" + String.format("%03d", i + 1));
+            section.setOrder(i + 1);
+        }
+    }
+
     private DocumentSection singleSection(String content, String documentType) {
         DocumentSection section = new DocumentSection();
         section.setId("sec-001");
@@ -210,6 +275,14 @@ public class DocumentOutlineExtractor {
             path.add(stack.get(level));
         }
         return String.join("/", path);
+    }
+
+    private String lastPathSegment(String path) {
+        if (path == null || path.isBlank()) {
+            return "";
+        }
+        int slash = path.lastIndexOf('/');
+        return slash >= 0 ? path.substring(slash + 1) : path;
     }
 
     private String cleanHeading(String heading) {

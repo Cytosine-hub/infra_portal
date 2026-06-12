@@ -61,7 +61,7 @@ class IngestTaskServiceTest {
 
         when(taskMapper.findById(9L)).thenReturn(task);
         when(sourceMapper.findById(3L)).thenReturn(source);
-        when(ingestAgent.ingestPlanned(eq(source), eq(1L)))
+        when(ingestAgent.ingestPlanned(eq(source), eq(1L), any()))
                 .thenReturn(failed);
 
         service.executeTask(9L);

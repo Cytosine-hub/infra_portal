@@ -20,7 +20,7 @@
 
 更新时间：2026-06-12
 
-总体进度：P0 主链路、P1 向量过滤和软件类型社区、P2 质量可视化均已完成第一版。
+总体进度：P0 主链路、P1 向量过滤和软件类型社区、P2 质量可视化均已完成第一版；当前进入 P0 性能与可观测性修正阶段。
 
 标记说明：`[x]` 已完成；需要真实外部环境或固定样例的内容单独列为验收项。
 
@@ -59,8 +59,27 @@
 - 已完成 `section_facts` 分批抽取、合并和 fallback。
 - 已完成 planned page 分批生成和 fallback。
 - 已完成 PDF/Word 文本目录中全角空格、全角点线和 `httpd.conf` 这类标题的识别增强。
-- 已通过相关单元测试：`mvn test -Dtest=DocumentOutlineExtractorTest,IngestAgentTest -Dapp.vector.type=memory`，共 16 个测试通过。
-- 待完成：全量测试、代码审查、服务重启验证、提交和推送。
+- 已完成超大 outline 瘦身：大纲过细时保留高层章节、必需章节、有正文内容和高价值结构信号，弱标题叶子不再全部进入后续链路。
+- 已完成标题-only section 本地事实生成：无正文、无表格/代码/列表的标题章节不再调用 `section_facts` LLM。
+- 已完成 planned ingest 阶段进度回写：目录抽取、章节事实批次、页面计划、页面生成批次、页面校验和质量门禁都会更新任务进度；批次阶段会同步更新 `total_chunks`，避免前端显示旧 chunk 分母。
+- 已完成阶段与批次耗时日志：记录 outline section 数、section_facts batch、localOnlySections、page_plan、page_generation batch 的耗时。
+- 已通过相关单元测试：`mvn test -Dtest=DocumentOutlineExtractorTest,IngestAgentTest,IngestTaskServiceTest -Dapp.vector.type=memory`，共 19 个测试通过。
+- 已通过全量测试：`mvn test -Dapp.vector.type=memory`，共 87 个测试通过。
+- 待完成：代码审查、服务重启验证、提交和推送。
+
+本轮长 PDF 暴露的新问题：
+
+- 5.9M PDF 被抽出 468+ 个 section，`section_facts` 阶段运行 70 分钟仍未进入 `page_plan`。
+- 很多 section 只有标题，没有正文片段，LLM 最终只是把标题改写成 facts，成本高但信息增益很低。
+- 单文档内 `section_facts` 批次串行执行，一个任务通常只使用 1 个 LLM 槽位。
+- 后端没有在每个阶段和每个批次回写进度，前端长时间停留在 25%，用户无法判断是卡死还是慢跑。
+
+新增执行策略：
+
+- 大纲过细时不追求“每个标题一个 section”，而是保留高层章节、必需章节、有正文内容的章节和高价值结构信号；弱标题、图题、目录碎片、只有标题的叶子章节应合并或降级，不单独进入 LLM。
+- `section_facts` 只让“有正文信息量”的 section 调用 LLM；标题-only section 使用本地 deterministic facts，避免为低价值标题消耗 1-2 分钟。
+- 编译阶段必须记录阶段耗时、批次数、已完成批次和当前 section 范围，并同步更新任务进度。
+- 单任务内批次并发作为第二步优化，先以大纲瘦身和跳过无效 LLM 为主，避免直接并发放大供应商限流和输出截断问题。
 
 ## 现状评估
 
@@ -496,6 +515,119 @@ Planner 规则：
 - 已完成每批相关 outline/facts/plans 的过滤输入。
 - 已完成页面生成 JSON 截断/解析失败 fallback。
 - 已完成服务端补齐 `coverage.section_ids` 和 `source_refs.sections`。
+
+## P0：编译并发与阶段耗时可观测性
+
+目录驱动编译会把一次长文档编译拆成多个 LLM 阶段和多个 batch。为了后续优化吞吐、定位慢点、判断是否需要并行 batch，必须记录并发模型和各阶段耗时。
+
+### 当前并发模型
+
+当前有两层并发限制：
+
+| 层级 | 配置 | 默认值 | 作用范围 |
+| --- | --- | --- | --- |
+| Wiki 编译任务并发 | `app.wiki.ingest.max-concurrent` | `2` | 最多同时执行 2 个 Wiki 编译任务 |
+| LLM 调用全局并发 | `app.llm.max-concurrent` / `LLM_MAX_CONCURRENT` | `3` | 全系统所有 `ChatModel.chat(...)` 调用最多同时 3 个 |
+
+注意：
+
+- 单个 `ingestPlanned(...)` 内部目前是顺序执行 batch。
+- `section_facts` batch 当前一个批次完成后才调用下一个批次。
+- planned page batch 当前也是一个批次完成后才调用下一个批次。
+- 因此，只有一个文档在编译时，通常只占用 1 个 LLM 调用槽位；`LLM_MAX_CONCURRENT=3` 主要用于多个编译任务或其他 Agent 同时调用模型时限流。
+
+当前实际链路：
+
+```text
+最多 2 个 Wiki 编译任务同时执行
+  |
+  v
+所有任务共享最多 3 个 LLM 调用槽位
+  |
+  v
+单个任务内部 section_facts/page_generation batch 顺序调用
+```
+
+后续如需提升单篇大文档速度，可以评估在单个任务内部并行执行 `section_facts` batch，但必须同时控制：
+
+- 不超过 `LLM_MAX_CONCURRENT`。
+- 保持 batch 结果按 section order 合并。
+- 单批失败不能影响其他批。
+- page_plan 仍必须在所有 section_facts 合并完成后再执行。
+
+### 阶段耗时记录方案
+
+建议在 `IngestAgent.ingestPlanned(...)` 内记录结构化耗时，并写入任务 `quality_report` 或单独的 `metrics` 字段。第一版可以先写入 `quality_report.timing`，避免立即新增表结构。
+
+建议记录字段：
+
+```json
+{
+  "timing": {
+    "outline_ms": 800,
+    "section_facts_ms": 420000,
+    "section_facts_batches": 18,
+    "section_facts_batch_ms": [12000, 18000, 9000],
+    "page_plan_ms": 35000,
+    "page_generation_ms": 180000,
+    "page_generation_batches": 5,
+    "page_generation_batch_ms": [32000, 41000, 29000],
+    "save_pages_ms": 1200,
+    "link_resolve_ms": 600,
+    "vectorize_ms": 3000,
+    "quality_gate_ms": 50,
+    "total_ms": 640000
+  },
+  "llm": {
+    "calls": 24,
+    "retries": 1,
+    "json_parse_fallbacks": 2,
+    "section_facts_fallbacks": 1,
+    "page_generation_fallbacks": 1
+  }
+}
+```
+
+日志层面建议同步输出阶段摘要：
+
+```text
+Planned ingest timing sourceId=12 outlineMs=800 sectionFactsMs=420000 sectionFactBatches=18 pagePlanMs=35000 pageGenerationMs=180000 pageGenerationBatches=5 saveMs=1200 linkMs=600 vectorizeMs=3000 qualityGateMs=50 totalMs=640000 llmCalls=24 retries=1 fallbacks=2
+```
+
+### 进度回写方案
+
+当前前端进度不够准确的原因是 `IngestTaskService` 只在调用 `ingestPlanned(...)` 前写入一次 `25% 正在生成章节事实和页面计划...`，而 `ingestPlanned(...)` 内部的 section facts、page plan、page generation、保存、质量门禁没有继续回写任务进度。
+
+建议增加阶段回调：
+
+```java
+interface IngestProgressReporter {
+    void report(int progress, String step, int completedUnits, int totalUnits);
+}
+```
+
+推荐进度区间：
+
+| 阶段 | 进度区间 | 文案示例 |
+| --- | --- | --- |
+| 文档类型和目录抽取 | `10% - 20%` | `正在抽取文档类型和目录结构...` |
+| section_facts batch | `20% - 55%` | `正在抽取章节事实 6/18...` |
+| page_plan | `55% - 65%` | `正在生成页面计划...` |
+| planned page batch | `65% - 85%` | `正在生成 Wiki 页面 3/5...` |
+| 保存和合并 | `85% - 90%` | `正在保存页面并合并已有知识...` |
+| 链接、向量化、质量门禁 | `90% - 98%` | `正在解析交叉引用并执行质量门禁...` |
+| 完成 | `100%` | `编译完成` |
+
+前端继续展示后端返回的 `task.progress` 和 `task.step` 即可，不需要在前端猜测阶段。
+
+当前完成情况：
+
+- 已确认当前 Wiki 编译任务并发默认 `2`，LLM 全局并发默认 `3`。
+- 已确认单个 planned ingest 内部 batch 当前顺序执行。
+- 已确认前端进度显示不准的直接原因是后端阶段回写不足。
+- 已接入 planned ingest 阶段进度回调，后端按阶段和批次更新任务 `progress/step/completed_chunks/total_chunks`。
+- 已记录关键阶段和批次耗时到后端日志。
+- 待完成：将结构化 `timing/llm` 指标写入质量报告或任务详情；如单篇大文档仍慢，再评估单任务内 batch 并发。
 
 ## P0：质量门禁
 

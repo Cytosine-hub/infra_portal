@@ -425,6 +425,65 @@ class IngestAgentTest {
             assertTrue(inserted.getSourceRefs().contains("sec-001"));
             assertTrue(inserted.getSourceRefs().contains("sec-002"));
         }
+
+        @Test
+        @DisplayName("标题-only章节使用本地事实，跳过section_facts LLM")
+        void skipsSectionFactLlmForTitleOnlySections() {
+            JsonObject pagePlan = new JsonObject();
+            com.google.gson.JsonArray plans = new com.google.gson.JsonArray();
+            JsonObject plan = new JsonObject();
+            plan.addProperty("planned_title", "BES 配置目录");
+            plan.addProperty("page_type", "CONCEPT");
+            plan.addProperty("category", "中间件");
+            plan.addProperty("software", "BES");
+            plan.addProperty("version", "");
+            com.google.gson.JsonArray covered = new com.google.gson.JsonArray();
+            covered.add("sec-001");
+            covered.add("sec-002");
+            plan.add("covered_section_ids", covered);
+            plan.addProperty("required", true);
+            plan.addProperty("merge_strategy", "CREATE_OR_PATCH");
+            plans.add(plan);
+            pagePlan.add("pages", plans);
+
+            JsonObject pagesResult = new JsonObject();
+            com.google.gson.JsonArray pages = new com.google.gson.JsonArray();
+            JsonObject page = new JsonObject();
+            page.addProperty("title", "BES 配置目录");
+            page.addProperty("page_type", "CONCEPT");
+            page.addProperty("category", "中间件");
+            page.addProperty("software", "BES");
+            page.addProperty("version", "");
+            page.addProperty("summary", "BES 配置目录页面");
+            page.addProperty("content", longContent());
+            pages.add(page);
+            pagesResult.add("pages", pages);
+
+            ChatResponse pagePlanResponse = createChatResponse(gson.toJson(pagePlan));
+            ChatResponse pagesResponse = createChatResponse(gson.toJson(pagesResult));
+            when(chatModel.chat(anyList()))
+                    .thenReturn(pagePlanResponse)
+                    .thenReturn(pagesResponse);
+            when(softwareTypeMapper.findAllByOrderByCategoryAscNameAsc()).thenReturn(Collections.emptyList());
+
+            WikiSource source = new WikiSource();
+            source.setId(1L);
+            source.setTitle("config.md");
+            source.setSourceType("UPLOAD");
+            source.setCategory("中间件");
+            source.setSoftware("BES");
+            source.setContent("""
+                    # 配置说明
+
+                    ## JDBC配置
+                    """);
+
+            IngestAgent.IngestResult result = ingestAgent.ingestPlanned(source, 1L);
+
+            assertNotEquals("FAILED", result.getStatus());
+            verify(chatModel, times(2)).chat(anyList());
+            verify(pageMapper).insert(any(WikiPage.class));
+        }
     }
 
     @Nested

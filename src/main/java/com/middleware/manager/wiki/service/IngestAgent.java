@@ -36,6 +36,7 @@ public class IngestAgent {
     private static final int MAX_RETRIES = 3;
     private static final int SECTION_FACTS_BATCH_SIZE = 12;
     private static final int SECTION_FACTS_BATCH_CHAR_LIMIT = 12000;
+    private static final int TITLE_ONLY_EXCERPT_MAX_LENGTH = 120;
     private static final int PAGE_GENERATION_BATCH_SIZE = 4;
     private static final Set<String> VALID_PAGE_TYPES = Set.of(
             "ENTITY", "CONCEPT", "RUNBOOK", "EXPERIENCE", "STANDARD", "SYNTHESIS", "OVERVIEW");
@@ -107,6 +108,14 @@ public class IngestAgent {
         public void setErrorMessage(String v) { this.errorMessage = v; }
         public void setQualityReport(String v) { this.qualityReport = v; }
     }
+
+    @FunctionalInterface
+    public interface ProgressReporter {
+        void report(int progress, String step, int completedUnits, int totalUnits);
+    }
+
+    private static final ProgressReporter NOOP_PROGRESS = (progress, step, completedUnits, totalUnits) -> {
+    };
 
     @Transactional
     public IngestResult ingest(WikiSource source, Long operatorId) {
@@ -254,11 +263,17 @@ public class IngestAgent {
 
     @Transactional
     public IngestResult ingestPlanned(WikiSource source, Long operatorId) {
+        return ingestPlanned(source, operatorId, NOOP_PROGRESS);
+    }
+
+    @Transactional
+    public IngestResult ingestPlanned(WikiSource source, Long operatorId, ProgressReporter progressReporter) {
         long startTime = System.currentTimeMillis();
         IngestResult result = new IngestResult();
         WikiIngestLog ingestLog = new WikiIngestLog();
         ingestLog.setSourceId(source.getId());
         ingestLog.setOperatorId(operatorId);
+        ProgressReporter progress = progressReporter == null ? NOOP_PROGRESS : progressReporter;
 
         try {
             String content = source.getContent();
@@ -269,7 +284,7 @@ public class IngestAgent {
                 return result;
             }
 
-            PlannedPages plannedPages = generatePlannedPages(source, content);
+            PlannedPages plannedPages = generatePlannedPages(source, content, progress);
             result.setQualityReport(gson.toJson(plannedPages.report()));
             if ("FAILED".equals(plannedPages.report().getStatus())) {
                 return failPlanned(result, ingestLog, startTime,
@@ -298,29 +313,37 @@ public class IngestAgent {
         return result;
     }
 
-    private PlannedPages generatePlannedPages(WikiSource source, String content) {
+    private PlannedPages generatePlannedPages(WikiSource source, String content, ProgressReporter progress) {
+        long stepStart = System.currentTimeMillis();
+        progress.report(10, "正在抽取文档类型和目录结构...", 0, 0);
         log.info("Planned ingest Step 0: Extracting outline for source '{}'", source.getTitle());
         DocumentTypeClassifier.Classification classification =
                 documentTypeClassifier.classify(source.getTitle(), content);
         DocumentOutlineExtractor.DocumentOutline outline = documentOutlineExtractor.extract(
                 source.getTitle(), content, source.getCategory(), source.getSoftware(), classification);
         String outlineJson = toCompactOutlineJson(outline, outline.getSections(), 260);
+        log.info("Planned ingest Step 0 completed for source '{}': sections={}, durationMs={}",
+                source.getTitle(), outline.getSections().size(), System.currentTimeMillis() - stepStart);
 
         log.info("Planned ingest Step 1: Extracting section facts for source '{}'", source.getTitle());
-        JsonObject sectionFacts = generateSectionFacts(outline);
+        JsonObject sectionFacts = generateSectionFacts(outline, progress);
         String sectionFactsJson = gson.toJson(sectionFacts);
 
-        JsonObject pagePlan = generatePagePlan(source, outlineJson, sectionFactsJson, outline);
+        JsonObject pagePlan = generatePagePlan(source, outlineJson, sectionFactsJson, outline, progress);
         validatePagePlanCoverage(pagePlan, outline);
-        JsonArray pages = generatePagesFromPlan(source, outline, sectionFacts, pagePlan);
+        JsonArray pages = generatePagesFromPlan(source, outline, sectionFacts, pagePlan, progress);
+        progress.report(82, "正在补充来源引用并执行页面校验...", 0, 0);
         enrichPagesWithPlan(pages, pagePlan.getAsJsonArray("pages"), outline, source);
         validateGeneratedPages(pages);
+        progress.report(86, "正在执行质量门禁...", 0, 0);
         WikiIngestQualityGate.QualityReport report = qualityGate.evaluate(outline, pages);
         return new PlannedPages(pages, report);
     }
 
     private JsonObject generatePagePlan(WikiSource source, String outlineJson, String sectionFactsJson,
-                                        DocumentOutlineExtractor.DocumentOutline outline) {
+                                        DocumentOutlineExtractor.DocumentOutline outline, ProgressReporter progress) {
+        long start = System.currentTimeMillis();
+        progress.report(55, "正在生成页面计划...", 0, 0);
         log.info("Planned ingest Step 2: Planning pages for source '{}'", source.getTitle());
         String existingSummary = buildExistingPagesSummary(source.getCategory(), source.getSoftware());
         String softwareRef = buildSoftwareReference();
@@ -332,18 +355,27 @@ public class IngestAgent {
             log.warn("Page plan JSON invalid for source '{}', using deterministic fallback", source.getTitle());
             return fallbackPagePlan(source, outline);
         }
+        log.info("Planned ingest Step 2 completed for source '{}': plannedPages={}, durationMs={}",
+                source.getTitle(), pagePlan.getAsJsonArray("pages").size(), System.currentTimeMillis() - start);
         return pagePlan;
     }
 
     private JsonArray generatePagesFromPlan(WikiSource source, DocumentOutlineExtractor.DocumentOutline outline,
-                                            JsonObject sectionFacts, JsonObject pagePlan) {
+                                            JsonObject sectionFacts, JsonObject pagePlan, ProgressReporter progress) {
         log.info("Planned ingest Step 3: Generating planned pages for source '{}'", source.getTitle());
         JsonArray plans = pagePlan.getAsJsonArray("pages");
         if (plans == null || plans.isEmpty()) {
             throw new PlannedIngestException(ErrorMessages.WIKI_PAGE_GENERATION_FAILED);
         }
         JsonArray generatedPages = new JsonArray();
-        for (JsonArray planBatch : partitionPlanBatch(plans)) {
+        List<JsonArray> planBatches = partitionPlanBatch(plans);
+        int completed = 0;
+        for (JsonArray planBatch : planBatches) {
+            long batchStart = System.currentTimeMillis();
+            completed++;
+            progress.report(progressBetween(65, 80, completed - 1, planBatches.size()),
+                    "正在按页面计划生成页面 " + completed + "/" + planBatches.size(),
+                    completed - 1, planBatches.size());
             Set<String> sectionIds = coveredSectionIds(planBatch);
             String outlineJson = toCompactOutlineJson(outline, sectionsByIds(outline, sectionIds), 500);
             String sectionFactsJson = gson.toJson(filterSectionFacts(sectionFacts, sectionIds));
@@ -364,17 +396,38 @@ public class IngestAgent {
             for (JsonElement page : pages) {
                 generatedPages.add(page);
             }
+            log.info("Planned ingest Step 3 batch completed for source '{}': batch={}/{}, plans={}, pages={}, durationMs={}",
+                    source.getTitle(), completed, planBatches.size(), planBatch.size(), pages.size(),
+                    System.currentTimeMillis() - batchStart);
         }
         if (generatedPages.isEmpty()) {
             throw new PlannedIngestException(ErrorMessages.WIKI_PAGE_GENERATION_FAILED);
         }
+        progress.report(80, "页面生成完成，正在校验质量...", planBatches.size(), planBatches.size());
         return generatedPages;
     }
 
-    private JsonObject generateSectionFacts(DocumentOutlineExtractor.DocumentOutline outline) {
+    private JsonObject generateSectionFacts(DocumentOutlineExtractor.DocumentOutline outline, ProgressReporter progress) {
+        long start = System.currentTimeMillis();
         JsonObject merged = new JsonObject();
         JsonArray mergedFacts = new JsonArray();
-        for (List<DocumentOutlineExtractor.DocumentSection> batch : partitionSectionFacts(outline.getSections())) {
+        List<List<DocumentOutlineExtractor.DocumentSection>> batches = partitionSectionFacts(outline.getSections());
+        int completed = 0;
+        int localOnlySections = 0;
+        for (List<DocumentOutlineExtractor.DocumentSection> batch : batches) {
+            long batchStart = System.currentTimeMillis();
+            completed++;
+            progress.report(progressBetween(25, 52, completed - 1, batches.size()),
+                    "正在生成章节事实 " + completed + "/" + batches.size(), completed - 1, batches.size());
+            if (batch.stream().allMatch(this::canUseLocalSectionFact)) {
+                localOnlySections += batch.size();
+                for (DocumentOutlineExtractor.DocumentSection section : batch) {
+                    mergedFacts.add(fallbackSectionFact(section));
+                }
+                log.info("Section facts batch skipped LLM: batch={}/{}, sections={}, durationMs={}",
+                        completed, batches.size(), batch.size(), System.currentTimeMillis() - batchStart);
+                continue;
+            }
             String batchOutlineJson = toCompactOutlineJson(outline, batch, 500);
             String response = callLlm(IngestPromptTemplates.buildSectionFactsPrompt(batchOutlineJson));
             JsonObject parsed = parseJson(response);
@@ -385,9 +438,35 @@ public class IngestAgent {
             for (JsonElement fact : normalized.getAsJsonArray("section_facts")) {
                 mergedFacts.add(fact);
             }
+            log.info("Section facts batch completed: batch={}/{}, sections={}, durationMs={}",
+                    completed, batches.size(), batch.size(), System.currentTimeMillis() - batchStart);
         }
         merged.add("section_facts", mergedFacts);
+        progress.report(52, "章节事实生成完成，正在生成页面计划...", batches.size(), batches.size());
+        log.info("Planned ingest Step 1 completed: sections={}, batches={}, localOnlySections={}, durationMs={}",
+                outline.getSections().size(), batches.size(), localOnlySections, System.currentTimeMillis() - start);
         return merged;
+    }
+
+    private boolean canUseLocalSectionFact(DocumentOutlineExtractor.DocumentSection section) {
+        if (section == null || hasRichBlocks(section)) {
+            return false;
+        }
+        String excerpt = trimToNull(section.getExcerpt());
+        String title = trimToNull(lastPathSegment(section.getPath()));
+        if (excerpt == null || title == null || excerpt.length() > TITLE_ONLY_EXCERPT_MAX_LENGTH) {
+            return false;
+        }
+        String normalizedExcerpt = canonicalTitle(excerpt);
+        String normalizedTitle = canonicalTitle(title);
+        return !normalizedExcerpt.isBlank()
+                && !normalizedTitle.isBlank()
+                && (normalizedExcerpt.equals(normalizedTitle) || normalizedExcerpt.endsWith(normalizedTitle));
+    }
+
+    private boolean hasRichBlocks(DocumentOutlineExtractor.DocumentSection section) {
+        List<String> blocks = section.getBlocks();
+        return blocks != null && (blocks.contains("table") || blocks.contains("code") || blocks.contains("list"));
     }
 
     private JsonObject normalizeSectionFacts(JsonObject parsed,
@@ -793,6 +872,14 @@ public class IngestAgent {
 
     private int safeLength(String value) {
         return value == null ? 0 : value.length();
+    }
+
+    private int progressBetween(int start, int end, int completed, int total) {
+        if (total <= 0) {
+            return start;
+        }
+        int boundedCompleted = Math.max(0, Math.min(completed, total));
+        return start + (int) Math.floor((end - start) * (boundedCompleted / (double) total));
     }
 
     private String limit(String value, int maxLength) {

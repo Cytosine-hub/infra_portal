@@ -138,4 +138,22 @@ class DocumentOutlineExtractorTest {
         assertThat(outline.getSections().get(1).getPath()).isEqualTo("配置mod_jk.conf文件");
         assertThat(outline.getSections().get(1).getPageRange()).isEqualTo("141");
     }
+
+    @Test
+    void prunesTitleOnlyLeafSectionsWhenOutlineIsTooLarge() {
+        StringBuilder content = new StringBuilder("1 集群管理\n总体说明。\n");
+        for (int i = 1; i <= 280; i++) {
+            content.append("1.1.").append(i).append(" 标题碎片").append(i).append("\n");
+        }
+        content.append("2 JDBC配置\n参数 maxConnections 默认值为 100。\n");
+
+        DocumentTypeClassifier.Classification classification = classifier.classify("manual.pdf", content.toString());
+        DocumentOutlineExtractor.DocumentOutline outline =
+                extractor.extract("manual.pdf", content.toString(), "中间件", "TongWeb", classification);
+
+        assertThat(outline.getSections().size()).isLessThan(80);
+        assertThat(outline.getSections()).anyMatch(section -> section.getPath().equals("集群管理"));
+        assertThat(outline.getSections()).anyMatch(section -> section.getPath().equals("JDBC配置"));
+        assertThat(outline.getSections()).noneMatch(section -> section.getPath().contains("标题碎片280"));
+    }
 }

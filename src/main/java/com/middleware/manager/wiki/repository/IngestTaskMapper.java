@@ -14,6 +14,9 @@ public interface IngestTaskMapper {
     int update(IngestTask task);
     int updateProgress(@Param("id") Long id, @Param("progress") int progress,
                        @Param("step") String step, @Param("completedChunks") int completedChunks);
+    int updateProgressWithTotal(@Param("id") Long id, @Param("progress") int progress,
+                                @Param("step") String step, @Param("completedChunks") int completedChunks,
+                                @Param("totalChunks") int totalChunks);
     int updateStatus(@Param("id") Long id, @Param("status") String status,
                      @Param("errorMessage") String errorMessage);
     int updateResult(@Param("id") Long id, @Param("pagesCreated") int pagesCreated,

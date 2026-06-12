@@ -54,6 +54,13 @@
         WHERE id=#{id}
     </update>
 
+    <update id="updateProgressWithTotal">
+        UPDATE wiki_ingest_tasks
+        SET progress=#{progress}, step=#{step}, completed_chunks=#{completedChunks},
+            total_chunks=#{totalChunks}, status='PROCESSING'
+        WHERE id=#{id}
+    </update>
+
     <update id="updateStatus">
         UPDATE wiki_ingest_tasks
         SET status=#{status}, error_message=#{errorMessage}

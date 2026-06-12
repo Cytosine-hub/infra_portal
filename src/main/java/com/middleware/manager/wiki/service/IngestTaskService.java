@@ -223,9 +223,14 @@ public class IngestTaskService {
     private void executePlannedTask(Long taskId, IngestTask task, WikiSource source) {
         int totalChunks = task.getTotalChunks();
 
-        taskMapper.updateProgress(taskId, 10, "正在抽取文档类型和目录结构...", 0);
-        taskMapper.updateProgress(taskId, 25, "正在生成章节事实和页面计划...", 0);
-        IngestAgent.IngestResult result = ingestAgent.ingestPlanned(source, task.getOperatorId());
+        IngestAgent.IngestResult result = ingestAgent.ingestPlanned(source, task.getOperatorId(),
+                (progress, step, completedUnits, totalUnits) -> {
+                    if (totalUnits > 0) {
+                        taskMapper.updateProgressWithTotal(taskId, progress, step, completedUnits, totalUnits);
+                    } else {
+                        taskMapper.updateProgress(taskId, progress, step, completedUnits);
+                    }
+                });
         persistQualityReport(taskId, result);
         if ("FAILED".equals(result.getStatus())) {
             markSourceNotIngested(source);
