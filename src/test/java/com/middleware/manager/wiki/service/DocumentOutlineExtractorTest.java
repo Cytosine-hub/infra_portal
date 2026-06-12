@@ -111,4 +111,31 @@ class DocumentOutlineExtractorTest {
         assertThat(outline.getSections().get(1).getSourceSignal()).isEqualTo("numbered-heading");
         assertThat(outline.getSections().get(1).getParagraphStart()).isGreaterThan(0);
     }
+
+    @Test
+    void handlesPdfTocLinesWithFullWidthSpaces() {
+        String content = """
+                目录
+                8.4.1　 配置httpd.conf文件 .... 140
+                8.4.2　 配置mod_jk.conf文件 .... 141
+                \f
+                8.4.1　 配置httpd.conf文件
+                Listen 80
+                ServerName localhost
+                \f
+                8.4.2　 配置mod_jk.conf文件
+                LoadModule jk_module modules/mod_jk.so
+                """;
+
+        DocumentTypeClassifier.Classification classification = classifier.classify("manual.pdf", content);
+        DocumentOutlineExtractor.DocumentOutline outline =
+                extractor.extract("manual.pdf", content, "中间件", "TongWeb", classification);
+
+        assertThat(outline.getSections()).hasSize(2);
+        assertThat(outline.getSections().get(0).getPath()).isEqualTo("配置httpd.conf文件");
+        assertThat(outline.getSections().get(0).getPageRange()).isEqualTo("140");
+        assertThat(outline.getSections().get(0).getSourceSignal()).isEqualTo("numbered-heading");
+        assertThat(outline.getSections().get(1).getPath()).isEqualTo("配置mod_jk.conf文件");
+        assertThat(outline.getSections().get(1).getPageRange()).isEqualTo("141");
+    }
 }

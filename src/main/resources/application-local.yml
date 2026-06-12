@@ -9,8 +9,9 @@ langchain4j:
       base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
       api-key: ${AI_API_KEY}
       model-name: ${AI_MODEL:mimo-v2.5-pro}
-      max-tokens: ${AI_MAX_TOKENS:4096}
+      max-tokens: ${AI_MAX_TOKENS:8192}
       temperature: ${AI_TEMPERATURE:0.1}
+      timeout: ${AI_TIMEOUT:PT600S}
       log-requests: true
       log-responses: true
     embedding-model:
@@ -23,7 +24,7 @@ app:
     base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
     api-key: ${AI_API_KEY}
     model: ${AI_MODEL:mimo-v2.5-pro}
-    max-tokens: ${AI_MAX_TOKENS:4096}
+    max-tokens: ${AI_MAX_TOKENS:8192}
     temperature: ${AI_TEMPERATURE:0.1}
   embedding:
     max-chars: 300

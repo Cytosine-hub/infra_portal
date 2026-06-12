@@ -34,6 +34,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class IngestAgent {
     private static final int MAX_RETRIES = 3;
+    private static final int SECTION_FACTS_BATCH_SIZE = 12;
+    private static final int SECTION_FACTS_BATCH_CHAR_LIMIT = 12000;
+    private static final int PAGE_GENERATION_BATCH_SIZE = 4;
     private static final Set<String> VALID_PAGE_TYPES = Set.of(
             "ENTITY", "CONCEPT", "RUNBOOK", "EXPERIENCE", "STANDARD", "SYNTHESIS", "OVERVIEW");
 
@@ -301,49 +304,502 @@ public class IngestAgent {
                 documentTypeClassifier.classify(source.getTitle(), content);
         DocumentOutlineExtractor.DocumentOutline outline = documentOutlineExtractor.extract(
                 source.getTitle(), content, source.getCategory(), source.getSoftware(), classification);
-        String outlineJson = gson.toJson(outline);
+        String outlineJson = toCompactOutlineJson(outline, outline.getSections(), 260);
 
         log.info("Planned ingest Step 1: Extracting section facts for source '{}'", source.getTitle());
-        String sectionFactsJson = callLlm(IngestPromptTemplates.buildSectionFactsPrompt(outlineJson));
-        JsonObject sectionFacts = parseJson(sectionFactsJson);
-        if (sectionFacts == null || !sectionFacts.has("section_facts")) {
-            throw new PlannedIngestException(ErrorMessages.WIKI_SECTION_FACTS_FAILED);
-        }
+        JsonObject sectionFacts = generateSectionFacts(outline);
+        String sectionFactsJson = gson.toJson(sectionFacts);
 
-        JsonObject pagePlan = generatePagePlan(source, outlineJson, sectionFactsJson);
+        JsonObject pagePlan = generatePagePlan(source, outlineJson, sectionFactsJson, outline);
         validatePagePlanCoverage(pagePlan, outline);
-        JsonArray pages = generatePagesFromPlan(source, outlineJson, sectionFactsJson, pagePlan);
+        JsonArray pages = generatePagesFromPlan(source, outline, sectionFacts, pagePlan);
         enrichPagesWithPlan(pages, pagePlan.getAsJsonArray("pages"), outline, source);
         validateGeneratedPages(pages);
         WikiIngestQualityGate.QualityReport report = qualityGate.evaluate(outline, pages);
         return new PlannedPages(pages, report);
     }
 
-    private JsonObject generatePagePlan(WikiSource source, String outlineJson, String sectionFactsJson) {
+    private JsonObject generatePagePlan(WikiSource source, String outlineJson, String sectionFactsJson,
+                                        DocumentOutlineExtractor.DocumentOutline outline) {
         log.info("Planned ingest Step 2: Planning pages for source '{}'", source.getTitle());
         String existingSummary = buildExistingPagesSummary(source.getCategory(), source.getSoftware());
         String softwareRef = buildSoftwareReference();
         String pagePlanJson = callLlm(IngestPromptTemplates.buildPagePlanPrompt(
                 outlineJson, sectionFactsJson, existingSummary, softwareRef));
         JsonObject pagePlan = parseJson(pagePlanJson);
-        if (pagePlan == null || !pagePlan.has("pages")) {
-            throw new PlannedIngestException(ErrorMessages.WIKI_PAGE_PLAN_FAILED);
+        if (pagePlan == null || !pagePlan.has("pages") || !pagePlan.get("pages").isJsonArray()
+                || pagePlan.getAsJsonArray("pages").isEmpty()) {
+            log.warn("Page plan JSON invalid for source '{}', using deterministic fallback", source.getTitle());
+            return fallbackPagePlan(source, outline);
         }
         return pagePlan;
     }
 
-    private JsonArray generatePagesFromPlan(WikiSource source, String outlineJson, String sectionFactsJson,
-                                            JsonObject pagePlan) {
+    private JsonArray generatePagesFromPlan(WikiSource source, DocumentOutlineExtractor.DocumentOutline outline,
+                                            JsonObject sectionFacts, JsonObject pagePlan) {
         log.info("Planned ingest Step 3: Generating planned pages for source '{}'", source.getTitle());
-        String sourceMetaJson = buildSourceMetaJson(source);
-        String pagePlanJson = gson.toJson(pagePlan);
-        String pagesJson = callLlm(IngestPromptTemplates.buildPlannedPageGenerationPrompt(
-                outlineJson, sectionFactsJson, pagePlanJson, sourceMetaJson));
-        JsonObject pagesResult = parseJson(pagesJson);
-        if (pagesResult == null || !pagesResult.has("pages")) {
+        JsonArray plans = pagePlan.getAsJsonArray("pages");
+        if (plans == null || plans.isEmpty()) {
             throw new PlannedIngestException(ErrorMessages.WIKI_PAGE_GENERATION_FAILED);
         }
-        return pagesResult.getAsJsonArray("pages");
+        JsonArray generatedPages = new JsonArray();
+        for (JsonArray planBatch : partitionPlanBatch(plans)) {
+            Set<String> sectionIds = coveredSectionIds(planBatch);
+            String outlineJson = toCompactOutlineJson(outline, sectionsByIds(outline, sectionIds), 500);
+            String sectionFactsJson = gson.toJson(filterSectionFacts(sectionFacts, sectionIds));
+            JsonObject batchPlan = new JsonObject();
+            batchPlan.add("pages", planBatch.deepCopy());
+            String pagesJson = callLlm(IngestPromptTemplates.buildPlannedPageGenerationPrompt(
+                    outlineJson, sectionFactsJson, gson.toJson(batchPlan), buildSourceMetaJson(source)));
+            JsonObject pagesResult = parseJson(pagesJson);
+            JsonArray pages = pagesResult != null && pagesResult.has("pages") && pagesResult.get("pages").isJsonArray()
+                    ? pagesResult.getAsJsonArray("pages")
+                    : fallbackPagesFromPlan(source, planBatch, outline, sectionFacts);
+            if (pagesResult == null || !pagesResult.has("pages") || !pagesResult.get("pages").isJsonArray()
+                    || pages.isEmpty()) {
+                log.warn("Planned page JSON invalid for source '{}', using deterministic fallback for {} plans",
+                        source.getTitle(), planBatch.size());
+                pages = fallbackPagesFromPlan(source, planBatch, outline, sectionFacts);
+            }
+            for (JsonElement page : pages) {
+                generatedPages.add(page);
+            }
+        }
+        if (generatedPages.isEmpty()) {
+            throw new PlannedIngestException(ErrorMessages.WIKI_PAGE_GENERATION_FAILED);
+        }
+        return generatedPages;
+    }
+
+    private JsonObject generateSectionFacts(DocumentOutlineExtractor.DocumentOutline outline) {
+        JsonObject merged = new JsonObject();
+        JsonArray mergedFacts = new JsonArray();
+        for (List<DocumentOutlineExtractor.DocumentSection> batch : partitionSectionFacts(outline.getSections())) {
+            String batchOutlineJson = toCompactOutlineJson(outline, batch, 500);
+            String response = callLlm(IngestPromptTemplates.buildSectionFactsPrompt(batchOutlineJson));
+            JsonObject parsed = parseJson(response);
+            JsonObject normalized = normalizeSectionFacts(parsed, batch);
+            if (parsed == null || !parsed.has("section_facts")) {
+                log.warn("Section facts JSON invalid, using fallback for {} sections", batch.size());
+            }
+            for (JsonElement fact : normalized.getAsJsonArray("section_facts")) {
+                mergedFacts.add(fact);
+            }
+        }
+        merged.add("section_facts", mergedFacts);
+        return merged;
+    }
+
+    private JsonObject normalizeSectionFacts(JsonObject parsed,
+                                             List<DocumentOutlineExtractor.DocumentSection> batch) {
+        JsonObject normalized = new JsonObject();
+        JsonArray facts = new JsonArray();
+        Set<String> expectedIds = new LinkedHashSet<>();
+        for (DocumentOutlineExtractor.DocumentSection section : batch) {
+            expectedIds.add(section.getId());
+        }
+
+        Set<String> presentIds = new HashSet<>();
+        if (parsed != null && parsed.has("section_facts") && parsed.get("section_facts").isJsonArray()) {
+            for (JsonElement element : parsed.getAsJsonArray("section_facts")) {
+                if (!element.isJsonObject()) {
+                    continue;
+                }
+                JsonObject fact = element.getAsJsonObject();
+                String sectionId = getAsString(fact, "section_id");
+                if (sectionId != null && expectedIds.contains(sectionId) && presentIds.add(sectionId)) {
+                    facts.add(ensureFactShape(fact));
+                }
+            }
+        }
+
+        for (DocumentOutlineExtractor.DocumentSection section : batch) {
+            if (!presentIds.contains(section.getId())) {
+                facts.add(fallbackSectionFact(section));
+            }
+        }
+        normalized.add("section_facts", facts);
+        return normalized;
+    }
+
+    private JsonObject ensureFactShape(JsonObject fact) {
+        String[] arrayFields = {"facts", "operations", "config_items", "warnings", "entities"};
+        for (String field : arrayFields) {
+            if (!fact.has(field) || !fact.get(field).isJsonArray()) {
+                fact.add(field, new JsonArray());
+            }
+        }
+        return fact;
+    }
+
+    private JsonObject fallbackSectionFact(DocumentOutlineExtractor.DocumentSection section) {
+        JsonObject fact = new JsonObject();
+        fact.addProperty("section_id", section.getId());
+        fact.addProperty("section_path", section.getPath());
+        JsonArray facts = new JsonArray();
+        String excerpt = trimToNull(section.getExcerpt());
+        facts.add(excerpt == null
+                ? "章节涉及：" + section.getPath()
+                : "章节摘录：" + excerpt);
+        fact.add("facts", facts);
+        fact.add("operations", new JsonArray());
+        fact.add("config_items", new JsonArray());
+        fact.add("warnings", new JsonArray());
+        JsonArray entities = new JsonArray();
+        String entity = lastPathSegment(section.getPath());
+        if (entity != null && entity.length() <= 60) {
+            entities.add(entity);
+        }
+        fact.add("entities", entities);
+        return fact;
+    }
+
+    private List<List<DocumentOutlineExtractor.DocumentSection>> partitionSectionFacts(
+            List<DocumentOutlineExtractor.DocumentSection> sections) {
+        List<List<DocumentOutlineExtractor.DocumentSection>> batches = new ArrayList<>();
+        List<DocumentOutlineExtractor.DocumentSection> current = new ArrayList<>();
+        int currentChars = 0;
+        for (DocumentOutlineExtractor.DocumentSection section : sections) {
+            int sectionChars = safeLength(section.getPath()) + safeLength(section.getExcerpt()) + 160;
+            if (!current.isEmpty()
+                    && (current.size() >= SECTION_FACTS_BATCH_SIZE
+                    || currentChars + sectionChars > SECTION_FACTS_BATCH_CHAR_LIMIT)) {
+                batches.add(current);
+                current = new ArrayList<>();
+                currentChars = 0;
+            }
+            current.add(section);
+            currentChars += sectionChars;
+        }
+        if (!current.isEmpty()) {
+            batches.add(current);
+        }
+        return batches;
+    }
+
+    private JsonObject fallbackPagePlan(WikiSource source, DocumentOutlineExtractor.DocumentOutline outline) {
+        JsonObject pagePlan = new JsonObject();
+        JsonArray plans = new JsonArray();
+        List<DocumentOutlineExtractor.DocumentSection> candidates = outline.getSections().stream()
+                .filter(DocumentOutlineExtractor.DocumentSection::isRequired)
+                .toList();
+        if (candidates.isEmpty()) {
+            candidates = outline.getSections();
+        }
+
+        List<DocumentOutlineExtractor.DocumentSection> current = new ArrayList<>();
+        String currentGroup = null;
+        for (DocumentOutlineExtractor.DocumentSection section : candidates) {
+            String group = firstPathSegment(section.getPath());
+            if (!current.isEmpty() && (!Objects.equals(currentGroup, group) || current.size() >= 8)) {
+                plans.add(fallbackPlan(source, currentGroup, current));
+                current = new ArrayList<>();
+            }
+            currentGroup = group;
+            current.add(section);
+        }
+        if (!current.isEmpty()) {
+            plans.add(fallbackPlan(source, currentGroup, current));
+        }
+        pagePlan.add("pages", plans);
+        return pagePlan;
+    }
+
+    private JsonObject fallbackPlan(WikiSource source, String group,
+                                    List<DocumentOutlineExtractor.DocumentSection> sections) {
+        JsonObject plan = new JsonObject();
+        String software = trimToNull(source.getSoftware());
+        String titleSubject = trimToNull(group) == null ? "文档知识" : group;
+        plan.addProperty("planned_title", (software == null ? "" : software + " ") + titleSubject);
+        plan.addProperty("page_type", fallbackPageType(sections));
+        plan.addProperty("category", source.getCategory());
+        plan.addProperty("software", source.getSoftware());
+        plan.addProperty("version", "");
+        JsonArray covered = new JsonArray();
+        JsonArray expectedOutline = new JsonArray();
+        for (DocumentOutlineExtractor.DocumentSection section : sections) {
+            covered.add(section.getId());
+            expectedOutline.add(section.getPath());
+        }
+        plan.add("covered_section_ids", covered);
+        plan.addProperty("required", sections.stream().anyMatch(DocumentOutlineExtractor.DocumentSection::isRequired));
+        plan.addProperty("merge_strategy", "CREATE_OR_PATCH");
+        plan.add("expected_outline", expectedOutline);
+        return plan;
+    }
+
+    private String fallbackPageType(List<DocumentOutlineExtractor.DocumentSection> sections) {
+        String joined = sections.stream()
+                .map(DocumentOutlineExtractor.DocumentSection::getSectionType)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.joining(" "));
+        if (joined.contains("TROUBLESHOOTING_STEP")) return "EXPERIENCE";
+        if (joined.contains("PROCEDURE")) return "RUNBOOK";
+        if (joined.contains("CONFIG_ITEM") || joined.contains("STANDARD_RULE")) return "STANDARD";
+        if (joined.contains("OVERVIEW")) return "OVERVIEW";
+        return "CONCEPT";
+    }
+
+    private List<JsonArray> partitionPlanBatch(JsonArray plans) {
+        List<JsonArray> batches = new ArrayList<>();
+        JsonArray current = new JsonArray();
+        for (JsonElement plan : plans) {
+            current.add(plan.deepCopy());
+            if (current.size() >= PAGE_GENERATION_BATCH_SIZE) {
+                batches.add(current);
+                current = new JsonArray();
+            }
+        }
+        if (!current.isEmpty()) {
+            batches.add(current);
+        }
+        return batches;
+    }
+
+    private Set<String> coveredSectionIds(JsonArray plans) {
+        Set<String> ids = new LinkedHashSet<>();
+        for (JsonElement element : plans) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject plan = element.getAsJsonObject();
+            if (!plan.has("covered_section_ids") || !plan.get("covered_section_ids").isJsonArray()) {
+                continue;
+            }
+            for (JsonElement id : plan.getAsJsonArray("covered_section_ids")) {
+                if (!id.isJsonNull()) {
+                    ids.add(id.getAsString());
+                }
+            }
+        }
+        return ids;
+    }
+
+    private List<DocumentOutlineExtractor.DocumentSection> sectionsByIds(
+            DocumentOutlineExtractor.DocumentOutline outline, Set<String> ids) {
+        if (ids.isEmpty()) {
+            return outline.getSections();
+        }
+        return outline.getSections().stream()
+                .filter(section -> ids.contains(section.getId()))
+                .toList();
+    }
+
+    private JsonObject filterSectionFacts(JsonObject sectionFacts, Set<String> ids) {
+        JsonObject filtered = new JsonObject();
+        JsonArray facts = new JsonArray();
+        if (sectionFacts != null && sectionFacts.has("section_facts")
+                && sectionFacts.get("section_facts").isJsonArray()) {
+            for (JsonElement element : sectionFacts.getAsJsonArray("section_facts")) {
+                if (!element.isJsonObject()) {
+                    continue;
+                }
+                JsonObject fact = element.getAsJsonObject();
+                String sectionId = getAsString(fact, "section_id");
+                if (ids.isEmpty() || ids.contains(sectionId)) {
+                    facts.add(fact.deepCopy());
+                }
+            }
+        }
+        filtered.add("section_facts", facts);
+        return filtered;
+    }
+
+    private JsonArray fallbackPagesFromPlan(WikiSource source, JsonArray plans,
+                                            DocumentOutlineExtractor.DocumentOutline outline,
+                                            JsonObject sectionFacts) {
+        JsonArray pages = new JsonArray();
+        Map<String, DocumentOutlineExtractor.DocumentSection> sectionById = sectionById(outline);
+        Map<String, JsonObject> factBySectionId = factBySectionId(sectionFacts);
+        for (JsonElement element : plans) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject plan = element.getAsJsonObject();
+            JsonObject page = new JsonObject();
+            String title = trimToNull(getAsString(plan, "planned_title"));
+            page.addProperty("title", title == null ? source.getSoftware() + " 文档知识" : title);
+            page.addProperty("page_type", trimToNull(getAsString(plan, "page_type")) == null
+                    ? "CONCEPT" : getAsString(plan, "page_type"));
+            page.addProperty("category", getAsString(plan, "category"));
+            page.addProperty("software", getAsString(plan, "software"));
+            page.addProperty("version", getAsString(plan, "version"));
+            page.add("alias_titles", new JsonArray());
+            page.addProperty("summary", "根据来源章节事实生成的基础页面，覆盖 "
+                    + coveredSectionIds(singlePlanArray(plan)).size() + " 个章节。");
+            page.addProperty("content", fallbackPageContent(page, plan, sectionById, factBySectionId));
+            pages.add(page);
+        }
+        return pages;
+    }
+
+    private String fallbackPageContent(JsonObject page, JsonObject plan,
+                                       Map<String, DocumentOutlineExtractor.DocumentSection> sectionById,
+                                       Map<String, JsonObject> factBySectionId) {
+        String title = getAsString(page, "title");
+        StringBuilder content = new StringBuilder("# ").append(title).append("\n\n");
+        content.append("## 覆盖范围\n");
+        JsonArray sectionIds = plan.has("covered_section_ids") && plan.get("covered_section_ids").isJsonArray()
+                ? plan.getAsJsonArray("covered_section_ids") : new JsonArray();
+        for (JsonElement idElement : sectionIds) {
+            if (idElement.isJsonNull()) {
+                continue;
+            }
+            String sectionId = idElement.getAsString();
+            DocumentOutlineExtractor.DocumentSection section = sectionById.get(sectionId);
+            JsonObject fact = factBySectionId.get(sectionId);
+            content.append("\n### ")
+                    .append(section == null ? sectionId : section.getPath())
+                    .append("\n");
+            appendFactArray(content, "事实", fact, "facts");
+            appendFactArray(content, "操作", fact, "operations");
+            appendFactArray(content, "配置项", fact, "config_items");
+            appendFactArray(content, "注意事项", fact, "warnings");
+            if (fact == null && section != null && trimToNull(section.getExcerpt()) != null) {
+                content.append("- 章节摘录：").append(section.getExcerpt()).append("\n");
+            }
+        }
+        content.append("\n## 来源说明\n");
+        content.append("本页面按文档目录章节聚合，保留章节事实、操作、配置项和注意事项。");
+        while (content.length() < 360) {
+            content.append(" 后续人工审核时可根据原始文档补充截图、命令输出和环境差异。");
+        }
+        return content.toString();
+    }
+
+    private void appendFactArray(StringBuilder content, String label, JsonObject fact, String field) {
+        if (fact == null || !fact.has(field) || !fact.get(field).isJsonArray()) {
+            return;
+        }
+        JsonArray values = fact.getAsJsonArray(field);
+        if (values.isEmpty()) {
+            return;
+        }
+        content.append("- ").append(label).append("：");
+        List<String> rendered = new ArrayList<>();
+        for (JsonElement value : values) {
+            if (!value.isJsonNull()) {
+                rendered.add(renderFactValue(value));
+            }
+        }
+        content.append(String.join("；", rendered)).append("\n");
+    }
+
+    private String renderFactValue(JsonElement value) {
+        if (value.isJsonPrimitive()) {
+            return value.getAsString();
+        }
+        if (value.isJsonObject()) {
+            JsonObject object = value.getAsJsonObject();
+            String action = getAsString(object, "action");
+            String name = getAsString(object, "name");
+            String description = getAsString(object, "description");
+            String evidence = getAsString(object, "evidence");
+            return java.util.stream.Stream.of(action, name, description, evidence)
+                    .filter(Objects::nonNull)
+                    .filter(text -> !text.isBlank())
+                    .collect(java.util.stream.Collectors.joining(" "));
+        }
+        return value.toString();
+    }
+
+    private JsonArray singlePlanArray(JsonObject plan) {
+        JsonArray array = new JsonArray();
+        array.add(plan);
+        return array;
+    }
+
+    private Map<String, DocumentOutlineExtractor.DocumentSection> sectionById(
+            DocumentOutlineExtractor.DocumentOutline outline) {
+        Map<String, DocumentOutlineExtractor.DocumentSection> sections = new HashMap<>();
+        for (DocumentOutlineExtractor.DocumentSection section : outline.getSections()) {
+            sections.put(section.getId(), section);
+        }
+        return sections;
+    }
+
+    private Map<String, JsonObject> factBySectionId(JsonObject sectionFacts) {
+        Map<String, JsonObject> facts = new HashMap<>();
+        if (sectionFacts == null || !sectionFacts.has("section_facts")
+                || !sectionFacts.get("section_facts").isJsonArray()) {
+            return facts;
+        }
+        for (JsonElement element : sectionFacts.getAsJsonArray("section_facts")) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject fact = element.getAsJsonObject();
+            String sectionId = getAsString(fact, "section_id");
+            if (sectionId != null) {
+                facts.put(sectionId, fact);
+            }
+        }
+        return facts;
+    }
+
+    private String toCompactOutlineJson(DocumentOutlineExtractor.DocumentOutline outline,
+                                        List<DocumentOutlineExtractor.DocumentSection> sections,
+                                        int excerptLimit) {
+        JsonObject compact = new JsonObject();
+        compact.addProperty("documentType", outline.getDocumentType());
+        compact.addProperty("format", outline.getFormat());
+        compact.addProperty("title", outline.getTitle());
+        compact.addProperty("category", outline.getCategory());
+        compact.addProperty("software", outline.getSoftware());
+        compact.addProperty("structureQuality", outline.getStructureQuality());
+        JsonArray compactSections = new JsonArray();
+        for (DocumentOutlineExtractor.DocumentSection section : sections) {
+            JsonObject item = new JsonObject();
+            item.addProperty("id", section.getId());
+            item.addProperty("path", section.getPath());
+            item.addProperty("level", section.getLevel());
+            item.addProperty("order", section.getOrder());
+            if (section.getPageRange() != null) item.addProperty("pageRange", section.getPageRange());
+            item.addProperty("sourceSignal", section.getSourceSignal());
+            item.addProperty("required", section.isRequired());
+            item.addProperty("sectionType", section.getSectionType());
+            item.addProperty("confidence", section.getConfidence());
+            item.addProperty("excerpt", limit(section.getExcerpt(), excerptLimit));
+            JsonArray blocks = new JsonArray();
+            if (section.getBlocks() != null) {
+                for (String block : section.getBlocks()) {
+                    blocks.add(block);
+                }
+            }
+            item.add("blocks", blocks);
+            compactSections.add(item);
+        }
+        compact.add("sections", compactSections);
+        return gson.toJson(compact);
+    }
+
+    private String firstPathSegment(String path) {
+        String value = trimToNull(path);
+        if (value == null) {
+            return "文档知识";
+        }
+        int slash = value.indexOf('/');
+        return slash >= 0 ? value.substring(0, slash) : value;
+    }
+
+    private String lastPathSegment(String path) {
+        String value = trimToNull(path);
+        if (value == null) {
+            return null;
+        }
+        int slash = value.lastIndexOf('/');
+        return slash >= 0 ? value.substring(slash + 1) : value;
+    }
+
+    private int safeLength(String value) {
+        return value == null ? 0 : value.length();
+    }
+
+    private String limit(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 
     private void validatePagePlanCoverage(JsonObject pagePlan, DocumentOutlineExtractor.DocumentOutline outline) {

@@ -125,9 +125,10 @@ public class IngestPromptTemplates {
 
             ## 输出规则
             1. 只抽取章节摘录中明确出现的事实，不要编造。
-            2. 每个 section_id 必须返回一条 section_facts。
+            2. 每个输入中的 section_id 必须返回一条 section_facts，不要返回输入之外的 section。
             3. 操作步骤、配置项、指标、故障处理、强制条款必须保留。
-            4. 输出必须是合法 JSON，不要包含任何其他文字。
+            4. 信息不足时输出简短事实，不要扩写。
+            5. 输出必须是合法 JSON，不要包含任何其他文字。
 
             ## 输出 JSON 格式
             {

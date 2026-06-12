@@ -14,9 +14,19 @@ import java.util.regex.Pattern;
 public class DocumentOutlineExtractor {
     private static final Pattern MARKDOWN_HEADING = Pattern.compile("^(#{1,6})\\s+(.+?)\\s*$");
     private static final Pattern SETEXT_UNDERLINE = Pattern.compile("^\\s*(=+|-{2,})\\s*$");
-    private static final Pattern NUMBERED_HEADING = Pattern.compile("^\\s*((第[一二三四五六七八九十0-9]+章)|([0-9]+(\\.[0-9]+){0,4})|([一二三四五六七八九十]+、)|(\\([一二三四五六七八九十0-9]+\\)))\\s+(.+?)\\s*$");
+    private static final String HORIZONTAL_SPACE = "[\\s\\u00A0\\u3000]";
+    private static final String HEADING_MARKER =
+            "(?:第[一二三四五六七八九十0-9]+章)|(?:[0-9]+(?:\\.[0-9]+){0,4})|(?:[一二三四五六七八九十]+、)|(?:\\([一二三四五六七八九十0-9]+\\))";
+    private static final Pattern NUMBERED_HEADING = Pattern.compile(
+            "^" + HORIZONTAL_SPACE + "*((" + HEADING_MARKER + "))"
+                    + HORIZONTAL_SPACE + "+(.+?)" + HORIZONTAL_SPACE + "*$");
     private static final Pattern WORD_STYLE_HEADING = Pattern.compile("^\\s*(?:Heading|标题)\\s*([1-6])\\s*[:：\\t ]+(.+?)\\s*$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern TOC_ENTRY = Pattern.compile("^\\s*((?:(?:第[一二三四五六七八九十0-9]+章)|(?:[0-9]+(?:\\.[0-9]+){0,4})|(?:[一二三四五六七八九十]+、)|(?:\\([一二三四五六七八九十0-9]+\\)))?\\s*[^.。\\n]{2,80}?)\\s*(?:\\.{2,}|…{2,}|\\s{2,})\\s*(\\d{1,4})\\s*$");
+    private static final Pattern TOC_ENTRY = Pattern.compile(
+            "^" + HORIZONTAL_SPACE + "*((?:" + HEADING_MARKER + ")?"
+                    + HORIZONTAL_SPACE + "*[^\\n]{2,100}?)"
+                    + HORIZONTAL_SPACE + "*(?:\\.{2,}|．{2,}|…{1,}|"
+                    + HORIZONTAL_SPACE + "{2,})"
+                    + HORIZONTAL_SPACE + "*(\\d{1,4})" + HORIZONTAL_SPACE + "*$");
 
     public DocumentOutline extract(String title, String content, String category, String software,
                                    DocumentTypeClassifier.Classification classification) {
@@ -204,8 +214,8 @@ public class DocumentOutlineExtractor {
 
     private String cleanHeading(String heading) {
         if (heading == null) return "";
-        return heading.replaceFirst("^\\s*((第[一二三四五六七八九十0-9]+章)|([0-9]+(\\.[0-9]+){0,4})|([一二三四五六七八九十]+、)|(\\([一二三四五六七八九十0-9]+\\)))\\s*", "")
-                .replaceAll("\\s+\\.{2,}\\s*\\d+\\s*$", "")
+        return heading.replaceFirst("^" + HORIZONTAL_SPACE + "*((" + HEADING_MARKER + "))" + HORIZONTAL_SPACE + "*", "")
+                .replaceAll(HORIZONTAL_SPACE + "+(?:\\.{2,}|．{2,}|…{1,})" + HORIZONTAL_SPACE + "*\\d+" + HORIZONTAL_SPACE + "*$", "")
                 .trim();
     }
 

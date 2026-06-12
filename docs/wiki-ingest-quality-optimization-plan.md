@@ -29,6 +29,9 @@
 - 新增 `DocumentTypeClassifier`，支持产品概览、安装、配置、监控、排障、标准规范、版本说明等文档类型的启发式识别。
 - 新增 `DocumentOutlineExtractor`，已支持 Markdown ATX/Setext 标题、PDF 书签/目录页/编号标题、Word `.docx` Heading 样式、中文章/节标题、短标题弱识别，并输出 `section_id`、`section_path`、`char_range`、`paragraph_range`、`page_range`、`source_signal`、`required`、`section_type`、`blocks`、`confidence`。
 - 新增章节事实、页面计划、按计划生成页面三段 Prompt：`buildSectionFactsPrompt`、`buildPagePlanPrompt`、`buildPlannedPageGenerationPrompt`。
+- `section_facts` 已从“整篇文档一次性 LLM 调用”改为“按 section 批次调用 LLM 后合并”，避免大文档在事实抽取阶段触发 `completion_tokens=4096` 输出截断。
+- 页面生成已从“整个 page_plan 一次性生成所有页面”改为“按 page_plan 批次生成页面”，每批只携带相关 section outline、section_facts 和计划页面。
+- `section_facts`、`page_plan` 和 planned page 生成均已增加解析失败兜底：单批 LLM JSON 截断或格式异常时，不直接让任务失败，而是用目录章节和已抽取事实生成保守 fallback，后续仍交给质量门禁判断 `SUCCESS/PARTIAL/FAILED`。
 - `page_plan` 已增加程序级覆盖校验，所有 required section 必须映射到计划页面，否则编译失败。
 - `IngestAgent` 新增 `ingestPlanned(...)`，编译链路已改为 `classify -> outline -> section_facts -> page_plan -> planned_pages -> quality_gate -> save -> link/vectorize`。
 - `IngestTaskService` 已切换到目录驱动编译，不再按 chunk 循环调用 `ingestContent(...)` 直接落页面。
@@ -42,14 +45,22 @@
 
 后续增强：
 
-- PDF 版式字号、双栏、OCR 噪声清洗和 Word 大纲级别可继续增强；当前第一版已接入 PDF 书签/目录文本、Word `.docx` Heading 样式和通用文本标题信号。
+- PDF 版式字号、双栏、OCR 噪声清洗和 Word 大纲级别可继续增强；当前第一版已接入 PDF 书签/目录文本、全角空格/点线目录、Word `.docx` Heading 样式和通用文本标题信号。
 - `section_facts` 和 `page_plan` 当前作为编译阶段产物落在 `IngestAgent` 内，尚未持久化中间产物。
 - `source_refs` 已覆盖 planned ingest 主路径；旧兼容方法 `ingest(...)`、`ingestContent(...)` 仍保留历史行为，生产任务入口已不再调用旧分段路径。
 - 合并策略已把 LLM 解析失败默认值从 `OVERWRITE` 改为 `APPEND`，并在 APPEND 分支按 Markdown heading block 做章节补丁；复杂冲突仍交给 LLM 和人工审核。
 - 质量报告目前已持久化到 `wiki_ingest_tasks.quality_report`，并已在来源详情展示覆盖率、必需章节、缺失章节、短页面、泛化标题、过度压缩页面、来源缺失页、任务详情和完整 JSON 报告。
 - 向量检索已新增 `VectorSearchFilter`，InMemory 和 Milvus 均支持同构过滤；Milvus 对旧 collection 会回退到 metadata 过滤。
 - 图谱社区已按软件类型聚类，保留关系边权重但不再用 Louvain 作为前端默认社区划分依据。
-- 单元测试已覆盖目录抽取、PDF/Word loader 结构信号、质量门禁、page_plan 覆盖校验、标题规范化、向量过滤和图谱社区；尚缺固定长文档样例的端到端集成测试。
+- 单元测试已覆盖目录抽取、PDF/Word loader 结构信号、质量门禁、page_plan 覆盖校验、标题规范化、向量过滤、图谱社区、PDF 全角空格目录识别，以及 `section_facts` JSON 截断时的 fallback 继续编译；尚缺固定长文档样例的端到端集成测试。
+
+本轮新增修复验证：
+
+- 已完成 `section_facts` 分批抽取、合并和 fallback。
+- 已完成 planned page 分批生成和 fallback。
+- 已完成 PDF/Word 文本目录中全角空格、全角点线和 `httpd.conf` 这类标题的识别增强。
+- 已通过相关单元测试：`mvn test -Dtest=DocumentOutlineExtractorTest,IngestAgentTest -Dapp.vector.type=memory`，共 16 个测试通过。
+- 待完成：全量测试、代码审查、服务重启验证、提交和推送。
 
 ## 现状评估
 
@@ -117,17 +128,22 @@ DocumentOutlineExtractor
   |
   v
 Section Fact Extraction
-  - 每个章节提取事实
+  - 按 section batch 提取事实
+  - 合并所有批次 section_facts
+  - 单批 JSON 截断时使用 fallback facts
   - 不直接生成页面
   |
   v
 Page Planner
   - 根据全文目录和 section_facts 生成 page_plan
   - 明确每个页面覆盖哪些章节
+  - page_plan 解析失败时生成保守计划
   |
   v
 Page Generator
-  - 按 page_plan 生成页面
+  - 按 page_plan batch 生成页面
+  - 每批只携带相关 outline/facts/plans
+  - 单批 JSON 截断时生成 fallback 页面
   - 写入 source_refs 和 coverage
   |
   v
@@ -334,9 +350,25 @@ PDF section 输出建议包含：
 
 `required` 判定不要只看标题层级。不同文档类型应有不同规则：配置手册中的参数表、排障手册中的处理步骤、监控手册中的指标表、标准规范中的强制条款，即使层级较低，也应标为 required。
 
-### 4. 长文档改为 Section Facts
+### 4. 长文档改为分批 Section Facts
 
-长文档分段不再直接生成 Wiki 页面。每个 section 或 section group 先生成 `section_facts`：
+长文档分段不再直接生成 Wiki 页面，也不再把整篇文档一次性丢给 LLM 抽取 `section_facts`。正确流程是先由 `DocumentOutlineExtractor` 得到全文 `document_outline.sections`，再按 section batch 分批抽取事实，最后合并为整体 `section_facts`。
+
+原因：
+
+- 大文档的 outline 和章节摘录可能非常长，一次性抽取会让 `prompt_tokens` 接近模型上下文上限。
+- `section_facts` 输出条目数随章节数线性增长，一次性输出很容易打满 `AI_MAX_TOKENS`，出现 `completion_tokens=4096` 后 JSON 被截断。
+- 分批抽取可以把失败范围限制在单批 section，配合 fallback 后不会让整篇文档直接失败。
+
+批次策略：
+
+- 每批按 section 数量和字符数双阈值切分。
+- 每批输入只包含当前 batch 的 compact outline，不携带整篇全文。
+- 每批输出只允许包含输入 batch 内的 `section_id`。
+- 合并时按 `section_id` 去重，并补齐缺失 section。
+- 单批 JSON 解析失败时，根据 section path、excerpt、section_type 生成 fallback facts。
+
+每个 section 或 section group 先生成 `section_facts`：
 
 ```json
 {
@@ -360,6 +392,14 @@ PDF section 输出建议包含：
 ```
 
 `section_facts` 只提取事实、步骤、参数、注意事项、依赖和证据，不落库为页面。
+
+当前完成情况：
+
+- 已完成 `section_facts` 按 batch 调用 LLM。
+- 已完成 batch 结果归一化和合并。
+- 已完成字段形状补齐，保证 `facts`、`operations`、`config_items`、`warnings`、`entities` 都是数组。
+- 已完成 JSON 截断/解析失败 fallback。
+- 已补充单元测试覆盖截断 JSON 场景。
 
 ### 5. 新增 Page Planner
 
@@ -402,9 +442,9 @@ Planner 规则：
 - 页面类型优先服务运维使用场景，步骤类内容优先 `RUNBOOK`。
 - 文档类型只影响规划偏好，不改变主链路。
 
-### 6. 按 Page Plan 生成页面
+### 6. 按 Page Plan 分批生成页面
 
-页面生成阶段只处理一个计划页面对应的 facts 和原文证据，输出完整 Wiki 页面：
+页面生成阶段不应一次性生成所有计划页面。正确方式是按 `page_plan.pages` 分批生成，每批只携带这些页面覆盖的 section outline、section_facts 和计划页面，输出完整 Wiki 页面：
 
 ```json
 {
@@ -440,6 +480,22 @@ Planner 规则：
   ]
 }
 ```
+
+分批策略：
+
+- `page_plan` 仍以整篇文档为视角生成，确保页面规划不丢章节。
+- `Page Generator` 只按 page batch 生成内容，降低单次 prompt 和 completion 长度。
+- 每批只传入该批计划页覆盖的 section outline 和 section_facts。
+- 每个页面必须写入 `coverage.section_ids`，并由服务端按 `page_plan.covered_section_ids` 做补齐。
+- 每个页面必须写入 `source_refs.sections`，并由服务端根据 outline 注入 source、section、页码、段落和字符范围。
+- 单批页面 JSON 解析失败时，服务端根据 `page_plan + section_facts + outline` 生成保守 fallback 页面，后续由质量门禁判断是否 `PARTIAL` 或 `FAILED`。
+
+当前完成情况：
+
+- 已完成 planned page 按 batch 调用 LLM。
+- 已完成每批相关 outline/facts/plans 的过滤输入。
+- 已完成页面生成 JSON 截断/解析失败 fallback。
+- 已完成服务端补齐 `coverage.section_ids` 和 `source_refs.sections`。
 
 ## P0：质量门禁
 

@@ -7,8 +7,9 @@ langchain4j:
       base-url: https://open.bigmodel.cn/api/paas/v4
       api-key: ${GLM_API_KEY}
       model-name: glm-4-plus
-      max-tokens: 4096
-      temperature: 0.1
+      max-tokens: ${AI_MAX_TOKENS:8192}
+      temperature: ${AI_TEMPERATURE:0.1}
+      timeout: ${AI_TIMEOUT:PT600S}
       log-requests: false
       log-responses: false
     embedding-model:
@@ -21,8 +22,8 @@ app:
     base-url: https://open.bigmodel.cn/api/paas/v4
     api-key: ${GLM_API_KEY}
     model: glm-4-plus
-    max-tokens: 4096
-    temperature: 0.1
+    max-tokens: ${AI_MAX_TOKENS:8192}
+    temperature: ${AI_TEMPERATURE:0.1}
   embedding:
     max-chars: 4000
   vector:

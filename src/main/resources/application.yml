@@ -42,14 +42,14 @@ app:
     diagnostics-enabled: ${DIAGNOSTICS_ENABLED:true}
   llm:
     max-concurrent: ${LLM_MAX_CONCURRENT:3}
-    timeout-seconds: ${LLM_TIMEOUT_SECONDS:300}
+    timeout-seconds: ${LLM_TIMEOUT_SECONDS:600}
 
 # ========== 知识库 & Agent 配置 ==========
   ai:
     base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
     api-key: ${AI_API_KEY:tp-c917uu165jgq2dosv8104vtxi7i8uaqb3wqkq5zxlbwm5haz}
     model: ${AI_MODEL:mimo-v2.5-pro}
-    max-tokens: ${AI_MAX_TOKENS:4096}
+    max-tokens: ${AI_MAX_TOKENS:8192}
     temperature: ${AI_TEMPERATURE:0.1}
   vector:
     type: ${VECTOR_TYPE:milvus}          # memory 或 milvus
@@ -83,9 +83,9 @@ langchain4j:
       base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
       api-key: ${AI_API_KEY:tp-c917uu165jgq2dosv8104vtxi7i8uaqb3wqkq5zxlbwm5haz}
       model-name: ${AI_MODEL:mimo-v2.5-pro}
-      max-tokens: ${AI_MAX_TOKENS:4096}
+      max-tokens: ${AI_MAX_TOKENS:8192}
       temperature: ${AI_TEMPERATURE:0.1}
-      timeout: PT120S
+      timeout: ${AI_TIMEOUT:PT600S}
       log-requests: true
       log-responses: true
     embedding-model:
