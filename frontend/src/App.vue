@@ -10,6 +10,7 @@
           <button :class="{ active: false }" @click="navigate('home')">首页</button>
           <button v-if="auth.token" :class="{ active: route.name === 'standards' }" @click="navigate('standards')">标准发布</button>
           <button v-if="auth.token" :class="{ active: route.name === 'public' }" @click="navigate('downloads')">下载中心</button>
+          <button v-if="auth.token" :class="{ active: route.name === 'dataMigration' }" @click="navigate('data-migration')">数据迁移</button>
           <button v-if="auth.token" :class="{ active: route.name?.startsWith('forum') }" @click="navigate('forum')">论坛</button>
           <button v-if="auth.token && siteConfig.knowledgeEnabled" :class="{ active: route.name === 'knowledge' }" @click="navigate('knowledge')">知识库</button>
           <button v-if="auth.token && siteConfig.wikiEnabled" :class="{ active: route.name === 'wiki' }" @click="navigate('wiki')">Wiki</button>
@@ -76,6 +77,8 @@
 
       <StandardsPage v-else-if="route.name === 'standards'" />
 
+      <DataMigrationPage v-else-if="route.name === 'dataMigration'" />
+
       <section v-else-if="route.name === 'forum'" class="workspace">
         <ForumPostList
           :auth="auth"
@@ -136,7 +139,7 @@
               <div class="login-brand-overlay">
                 <p class="login-brand-eyebrow">Operations Hub</p>
                 <h1>运营集成中心</h1>
-                <p>资源下载 · 标准发布 · 漏洞通告 · 技术交流</p>
+                <p>资源下载 · 标准发布 · 数据迁移 · 技术交流</p>
               </div>
             </div>
             <form class="login-form" @submit.prevent="login">
@@ -289,6 +292,7 @@ import DiagnosticsPanel from './components/DiagnosticsPanel.vue'
 import HomePage from './pages/HomePage.vue'
 import DownloadsPage from './pages/DownloadsPage.vue'
 import StandardsPage from './pages/StandardsPage.vue'
+import DataMigrationPage from './pages/DataMigrationPage.vue'
 import CommandsPage from './pages/CommandsPage.vue'
 import AdminPage from './pages/admin/AdminPage.vue'
 import FilesSection from './pages/admin/FilesSection.vue'
@@ -347,6 +351,7 @@ const pageTitle = computed(() => {
   if (route.name === 'home') return '运营集成中心'
   if (route.name === 'public') return '运营集成中心 · 下载中心'
   if (route.name === 'standards') return '运营集成中心 · 标准发布'
+  if (route.name === 'dataMigration') return '运营集成中心 · 数据迁移'
   if (route.name === 'documentEditor') return '运营集成中心 · 文档编辑'
   if (route.name && route.name.startsWith('forum')) return '运营集成中心 · infra论坛'
   if (route.name === 'knowledge') return '运营集成中心 · 知识库管理'
@@ -373,6 +378,7 @@ function syncRoute() {
   else if (hash.startsWith('/knowledge')) next = { name: 'knowledge' }
   else if (hash.startsWith('/wiki')) next = { name: 'wiki' }
   else if (hash.startsWith('/diagnostics')) next = { name: 'diagnostics' }
+  else if (hash.startsWith('/data-migration')) next = { name: 'dataMigration' }
   else if (/^\/downloads\/(.+)$/.test(hash)) next = { name: 'public', token: hash.match(/^\/downloads\/(.+)$/)[1] }
   else if (/^\/standards\/(ps|doc)\/(\d+)$/.test(hash)) { const m = hash.match(/^\/standards\/(ps|doc)\/(\d+)$/); next = { name: 'standards', standardId: m[2], standardType: m[1] } }
   else if (/^\/standards\/(\d+)$/.test(hash)) next = { name: 'standards', standardId: hash.match(/\d+/)[0], standardType: null }
@@ -386,8 +392,8 @@ function syncRoute() {
   route.documentId = next.documentId
   route.postId = next.postId
   updateDocumentTitle()
-  // 独立页面组件自行加载数据（HomePage/DownloadsPage/StandardsPage/CommandsPage/WikiPanel/KnowledgePanel/DiagnosticsPanel）
-  const selfManagedRoutes = ['home', 'public', 'standards', 'commands', 'knowledge', 'wiki', 'diagnostics']
+  // 独立页面组件自行加载数据（HomePage/DownloadsPage/StandardsPage/DataMigrationPage/CommandsPage/WikiPanel/KnowledgePanel/DiagnosticsPanel）
+  const selfManagedRoutes = ['home', 'public', 'standards', 'dataMigration', 'commands', 'knowledge', 'wiki', 'diagnostics']
   if (selfManagedRoutes.includes(route.name)) return
   if (route.name === 'documentEditor' || route.name === 'forum' || route.name === 'forumDetail' || route.name === 'forumEditor' || route.name === 'forumMine') {
     if (route.name === 'documentEditor' && auth.token) {

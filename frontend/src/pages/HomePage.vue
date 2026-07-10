@@ -3,8 +3,8 @@
     <div class="portal-hero">
       <div class="portal-copy">
         <p class="eyebrow">统一入口</p>
-        <h2>资源下载、标准发布、漏洞通告与技术交流</h2>
-        <p>面向基础设施运维场景，集中呈现软件资产、规范文件、安全信息和论坛入口。</p>
+        <h2>资源下载、标准发布、数据迁移与技术交流</h2>
+        <p>面向基础设施运维场景，集中呈现软件资产、规范文件、迁移能力和论坛入口。</p>
       </div>
       <div class="portal-stats">
         <div>
@@ -37,13 +37,13 @@
         <button>查看标准</button>
       </article>
 
-      <article class="portal-card warning" @click="$emit('notify', '漏洞发布模块正在建设中')">
-        <div class="portal-icon">漏</div>
+      <article class="portal-card warning" @click="$emit('navigate', 'data-migration')">
+        <div class="portal-icon">迁</div>
         <div>
-          <h3>漏洞发布</h3>
-          <p>跟踪漏洞公告、影响范围、修复建议和版本升级要求。</p>
+          <h3>数据迁移</h3>
+          <p>规划 MySQL、Oracle、OceanBase 等数据库的可插拔迁移能力。</p>
         </div>
-        <button>查看漏洞</button>
+        <button>查看设计</button>
       </article>
 
       <article class="portal-card forum" @click="$emit('navigate', 'forum')">
