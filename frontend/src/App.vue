@@ -2,12 +2,12 @@
   <div class="app-shell">
     <header :class="['topbar', route.name === 'home' ? 'portal-topbar' : '']">
       <div class="clickable-title" @click="navigate('home')">
-        <p class="eyebrow">Infrastructure Portal</p>
-        <h1>{{ auth.token ? pageTitle : '运营集成中心门户' }}</h1>
+        <p class="eyebrow">Operations Hub</p>
+        <h1>{{ pageTitle }}</h1>
       </div>
       <div class="topbar-right">
         <nav v-if="route.name !== 'home'" class="nav-tabs" aria-label="Primary">
-          <button :class="{ active: false }" @click="navigate('home')">门户首页</button>
+          <button :class="{ active: false }" @click="navigate('home')">首页</button>
           <button v-if="auth.token" :class="{ active: route.name === 'standards' }" @click="navigate('standards')">标准发布</button>
           <button v-if="auth.token" :class="{ active: route.name === 'public' }" @click="navigate('downloads')">下载中心</button>
           <button v-if="auth.token" :class="{ active: route.name?.startsWith('forum') }" @click="navigate('forum')">论坛</button>
@@ -134,8 +134,8 @@
           <div class="login-card">
             <div class="login-brand">
               <div class="login-brand-overlay">
-                <p class="login-brand-eyebrow">Infrastructure Portal</p>
-                <h1>运营集成中心门户</h1>
+                <p class="login-brand-eyebrow">Operations Hub</p>
+                <h1>运营集成中心</h1>
                 <p>资源下载 · 标准发布 · 漏洞通告 · 技术交流</p>
               </div>
             </div>
@@ -344,16 +344,16 @@ const loginForm = reactive({ username: '', password: '' })
 const selectedPreviewDocument = ref(null)
 
 const pageTitle = computed(() => {
-  if (route.name === 'home') return '运营集成中心门户'
-  if (route.name === 'public') return '软件下载'
-  if (route.name === 'standards') return '标准发布'
-  if (route.name === 'documentEditor') return '文档编辑'
-  if (route.name && route.name.startsWith('forum')) return 'infra论坛'
-  if (route.name === 'knowledge') return '知识库管理'
-  if (route.name === 'wiki') return 'Wiki 知识库'
-  if (route.name === 'diagnostics') return '智能排查'
-  if (route.name === 'commands') return '常用命令'
-  return '管理后台'
+  if (route.name === 'home') return '运营集成中心'
+  if (route.name === 'public') return '运营集成中心 · 下载中心'
+  if (route.name === 'standards') return '运营集成中心 · 标准发布'
+  if (route.name === 'documentEditor') return '运营集成中心 · 文档编辑'
+  if (route.name && route.name.startsWith('forum')) return '运营集成中心 · infra论坛'
+  if (route.name === 'knowledge') return '运营集成中心 · 知识库管理'
+  if (route.name === 'wiki') return '运营集成中心 · Wiki 知识库'
+  if (route.name === 'diagnostics') return '运营集成中心 · 智能排查'
+  if (route.name === 'commands') return '运营集成中心 · 常用命令'
+  return '运营集成中心 · 管理后台'
 })
 
 // syncRoute 包含路由变化后的数据加载副作用
@@ -412,7 +412,7 @@ function syncRoute() {
 }
 
 function updateDocumentTitle() {
-  document.title = `${pageTitle.value} - 运营集成中心`
+  document.title = pageTitle.value
 }
 
 async function login() {

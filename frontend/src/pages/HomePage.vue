@@ -13,7 +13,7 @@
         </div>
         <div>
           <strong>5</strong>
-          <span>门户模块</span>
+          <span>集成模块</span>
         </div>
       </div>
     </div>
