@@ -19,3 +19,6 @@
 /mysql/
 /.m2/
 /logs/
+
+# codegraph 本地索引
+.codegraph/
