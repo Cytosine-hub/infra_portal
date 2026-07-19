@@ -177,6 +177,32 @@ describe('门户页面结构优化验收', () => {
     expect(wrapper.text()).toContain('共 1 条')
   })
 
+  test('TC-PORTAL-003 (TC-03) 打开标准详情后切换岗位应关闭跨岗位详情并限制详情树', async () => {
+    vi.mocked(fetch).mockImplementation((input) => {
+      const url = new URL(String(input), 'http://localhost')
+      if (url.pathname === '/api/public/parameter-standards') return jsonResponse({ content: standards })
+      if (url.pathname === '/api/public/parameter-standards/1') return jsonResponse(standards[0])
+      if (url.pathname === '/api/public/standard-parameters') return jsonResponse([])
+      return jsonResponse([])
+    })
+
+    const wrapper = track(mount(StandardsPage))
+    await flushPromises()
+    await selectJob(wrapper, '网络')
+    await wrapper.find('.standard-title-link').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.standards-tree .tree-group')).toHaveLength(1)
+    expect(wrapper.text()).toContain('Network Standard')
+    expect(wrapper.text()).not.toContain('Security Standard')
+
+    await selectJob(wrapper, '数据库')
+    expect(wrapper.find('.standards-detail-layout').exists()).toBe(false)
+    expect(wrapper.findAll('.standard-row')).toHaveLength(1)
+    expect(wrapper.text()).toContain('Database Standard')
+    expect(wrapper.text()).not.toContain('Network Standard')
+  })
+
   test('TC-PORTAL-004 (TC-04) infra论坛岗位筛选重拉第一页且后续滚动沿用岗位标签', async () => {
     const secondNetworkPost = { id: 4, title: 'Network Post Page 2', summary: 'network page 2', tags: ['网络'], authorDisplayName: 'D' }
     vi.mocked(fetch).mockImplementation((input) => {
@@ -256,6 +282,23 @@ describe('门户页面结构优化验收', () => {
     expect(wrapper.text()).toContain('redis-cli info')
     await wrapper.find('.command-card button').trigger('click')
     expect(writeText).toHaveBeenCalledWith('redis-cli info')
+  })
+
+  test('TC-PORTAL-005 (TC-05) 常用命令复制失败时应向用户反馈', async () => {
+    const middleware = jobModules.find(({ id }) => id === 'middleware')
+    const context = {
+      auth: {}, isSysAdmin: false, managedCategory: '', softwareTypes: [],
+      notify: vi.fn(), confirm: vi.fn()
+    }
+    const writeText = vi.fn().mockRejectedValue(new Error('clipboard unavailable'))
+    Object.defineProperty(window.navigator, 'clipboard', { value: { writeText }, configurable: true })
+
+    const wrapper = track(mount(middleware.entryComponent, { props: { job: middleware, feature: 'commands', context } }))
+    await flushPromises()
+    await wrapper.find('.command-card button').trigger('click')
+    await flushPromises()
+
+    expect(context.notify).toHaveBeenCalledWith('复制失败', 'error')
   })
 
   test('TC-PORTAL-006 (TC-06) 岗位模块独立注册入口、功能路由与接口配置', async () => {

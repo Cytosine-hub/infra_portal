@@ -118,7 +118,9 @@ function canManageCmd(cmd) {
 function parseCats(cats) { if (!cats) return []; try { return JSON.parse(cats) } catch { return [] } }
 function copyCommand(text) {
   if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).then(() => props.notify('已复制到剪贴板')).catch(() => {})
+    navigator.clipboard.writeText(text)
+      .then(() => props.notify('已复制到剪贴板'))
+      .catch(() => props.notify('复制失败', 'error'))
   } else {
     const textarea = document.createElement('textarea')
     textarea.value = text

@@ -1,7 +1,7 @@
 <template>
   <section class="workspace standards-page">
     <div class="public-module-layout">
-      <JobNavigation :model-value="selectedJob" @update:model-value="selectJob" />
+      <JobNavigation :model-value="selectedJob" @update:model-value="handleJobChange" />
       <div class="public-module-content">
     <div v-if="selectedStandard" class="standards-detail-layout">
       <!-- 左侧树形目录 -->
@@ -11,7 +11,7 @@
           <button class="ghost" @click="closeDetail()">返回列表</button>
         </div>
         <div class="tree-content">
-          <div v-for="std in standards" :key="std.id" class="tree-group">
+          <div v-for="std in filteredStandards" :key="std.id" class="tree-group">
             <!-- 一级目录：参数标准 -->
             <div :class="['tree-item', 'tree-parent', { active: selectedStandard?.id === std.id && !selectedDoc }]" @click="openStandardDetail(std.id)">
               <span class="tree-toggle" @click.stop="toggleExpand(std.id)">{{ expanded[std.id] ? '▼' : '▶' }}</span>
@@ -26,7 +26,7 @@
               </div>
             </div>
           </div>
-          <p v-if="standards.length === 0" class="tree-empty">暂无标准</p>
+          <p v-if="filteredStandards.length === 0" class="tree-empty">暂无标准</p>
         </div>
       </aside>
 
@@ -264,6 +264,13 @@ function displayTitle(doc) {
 }
 function toggleExpand(id) {
   expanded[id] = !expanded[id]
+}
+
+function handleJobChange(jobId) {
+  selectJob(jobId)
+  if (selectedStandard.value && !filterItemsByJob([selectedStandard.value], jobId, (standard) => standard.category).length) {
+    closeDetail()
+  }
 }
 
 async function loadStandards() {
