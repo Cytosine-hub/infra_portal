@@ -11,13 +11,34 @@
     </parent>
 
     <groupId>com.middleware</groupId>
-    <artifactId>middleware-resource-manager</artifactId>
+    <artifactId>middleware-resource-manager-parent</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>middleware-resource-manager</name>
-    <description>Middleware resource manager</description>
+    <packaging>pom</packaging>
+    <name>middleware-resource-manager-parent</name>
+    <description>Middleware resource manager modular monolith</description>
+
+    <modules>
+        <module>common-core</module>
+        <module>common-security</module>
+        <module>common-web</module>
+        <module>identity</module>
+        <module>catalog</module>
+        <module>standards</module>
+        <module>knowledge</module>
+        <module>wiki</module>
+        <module>community</module>
+        <module>ops-agent</module>
+        <module>job-middleware</module>
+        <module>job-database</module>
+        <module>job-host</module>
+        <module>job-network</module>
+        <module>job-security</module>
+        <module>app</module>
+    </modules>
 
     <properties>
         <java.version>17</java.version>
+        <mysql.version>8.0.33</mysql.version>
     </properties>
 
     <dependencies>
@@ -25,7 +46,6 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-
         <dependency>
             <groupId>org.mybatis.spring.boot</groupId>
             <artifactId>mybatis-spring-boot-starter</artifactId>
@@ -52,7 +72,6 @@
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
-            <version>8.0.33</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
@@ -60,77 +79,60 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-
-        <!-- OkHttp：HTTP 客户端，用于调用本地大模型 API（MiMo-v2.5 等 OpenAI 兼容接口） -->
+        <dependency>
+            <groupId>net.bytebuddy</groupId>
+            <artifactId>byte-buddy-agent</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>
             <version>4.12.0</version>
         </dependency>
-
-        <!-- Gson：JSON 序列化/反序列化，用于 LLM API 请求和响应处理 -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <version>2.10.1</version>
         </dependency>
-
-        <!-- Tika Core：Apache 文档解析核心库 -->
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-core</artifactId>
             <version>2.9.1</version>
         </dependency>
-
-        <!-- Tika Parsers：文档解析器集合，支持 PDF/Word/Excel 等格式的文本提取 -->
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-parsers-standard-package</artifactId>
             <version>2.9.1</version>
         </dependency>
-
-        <!-- Milvus SDK：向量数据库客户端，用于知识库语义检索（当前使用内存存储，生产可切换 Milvus） -->
         <dependency>
             <groupId>io.milvus</groupId>
             <artifactId>milvus-sdk-java</artifactId>
             <version>2.3.4</version>
         </dependency>
-
-        <!-- LangChain4j：LLM 应用框架，提供 RAG、Agent、Tool Calling 等能力 -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-spring-boot-starter</artifactId>
             <version>1.0.0-beta5</version>
         </dependency>
-
-        <!-- LangChain4j OpenAI 模块：支持 OpenAI 兼容格式 API（含小米 MiMo、智谱 GLM 等） -->
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
             <version>1.0.0-beta5</version>
         </dependency>
-
-        <!-- Jackson YAML：用于解析 Skill YAML 配置文件 -->
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
         </dependency>
-
-        <!-- Apache POI：用于 Excel 文件生成和导出 -->
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
             <version>5.2.5</version>
         </dependency>
-
-        <!-- JGraphT：图算法库，用于知识图谱的 Louvain 社区检测、图遍历 -->
         <dependency>
             <groupId>org.jgrapht</groupId>
             <artifactId>jgrapht-core</artifactId>
             <version>1.5.2</version>
         </dependency>
-
-        <!-- Commonmark：Markdown 解析器，用于提取 [[wikilink]] 交叉引用 -->
         <dependency>
             <groupId>org.commonmark</groupId>
             <artifactId>commonmark</artifactId>
@@ -139,12 +141,28 @@
     </dependencies>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>3.5.7</version>
+                    <configuration>
+                        <skip>true</skip>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
             <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <classifier>exec</classifier>
+                    <argLine>-javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${byte-buddy.version}/byte-buddy-agent-${byte-buddy.version}.jar</argLine>
+                    <systemPropertyVariables>
+                        <app.vector.type>memory</app.vector.type>
+                        <app.startup.runners-enabled>false</app.startup.runners-enabled>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>

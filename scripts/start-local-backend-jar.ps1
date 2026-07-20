@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$JarPath = Join-Path $ProjectRoot "backend\target\middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar"
+$JarPath = Join-Path $ProjectRoot "backend\app\target\middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar"
 $RunnerPath = Join-Path $PSScriptRoot "run-local-backend-jar.ps1"
 $OutLogPath = Join-Path $ProjectRoot "backend-local.out.log"
 $ErrLogPath = Join-Path $ProjectRoot "backend-local.err.log"

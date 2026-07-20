@@ -8,30 +8,25 @@
 
 ```
 .
-├── backend/                         # 后端 Spring Boot 工程（Maven，与 frontend/ 平级）
-│   ├── pom.xml                          # 后端唯一构建文件（spring-boot-maven-plugin）
-│   ├── src/main/java/com/middleware/manager/
-│   │   ├── MiddlewareResourceManagerApplication.java   # 后端入口
-│   │   ├── domain/          # Lombok POJO，映射 MySQL 表（SoftwareType、ReleaseAsset、ParameterStandard…）
-│   │   ├── repository/      # MyBatis Mapper 接口（XML 在 resources/mapper/*.xml，一一对应）
-│   │   ├── service/         # 业务逻辑（构造器注入，写操作 @Transactional）
-│   │   ├── web/api/         # REST 控制器：/api/admin/**、/api/public/**、/api/auth/**、/api/forum/**
-│   │   │   └── dto/         # Request/Response DTO + ApiError
-│   │   ├── web/controller/  # Thymeleaf SSR 页面控制器（/login、/admin/releases）
-│   │   ├── web/form/        # SSR 表单对象
-│   │   ├── config/          # SecurityConfig、StorageProperties、WarmupRunner、AccessLogFilter
-│   │   ├── security/        # Role 枚举（14 角色）+ PermissionService（按类目授权）
-│   │   ├── constant/        # ErrorCode.java、ErrorMessages.java（禁止魔法值）
-│   │   ├── exception/       # BusinessException / NotFoundException / ForbiddenException
-│   │   ├── knowledge/       # 知识库+RAG 排查（JdbcTemplate，非 MyBatis）：loader/splitter/embedding/store/retriever/agent/web
-│   │   ├── wiki/            # LLM Wiki 摄取与知识图谱：entity/repository/service/web
-│   │   ├── agent/           # 运维 Agent：tool/、skill/、zabbix/（ZabbixClient JSON-RPC）、export/（Excel）
-│   │   └── util/            # TextUtil
-│   ├── src/main/resources/
-│   │   ├── application.yml  # 唯一配置文件（DB/langchain4j/zabbix，环境变量可覆盖）
-│   │   ├── mapper/          # 30 个 MyBatis XML
-│   │   └── db/knowledge_ddl.sql
-│   └── src/test/java/…      # JUnit 5 + Mockito 单元测试（wiki/、agent/、knowledge/ 覆盖最全）
+├── backend/                         # Maven 多模块单体，最终仍部署一个 Spring Boot JAR
+│   ├── pom.xml                      # 聚合父 POM，声明模块、统一依赖和测试插件
+│   ├── common-core/                 # DTO、异常/错误码、常量、共享模型及跨模块业务端口
+│   ├── common-security/             # Token 校验、PermissionService、角色/岗位权限端口
+│   ├── common-web/                  # SecurityConfig、过滤器、全局异常处理、Web 通用配置
+│   ├── identity/                    # 账号、Token、角色、系统设置、API 审计
+│   ├── catalog/                     # 软件分类、软件类型、发布包与文件下载
+│   ├── standards/                   # 参数标准、标准文档、审核、版本与转换
+│   ├── knowledge/                   # 知识库、向量检索、RAG 排查
+│   ├── wiki/                        # Wiki 摄取、检索与知识图谱
+│   ├── community/                   # 论坛帖子、评论、标签与点赞
+│   ├── ops-agent/                   # 运维 Agent、工具、Skill、Zabbix 与导出
+│   ├── job-middleware/              # 中间件岗位专属命令端点
+│   ├── job-database/                # 数据库岗位边界（待演进）
+│   ├── job-host/                    # 主机岗位边界（待演进）
+│   ├── job-network/                 # 网络岗位边界（待演进）
+│   ├── job-security/                # 网络安全岗位边界（待演进）
+│   └── app/                         # 唯一启动模块、application*.yml、可执行 JAR
+│       └── src/main/java/com/middleware/manager/MiddlewareResourceManagerApplication.java
 ├── frontend/
 │   ├── src/main.js      # 前端入口
 │   ├── src/App.vue      # 应用骨架 + hash 路由分发
@@ -121,11 +116,11 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 
 ## 4. 新增一个功能的配方（以"新增一个受权限管控的管理端 CRUD"为例）
 
-1. **建表**：DDL 加入 `db/`（知识模块相关放 `backend/src/main/resources/db/`），在 MySQL `middleware_resource_manager` 库执行。
+1. **建表**：DDL 加入所属模块的 `src/main/resources/db/`（例如知识模块放 `backend/knowledge/src/main/resources/db/`），在 MySQL `middleware_resource_manager` 库执行。
 2. **domain/**：新建 Lombok POJO（`@Data @NoArgsConstructor @AllArgsConstructor`）。
 3. **repository/**：新建 Mapper 接口 + `resources/mapper/XxxMapper.xml`（方法命名仿现有：`findById`、`findAllByOrderBy…`、`existsBy…`、`insert`、`update`、`deleteById`）。
 4. **constant/**：在 `ErrorCode.java` 加错误码常量、`ErrorMessages.java` 加中文消息（成对出现）。
-5. **先写测试**（TDD，见第 8 节）：`backend/src/test/java/.../service/XxxServiceTest.java`，Mockito mock Mapper，覆盖正常/重复/不存在/无权限分支。
+5. **先写测试**（TDD，见第 8 节）：`backend/<所属模块>/src/test/java/.../service/XxxServiceTest.java`，Mockito mock Mapper，覆盖正常/重复/不存在/无权限分支。
 6. **service/**：实现业务逻辑，构造器注入，写操作 `@Transactional`，校验失败抛 `BusinessException(ErrorCode.X, ErrorMessages.X)`。
 7. **web/api/dto/**：新建 `XxxRequest`（带 `jakarta.validation` 注解）和 `XxxResponse`。
 8. **web/api/**：新建 `AdminXxxApiController`，路径 `/api/admin/xxx`，注入 `PermissionService` 做类目权限过滤；公共只读接口另建 `PublicXxxApiController` 于 `/api/public/xxx`。
@@ -177,7 +172,7 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 
 ## 8. 测试（严格 TDD）
 
-**测试先行**：任何功能/修复，先在 `backend/src/test/java` 写失败的测试（Red），再实现（Green），再重构。技术栈：JUnit 5 + Mockito + `spring-boot-starter-test`；Web 层安全用 `@WebMvcTest` 风格的 `*ControllerSecurityTest`（参照 `agent/web/OpsAgentControllerSecurityTest.java`）。
+**测试先行**：任何功能/修复，先在 `backend/<所属模块>/src/test/java` 写失败的测试（Red），再实现（Green），再重构。技术栈：JUnit 5 + Mockito + `spring-boot-starter-test`；Web 层安全用 `@WebMvcTest` 风格的 `*ControllerSecurityTest`（参照 `ops-agent` 模块的 `agent/web/OpsAgentControllerSecurityTest.java`）。
 
 组织方式仿 `wiki/service/LinkResolverTest.java`：`@Mock` mock Mapper，`@BeforeEach` 中 `MockitoAnnotations.openMocks(this)` 后手动 new 被测类；用 `@Nested` + `@DisplayName` 按方法分组。
 

@@ -39,7 +39,7 @@
 ```bash
 cd /path/to/middleware_resource_manager/backend
 mvn clean package -DskipTests
-# 产物：backend/target/middleware-resource-manager-0.0.1-SNAPSHOT.jar
+# 产物：backend/app/target/middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar
 ```
 
 ### 3.2 构建前端
@@ -58,7 +58,7 @@ npm run build
 ```
 /opt/middleware-resource-manager/
 ├── backend/
-│   ├── middleware-resource-manager-0.0.1-SNAPSHOT.jar
+│   ├── middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar
 │   ├── data/skills/          # 经验 Skill YAML（运行时生成）
 │   └── storage/              # 上传文件存储
 ├── frontend/
@@ -90,7 +90,7 @@ mysql -u root middleware_resource_manager < release/db/upgrade-v1.0.4.sql
 cd /opt/middleware-resource-manager/backend
 
 # 生产环境推荐配置
-java -jar middleware-resource-manager-0.0.1-SNAPSHOT.jar \
+java -jar middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar \
   --server.port=8080 \
   --spring.jpa.open-in-view=false \
   --app.modules.knowledge-enabled=false \
@@ -104,7 +104,7 @@ java -jar middleware-resource-manager-0.0.1-SNAPSHOT.jar \
 ```bash
 export APP_MODULES_KNOWLEDGE_ENABLED=false
 export APP_MODULES_DIAGNOSTICS_ENABLED=false
-java -jar middleware-resource-manager-0.0.1-SNAPSHOT.jar
+java -jar middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar
 ```
 
 ### 4.4 systemd 服务（推荐）
@@ -122,7 +122,7 @@ After=network.target mysql.service
 Type=simple
 User=appuser
 WorkingDirectory=/opt/middleware-resource-manager/backend
-ExecStart=/usr/bin/java -jar middleware-resource-manager-0.0.1-SNAPSHOT.jar \
+ExecStart=/usr/bin/java -jar middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar \
   --server.port=8080 \
   --app.modules.knowledge-enabled=false \
   --app.modules.diagnostics-enabled=false
@@ -355,7 +355,7 @@ cd frontend && npm run build && cd ..
 
 # 替换后端 JAR
 sudo systemctl stop middleware-resource-manager
-cp backend/target/middleware-resource-manager-0.0.1-SNAPSHOT.jar /opt/middleware-resource-manager/backend/
+cp backend/app/target/middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar /opt/middleware-resource-manager/backend/
 sudo systemctl start middleware-resource-manager
 
 # 替换前端

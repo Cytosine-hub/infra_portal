@@ -1,0 +1,134 @@
+package com.middleware.manager.agent.tool;
+
+import com.middleware.manager.knowledge.service.KnowledgeSearchPort;
+import com.middleware.manager.knowledge.service.KnowledgeSearchResult;
+import com.middleware.manager.knowledge.store.VectorSearchFilter;
+import com.middleware.manager.wiki.entity.WikiPage;
+import com.middleware.manager.wiki.service.WikiSearchPort;
+import com.middleware.manager.wiki.service.WikiSearchResult;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+@Component
+public class KnowledgeSearchTool implements Tool {
+
+    private final KnowledgeSearchPort knowledgeService;
+    private final WikiSearchPort wikiSearchService;
+
+    public KnowledgeSearchTool(KnowledgeSearchPort knowledgeService,
+                               ObjectProvider<WikiSearchPort> wikiSearchServiceProvider) {
+        this.knowledgeService = knowledgeService;
+        this.wikiSearchService = wikiSearchServiceProvider.getIfAvailable();
+    }
+
+    @Override
+    public String name() { return "knowledge_search"; }
+
+    @Override
+    public String description() {
+        return "从 Wiki 和向量知识库混合检索相关内容。用于查找产品介绍、排查手册、配置指南、历史案例。参数：query(查询内容), top_k(返回数量，默认5), category, software, source_type, source_id";
+    }
+
+    @Override
+    public String call(Map<String, Object> params) {
+        String query = String.valueOf(params.get("query"));
+        int topK = 5;
+        if (params.containsKey("top_k")) {
+            Object v = params.get("top_k");
+            topK = v instanceof Number ? ((Number) v).intValue() : Integer.parseInt(String.valueOf(v));
+        }
+        String category = stringParam(params, "category");
+        String software = stringParam(params, "software");
+        VectorSearchFilter filter = VectorSearchFilter.none()
+                .addCategory(category)
+                .addSoftware(software)
+                .addSourceType(stringParam(params, "source_type"))
+                .addSourceId(longParam(params, "source_id"));
+
+        List<String> blocks = new ArrayList<>();
+        Set<String> dedupe = new LinkedHashSet<>();
+
+        if (wikiSearchService != null) {
+            List<WikiSearchResult> wikiResults = wikiSearchService.search(
+                    query, topK, ToolContextHolder.getAuthentication());
+            for (WikiSearchResult result : wikiResults) {
+                WikiPage page = result.getPage();
+                if (page == null || !matchesWikiFilter(page, category, software) || !dedupe.add("wiki:" + page.getId())) {
+                    continue;
+                }
+                String content = trim(page.getContent(), 1200);
+                blocks.add("【Wiki：" + page.getTitle() + "】\n"
+                        + "类型: " + valueOrDefault(page.getPageType(), "未知")
+                        + "；分类: " + valueOrDefault(page.getCategory(), "未分类")
+                        + "；软件: " + valueOrDefault(page.getSoftware(), "未指定")
+                        + "\n" + content
+                        + "\n相关度: " + String.format("%.2f", result.getScore()));
+            }
+        }
+
+        List<KnowledgeSearchResult> knowledgeResults = knowledgeService.search(query, topK, filter);
+        for (KnowledgeSearchResult result : knowledgeResults) {
+            String key = "doc:" + result.getSourceTitle() + ":" + result.getContent();
+            if (!dedupe.add(key)) {
+                continue;
+            }
+            blocks.add("【知识库：" + valueOrDefault(result.getSourceTitle(), "未知来源") + "】\n"
+                    + trim(result.getContent(), 1200)
+                    + "\n相关度: " + String.format("%.2f", result.getScore()));
+        }
+
+        if (blocks.isEmpty()) {
+            return "知识库中未找到相关内容";
+        }
+
+        return blocks.stream()
+                .limit(topK)
+                .collect(Collectors.joining("\n---\n"));
+    }
+
+    private String trim(String text, int maxLength) {
+        if (text == null) return "";
+        if (text.length() <= maxLength) return text;
+        return text.substring(0, maxLength) + "...";
+    }
+
+    private String valueOrDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String stringParam(Map<String, Object> params, String key) {
+        Object value = params.get(key);
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    private Long longParam(Map<String, Object> params, String key) {
+        String value = stringParam(params, key);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private boolean matchesWikiFilter(WikiPage page, String category, String software) {
+        return matches(category, page.getCategory()) && matches(software, page.getSoftware());
+    }
+
+    private boolean matches(String expected, String actual) {
+        return expected == null || expected.isBlank() || expected.equals(actual);
+    }
+}

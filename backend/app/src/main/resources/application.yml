@@ -1,0 +1,111 @@
+server:
+  port: 8080
+  tomcat:
+    max-http-form-post-size: 2048MB
+    # 提高 multipart 文件数量限制（默认很低）
+    # 需要通过自定义配置类设置，见 MultipartConfig
+
+logging:
+  level:
+    root: INFO
+    com.middleware.manager: INFO
+  file:
+    name: logs/middleware-resource-manager.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+
+spring:
+  datasource:
+    url: jdbc:mysql://${APP_DB_HOST:127.0.0.1}:${APP_DB_PORT:3306}/${APP_DB_NAME:middleware_resource_manager}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${APP_DB_USERNAME:root}
+    password: ${APP_DB_PASSWORD:OlgDqdJfehRwBUITqFpi}
+    hikari:
+      initialization-fail-timeout: -1
+      minimum-idle: 2
+  servlet:
+    multipart:
+      max-file-size: 2048MB
+      max-request-size: 2048MB
+
+
+
+app:
+  storage:
+    location: ./storage
+  security:
+    admin:
+      default-password: admin123
+  modules:
+    knowledge-enabled: ${KNOWLEDGE_ENABLED:true}
+    diagnostics-enabled: ${DIAGNOSTICS_ENABLED:true}
+  llm:
+    max-concurrent: ${LLM_MAX_CONCURRENT:5}
+    timeout-seconds: ${LLM_TIMEOUT_SECONDS:600}
+
+# ========== 知识库 & Agent 配置 ==========
+  ai:
+    base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
+    api-key: ${AI_API_KEY:tp-c917uu165jgq2dosv8104vtxi7i8uaqb3wqkq5zxlbwm5haz}
+    model: ${AI_MODEL:mimo-v2.5-pro}
+    max-tokens: ${AI_MAX_TOKENS:8192}
+    temperature: ${AI_TEMPERATURE:0.1}
+  vector:
+    type: ${VECTOR_TYPE:milvus}          # memory 或 milvus
+    host: ${VECTOR_HOST:localhost}
+    port: ${VECTOR_PORT:19530}
+    collection: ${VECTOR_COLLECTION:knowledge_chunks}
+  wiki:
+    search:
+      max-context-pages: ${WIKI_MAX_CONTEXT_PAGES:8}
+      max-content-chars: ${WIKI_MAX_CONTENT_CHARS:2000}
+      graph-hop-limit: ${WIKI_GRAPH_HOP_LIMIT:1}
+      fulltext-min-results: ${WIKI_FULLTEXT_MIN_RESULTS:3}
+      min-results-for-wiki: ${WIKI_MIN_RESULTS:2}
+    ingest:
+      max-content-chars: ${WIKI_INGEST_MAX_CHARS:20000}
+      chunk-overlap: ${WIKI_CHUNK_OVERLAP:500}
+      parallel-chunks: ${WIKI_PARALLEL_CHUNKS:3}
+    export:
+      signature-secret: ${WIKI_EXPORT_SIGNATURE_SECRET:middleware-resource-manager}
+  # Zabbix 监控配置
+  zabbix:
+    url: ${ZABBIX_URL:http://localhost:8080/api_jsonrpc.php}
+    username: ${ZABBIX_USERNAME:Admin}
+    password: ${ZABBIX_PASSWORD:zabbix}
+    timeout: ${ZABBIX_TIMEOUT:30}
+
+# LangChain4j 配置
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
+      api-key: ${AI_API_KEY:tp-c917uu165jgq2dosv8104vtxi7i8uaqb3wqkq5zxlbwm5haz}
+      model-name: ${AI_MODEL:mimo-v2.5-pro}
+      max-tokens: ${AI_MAX_TOKENS:8192}
+      temperature: ${AI_TEMPERATURE:0.1}
+      timeout: ${AI_TIMEOUT:PT600S}
+      log-requests: true
+      log-responses: true
+    embedding-model:
+      base-url: ${EMBEDDING_BASE_URL:http://localhost:11434/v1}
+      api-key: ${EMBEDDING_API_KEY:ollama}
+      model-name: ${EMBEDDING_MODEL:bge-large}
+
+skills:
+  external-dir: ${SKILLS_DIR:./data/skills}
+
+# MyBatis 配置
+mybatis:
+  mapper-locations: classpath*:mapper/*.xml
+  type-aliases-package: com.middleware.manager.domain,com.middleware.manager.wiki.entity,com.middleware.manager.knowledge.entity,com.middleware.manager.knowledge.agent
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+# PageHelper 分页插件
+pagehelper:
+  helper-dialect: mysql
+  reasonable: true
+  support-methods-arguments: true

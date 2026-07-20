@@ -1,4 +1,4 @@
-/backend/target/
+backend/*/target/
 /.idea/
 /.vscode/
 /.settings/
@@ -29,3 +29,10 @@
 /frontend/.claude/
 /docs/.DS_Store
 /backend/src/.DS_Store
+# 多模块构建产物与运行期目录
+backend/*/data/
+backend/*/logs/
+backend/*/storage/
+backend/app/data/
+backend/app/logs/
+backend/app/storage/

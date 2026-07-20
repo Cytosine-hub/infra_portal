@@ -40,7 +40,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-mysql.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\stop-local-mysql.ps1
 ```
 
-默认数据库配置在 `backend/src/main/resources/application.yml`：
+默认数据库配置在 `backend/app/src/main/resources/application.yml`：
 
 - 数据库：`middleware_resource_manager`
 - 地址：`127.0.0.1:3306`
