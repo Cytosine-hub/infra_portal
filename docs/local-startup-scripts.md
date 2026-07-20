@@ -16,12 +16,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start-local-full.ps1
 前端：http://localhost:5173
 网关：http://localhost:8080
 后端 app：http://localhost:8081
+论坛服务：http://localhost:8082
 ```
 
 常用接口检查：
 
 ```text
 http://localhost:8080/api/public/releases
+http://localhost:8080/api/forum/posts
 ```
 
 ## 分别启动
@@ -32,10 +34,16 @@ http://localhost:8080/api/public/releases
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-backend-jar.ps1
 ```
 
-Gateway 使用自己的可执行 jar；默认 profile 静态转发到 app，不要求 Nacos：
+Gateway 使用自己的可执行 jar；默认 profile 将论坛转发到 community-service、其余请求转发到 app，不要求 Nacos：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-gateway-jar.ps1
+```
+
+community-service 使用独立可执行 jar：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-community-jar.ps1
 ```
 
 前端项目位于 `frontend` 目录，使用 Vite 开发服务：
@@ -53,6 +61,8 @@ backend-local.out.log
 backend-local.err.log
 gateway-local.out.log
 gateway-local.err.log
+community-local.out.log
+community-local.err.log
 frontend-local.out.log
 frontend-local.err.log
 ```
@@ -66,6 +76,7 @@ frontend-local.err.log
 ```text
 Gateway：8080
 后端 app：8081
+community-service：8082
 前端：5173
 ```
 

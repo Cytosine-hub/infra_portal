@@ -22,4 +22,12 @@ class MiddlewareResourceManagerApplicationTests {
         assertThat(environment.getProperty("spring.cloud.nacos.config.enabled", Boolean.class))
                 .isFalse();
     }
+
+    @Test
+    @DisplayName("TC-APP-002 app 类路径不再包含论坛 Controller")
+    void appClasspathDoesNotContainForumController() {
+        assertThat(MiddlewareResourceManagerApplication.class.getClassLoader()
+                .getResource("com/middleware/manager/web/api/ForumController.class"))
+                .isNull();
+    }
 }

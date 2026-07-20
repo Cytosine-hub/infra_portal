@@ -2,13 +2,13 @@
 
 ## 1. 项目一句话定位与形态
 
-**中间件资源管理平台**：一个面向基础设施团队的内部门户，管理软件下载包（ReleaseAsset）、参数标准（含草稿→审核→发布版本流）、标准文档、论坛，并集成 AI 知识库/RAG 排查（LangChain4j + Milvus）、Wiki 知识图谱和 Zabbix 监控 Agent。业务运行时仍是 Spring Boot 3.5.3（Java 17，MyBatis + MySQL 8）模块化单体，前置独立 Spring Cloud Gateway；`cloud` profile 下通过 Nacos 注册、发现和配置。前端为 Vue 3 单页应用（Vite，无 vue-router，hash 路由）。
+**中间件资源管理平台**：一个面向基础设施团队的内部门户，管理软件下载包（ReleaseAsset）、参数标准（含草稿→审核→发布版本流）、标准文档、论坛，并集成 AI 知识库/RAG 排查（LangChain4j + Milvus）、Wiki 知识图谱和 Zabbix 监控 Agent。业务运行时为 Spring Boot 3.5.3（Java 17，MyBatis + MySQL 8）：大部分能力仍在模块化单体 app，论坛已由独立 community-service 提供，前置 Spring Cloud Gateway；`cloud` profile 下通过 Nacos 注册、发现和配置。前端为 Vue 3 单页应用（Vite，无 vue-router，hash 路由）。
 
 ## 2. 代码地图
 
 ```
 .
-├── backend/                         # Maven 多模块：业务单体 app + 独立 api-gateway
+├── backend/                         # Maven 多模块：业务 app + forum 服务 + api-gateway
 │   ├── pom.xml                      # 聚合根父 POM，统一 Boot/Cloud/Alibaba BOM 与插件
 │   ├── modular-monolith-parent/     # 既有业务模块的依赖父 POM，隔离 Gateway WebFlux 依赖
 │   ├── common-core/                 # DTO、异常/错误码、常量、共享模型及跨模块业务端口
@@ -27,7 +27,8 @@
 │   ├── job-network/                 # 网络岗位边界（待演进）
 │   ├── job-security/                # 网络安全岗位边界（待演进）
 │   ├── api-gateway/                 # 独立 Gateway 应用（:8080）；cloud 下经 Nacos lb:// 路由
-│   └── app/                         # 业务单体启动模块（:8081）；默认不连接 Nacos
+│   ├── community-service/           # 独立论坛应用（:8082）；聚合 common-* + community
+│   └── app/                         # 剩余业务启动模块（:8081）；不再包含 community
 │       └── src/main/java/com/middleware/manager/MiddlewareResourceManagerApplication.java
 ├── frontend/
 │   ├── src/main.js      # 前端入口
@@ -160,6 +161,7 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 |------|------|
 | 后端编译打包 | `cd backend && mvn clean package -DskipTests` |
 | app 启动（:8081） | `cd backend && mvn -pl app -am spring-boot:run` |
+| community-service 启动（:8082） | `cd backend && mvn -pl community-service -am spring-boot:run` |
 | Gateway 启动（:8080） | `cd backend && mvn -pl api-gateway -am spring-boot:run` |
 | 后端测试 | `cd backend && mvn test` |
 | 前端安装 | `cd frontend && npm install` |
@@ -173,7 +175,7 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 
 数据库：MySQL 8.0 `127.0.0.1:3306/middleware_resource_manager`，用户 `root`，凭据在 `~/.my.cnf`；连接可用 `APP_DB_*` 环境变量覆盖。
 
-Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，服务名为 `middleware-resource-manager-app` 和 `api-gateway`。端口、环境变量和联通清单见 `docs/microservices-stage1-gateway-nacos.md`。
+Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，服务名为 `middleware-resource-manager-app`、`community-service` 和 `api-gateway`。Gateway 将 `/api/forum/**` 路由到 community-service，其余 API 和 `/files/**` 路由到 app。端口、环境变量和联通清单见 `docs/microservices-stage2-community-service.md`。
 
 ## 8. 测试（严格 TDD）
 

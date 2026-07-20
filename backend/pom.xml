@@ -35,6 +35,7 @@
         <module>job-network</module>
         <module>job-security</module>
         <module>api-gateway</module>
+        <module>community-service</module>
         <module>app</module>
     </modules>
 

@@ -2,11 +2,10 @@ package com.middleware.manager.service;
 
 import com.middleware.manager.repository.UserTokenMapper;
 import com.middleware.manager.security.TokenValidator;
-import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 @Service
 @Slf4j
@@ -35,13 +34,10 @@ public class TokenService implements TokenValidator {
             return null;
         }
 
-        // 清理过期 token
         tokenMapper.deleteExpired();
-
         String username = tokenMapper.findUsernameByToken(token);
 
         if (username != null) {
-            // 滑动续期
             LocalDateTime newExpiry = LocalDateTime.now().plusHours(TOKEN_EXPIRY_HOURS);
             tokenMapper.updateExpiry(token, newExpiry);
         }

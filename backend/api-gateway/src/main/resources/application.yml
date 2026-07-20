@@ -19,6 +19,10 @@ spring:
       server:
         webflux:
           routes:
+            - id: community-api
+              uri: "${COMMUNITY_SERVICE_URL:http://127.0.0.1:8082}"
+              predicates:
+                - Path=/api/forum/**
             - id: app-api
               uri: "${APP_SERVICE_URL:http://127.0.0.1:8081}"
               predicates:

@@ -1,0 +1,24 @@
+[Unit]
+Description=Middleware Resource Manager Community Service
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/app/infra_portal/backend
+ExecStart=/usr/local/java/bisheng-jdk-17.0.12/bin/java -Xms512m -Xmx512m -jar /app/infra_portal/backend/community-service-0.0.1-SNAPSHOT-exec.jar --spring.config.additional-location=optional:file:/app/infra_portal/backend/community-application.yml
+ExecStop=/bin/kill -SIGTERM $MAINPID
+Restart=on-failure
+RestartSec=10
+SuccessExitStatus=143
+
+StandardOutput=append:/app/infra_portal/logs/community-service.log
+StandardError=append:/app/infra_portal/logs/community-service.log
+
+Environment=APP_DB_HOST=127.0.0.1
+Environment=APP_DB_PORT=3306
+Environment=APP_DB_NAME=middleware_resource_manager
+Environment=APP_DB_USERNAME=root
+
+[Install]
+WantedBy=multi-user.target

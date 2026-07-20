@@ -1,14 +1,14 @@
 package com.middleware.manager.repository;
 
+import java.time.LocalDateTime;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-
-import java.time.LocalDateTime;
 
 @Mapper
 public interface UserTokenMapper {
 
-    int insert(@Param("token") String token, @Param("username") String username, @Param("expiresAt") LocalDateTime expiresAt);
+    int insert(@Param("token") String token, @Param("username") String username,
+               @Param("expiresAt") LocalDateTime expiresAt);
 
     String findUsernameByToken(@Param("token") String token);
 

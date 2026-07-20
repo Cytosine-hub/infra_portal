@@ -1,7 +1,7 @@
 [Unit]
 Description=Middleware Resource Manager API Gateway
-After=network.target infra-portal.service
-Wants=infra-portal.service
+After=network.target infra-portal.service community-service.service
+Wants=infra-portal.service community-service.service
 
 [Service]
 Type=simple

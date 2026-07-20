@@ -1,0 +1,57 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: community-service
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+        register-enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+  datasource:
+    url: jdbc:mysql://${APP_DB_HOST:127.0.0.1}:${APP_DB_PORT:3306}/${APP_DB_NAME:middleware_resource_manager}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${APP_DB_USERNAME:root}
+    password: ${APP_DB_PASSWORD:}
+    hikari:
+      initialization-fail-timeout: -1
+      minimum-idle: 2
+
+logging:
+  level:
+    root: INFO
+    com.middleware: INFO
+  file:
+    name: logs/community-service.log
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"
+
+app:
+  storage:
+    location: ./storage
+
+mybatis:
+  mapper-locations:
+    - classpath*:mapper/ForumPostMapper.xml
+    - classpath*:mapper/ForumCommentMapper.xml
+    - classpath*:mapper/ForumTagMapper.xml
+    - classpath*:mapper/PostLikeMapper.xml
+    - classpath*:mapper/UserTokenMapper.xml
+    - classpath*:mapper/AdminAccountMapper.xml
+    - classpath*:mapper/RoleMapper.xml
+    - classpath*:mapper/ApiAuditLogMapper.xml
+  type-aliases-package: com.middleware.manager.domain
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+pagehelper:
+  helper-dialect: mysql
+  reasonable: true
+  support-methods-arguments: true

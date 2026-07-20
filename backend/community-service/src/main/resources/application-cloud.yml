@@ -20,18 +20,3 @@ spring:
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:}
         group: ${NACOS_DISCOVERY_GROUP:DEFAULT_GROUP}
-    loadbalancer:
-      nacos:
-        enabled: true
-    gateway:
-      server:
-        webflux:
-          routes:
-            - id: community-api
-              uri: lb://community-service
-              predicates:
-                - Path=/api/forum/**
-            - id: app-api
-              uri: lb://middleware-resource-manager-app
-              predicates:
-                - Path=/api/**,/files/**

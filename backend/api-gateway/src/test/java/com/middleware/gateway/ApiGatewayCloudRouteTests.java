@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,14 +26,14 @@ class ApiGatewayCloudRouteTests {
     private RouteDefinitionLocator routeDefinitionLocator;
 
     @Test
-    @DisplayName("TC-GATEWAY-002 cloud profile 经服务发现动态路由到 app")
+    @DisplayName("TC-GATEWAY-002 cloud profile 分别路由论坛与其余 API")
     void cloudProfileUsesLoadBalancedAppRoute() {
-        URI appRouteUri = routeDefinitionLocator.getRouteDefinitions()
-                .filter(route -> "app-api".equals(route.getId()))
-                .single()
-                .map(route -> route.getUri())
+        Map<String, URI> routes = routeDefinitionLocator.getRouteDefinitions()
+                .filter(route -> "community-api".equals(route.getId()) || "app-api".equals(route.getId()))
+                .collect(Collectors.toMap(route -> route.getId(), route -> route.getUri()))
                 .block(Duration.ofSeconds(5));
 
-        assertThat(appRouteUri).isEqualTo(URI.create("lb://middleware-resource-manager-app"));
+        assertThat(routes).containsEntry("community-api", URI.create("lb://community-service"));
+        assertThat(routes).containsEntry("app-api", URI.create("lb://middleware-resource-manager-app"));
     }
 }

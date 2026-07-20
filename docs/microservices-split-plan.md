@@ -2,7 +2,7 @@
 
 > 目标：把当前单体后端按「岗位」组织成模块，并演进为微服务架构，与前端已有的岗位化模块对齐。
 > 本文档既是给人审阅的设计方案，也是交给实现 Agent（codex gpt-5.6-sol / xhigh）的规格书。
-> 进度：阶段 0 已完成；阶段 1 已新增 Gateway，并在 `cloud` profile 下接入 Nacos。落地细节见 `docs/microservices-stage1-gateway-nacos.md`。
+> 进度：阶段 0、阶段 1 已完成；阶段 2 已完成首个叶子服务 community 剥离。落地细节见 `docs/microservices-stage2-community-service.md`。
 
 ---
 
@@ -86,7 +86,7 @@
   - 用模块依赖强制边界（岗位模块可依赖平台模块，反之禁止；平台模块之间零依赖或仅依赖 common）。
   - **行为零变化**：端点、路径、鉴权、DB 全不动，`mvn test` 全绿；本地 `mvn spring-boot:run` 正常。
 - **阶段 1 — 引入网关 + Nacos（已落地）**：加 `api-gateway`；默认 profile 静态路由到 `app:8081` 以兼容无 Nacos 环境，`cloud` profile 下 app/Gateway 注册到 Nacos、Gateway 通过 `lb://middleware-resource-manager-app` 动态路由；前端 `VITE_*_API_BASE_URL` 指向网关。
-- **阶段 2 — 逐个剥离为独立服务**（strangler）：叶子优先（`ops-agent`→`community`→`knowledge`/`wiki`→`catalog`/`standards`→`identity`→岗位服务）。每剥一个：独立 Spring Boot 应用 + 注册到 Nacos + 网关路由切过去 + 归属表随迁。
+- **阶段 2 — 逐个剥离为独立服务**（strangler，进行中）：首个叶子服务 `community` 已完成；后续继续按叶子优先剥离。每剥一个：独立 Spring Boot 应用 + 注册到 Nacos + 网关路由切过去 + 归属表随迁。
 - **阶段 3 — 数据与运维**：物理拆库、分布式配置、可观测性(链路/日志/指标)、每服务独立 CI/CD。
 
 ---
