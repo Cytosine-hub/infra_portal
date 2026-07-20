@@ -2,7 +2,6 @@
   <section class="workspace migration-page">
     <div class="migration-hero">
       <div>
-        <p class="eyebrow">Data Migration</p>
         <h2>数据迁移架构设计</h2>
         <p>面向常用数据库迁移场景，先建立可插拔执行框架，再逐步接入 MySQL、Oracle、OceanBase、OSS 等能力。</p>
       </div>
@@ -23,7 +22,6 @@
     <section class="migration-section">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Pattern</p>
           <h3>核心设计模式</h3>
         </div>
       </div>
@@ -38,7 +36,6 @@
     <section class="migration-section">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Roadmap</p>
           <h3>分阶段实现</h3>
         </div>
       </div>

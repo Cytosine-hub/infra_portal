@@ -244,7 +244,7 @@ describe('门户页面结构优化验收', () => {
     await flushPromises()
 
     await selectJob(wrapper, '主机')
-    expect(wrapper.find('.empty-state').text()).toContain('当前岗位暂无可下载软件')
+    expect(wrapper.find('.empty-state').text()).toContain('当前类别暂无可下载软件')
 
     await selectJob(wrapper, '数据库')
     expect(wrapper.findAll('.release-card')).toHaveLength(1)

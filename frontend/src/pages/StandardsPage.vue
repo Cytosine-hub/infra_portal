@@ -128,7 +128,6 @@
         <section v-for="group in standardGroups" :key="group.category" class="standard-category-section">
           <div class="standard-category-head">
             <div>
-              <p class="eyebrow">Category</p>
               <h2>{{ group.category }}</h2>
             </div>
             <span>{{ group.standards.length }} 项标准</span>

@@ -50,7 +50,7 @@
               </div>
             </div>
           </article>
-          <EmptyState v-if="page.content.length === 0" message="当前岗位暂无可下载软件，可切换其他岗位查看。" />
+          <EmptyState v-if="page.content.length === 0" message="当前类别暂无可下载软件，可切换其他类别查看。" />
         </div>
         <div class="release-pagination">
           <Pagination :page="page" @change="changePage" />

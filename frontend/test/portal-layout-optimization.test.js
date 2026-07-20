@@ -7,8 +7,9 @@ import { flushPromises, mount } from '@vue/test-utils'
 
 import HomePage from '../src/pages/HomePage.vue'
 import DownloadsPage from '../src/pages/DownloadsPage.vue'
+import StandardsPage from '../src/pages/StandardsPage.vue'
 import JobNavigation from '../src/shared/jobs/JobNavigation.vue'
-import { jobModules } from '../src/modules/index.js'
+import { jobModules, getJobModule } from '../src/modules/index.js'
 
 const readSource = (path) => readFile(new URL(path, import.meta.url), 'utf8')
 const mountedWrappers = []
@@ -26,6 +27,10 @@ const releases = [
   { downloadToken: 'net-1', middlewareName: '连通性检测包', version: '2.0', softwareTypeCategory: '网络' }
 ]
 
+const standards = [
+  { id: 1, category: '数据库', software: 'MySQL', softwareVersion: '8.4.0', version: '1.0', relatedDocuments: [] }
+]
+
 function jsonResponse(data) {
   return Promise.resolve(new Response(JSON.stringify(data), {
     status: 200,
@@ -40,6 +45,9 @@ function installPublicApiMock() {
       const category = url.searchParams.get('category')
       const content = category ? releases.filter((release) => release.softwareTypeCategory === category) : releases
       return jsonResponse({ content, totalElements: content.length, totalPages: content.length ? 1 : 0, first: true, last: true })
+    }
+    if (url.pathname === '/api/public/parameter-standards') {
+      return jsonResponse(standards)
     }
     return jsonResponse([])
   }))
@@ -203,6 +211,11 @@ describe('门户页面优化2验收用例（需求 #17 · Issue #10）', () => {
     await flushPromises()
     expect(downloads.find('.job-navigation').text()).not.toMatch(/[A-Za-z]/)
 
+    const standards = track(mount(StandardsPage))
+    await flushPromises()
+    expect(standards.find('.eyebrow').exists()).toBe(false)
+    expect(standards.text()).not.toContain('Category')
+
     for (const job of jobModules) {
       const workspace = track(mount(job.entryComponent, { props: { job, feature: null, context: {} } }))
       await flushPromises()
@@ -210,5 +223,16 @@ describe('门户页面优化2验收用例（需求 #17 · Issue #10）', () => {
       expect(headerEl.find('.eyebrow').exists()).toBe(false)
       expect(headerEl.text()).not.toContain(job.englishName)
     }
+  })
+
+  test('TC-07 数据库空间"数据迁移"功能页标题区域不显示英文小字', async () => {
+    const database = getJobModule('database')
+    const wrapper = track(mount(database.entryComponent, { props: { job: database, feature: 'data-migration', context: {} } }))
+    await flushPromises()
+
+    expect(wrapper.find('.eyebrow').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('Data Migration')
+    expect(wrapper.text()).not.toContain('Pattern')
+    expect(wrapper.text()).not.toContain('Roadmap')
   })
 })
