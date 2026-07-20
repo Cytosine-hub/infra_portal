@@ -52,7 +52,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\stop-local-mysql.ps1
 在项目根目录执行：
 
 ```powershell
-mvn -gs maven-local-settings.xml -s maven-local-settings.xml "-Dmaven.repo.local=.m2" spring-boot:run
+mvn spring-boot:run
 ```
 
 后端启动成功后访问：
@@ -62,8 +62,6 @@ http://localhost:8080/api/public/releases
 ```
 
 如果返回 JSON，说明后端接口可用。
-
-说明：当前机器的 Maven 全局 `settings.xml` 有解析问题，所以启动命令显式使用项目内的 `maven-local-settings.xml`。
 
 ## 4. 启动前端
 
@@ -184,7 +182,7 @@ frontend/dist
 在项目根目录执行：
 
 ```powershell
-mvn -gs maven-local-settings.xml -s maven-local-settings.xml "-Dmaven.repo.local=.m2" test
+mvn test
 ```
 
 ## 9. 端口占用检查

@@ -7,7 +7,7 @@ This project now has a Spring Boot backend API and a separate Vue frontend.
 Run from the project root:
 
 ```powershell
-mvn -gs maven-local-settings.xml -s maven-local-settings.xml "-Dmaven.repo.local=.m2" spring-boot:run
+mvn spring-boot:run
 ```
 
 Important API groups:

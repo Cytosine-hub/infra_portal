@@ -162,7 +162,7 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 |------|------|
 | 后端编译打包 | `mvn clean package -DskipTests` |
 | 后端启动（:8080） | `mvn spring-boot:run` |
-| 后端测试 | `mvn test`（离线环境：`mvn -gs maven-local-settings.xml -s maven-local-settings.xml "-Dmaven.repo.local=.m2" test`） |
+| 后端测试 | `mvn test` |
 | 前端安装 | `cd frontend && npm install` |
 | 前端开发（:5173，代理 /api、/files 到 :8080） | `cd frontend && npm run dev` |
 | 前端构建 | `cd frontend && npm run build` |
@@ -224,7 +224,6 @@ void getMissingThrows() { ... }
 - **Mapper 接口方法名是 JPA 风格但实现在 XML**：新增查询要同时改接口和 `resources/mapper/*.xml`，两边 id 必须一致，漏改 XML 只在运行时报错。
 - **种子数据在 Service 里**：`SoftwareTypeService` 实现 `ApplicationRunner` 在启动时 seed 类目/类型；改类目相关逻辑注意幂等，别造成重复插入。
 - **`@RestControllerAdvice` 限定了 basePackages**：`ApiExceptionHandler` 只覆盖 `web.api` 包；wiki/knowledge/agent 的 Controller 若不在该包需确认各自异常处理，否则会漏出 500 白页。
-- **离线/内网构建**：仓库自带 `maven-local-settings.xml` 与本地 `.m2` 仓库用法（见 `docs/startup-manual.md`），网络受限时必须带 `-gs/-s/-Dmaven.repo.local` 参数。
 - **外部服务全部走环境变量**：Zabbix（`ZABBIX_URL` 等）、大模型（`AI_BASE_URL`/`AI_API_KEY`）、Milvus（`VECTOR_HOST`/`VECTOR_PORT`）；本地没起 Milvus 时知识库相关功能会失败，开发可用 `InMemoryVectorStore`。
 - **模块开关在 `system_settings` 表**（knowledge-enabled、diagnostics-enabled）：功能"不见了"先查开关再查代码。
 - **权限模型有两级**：管理员（`isCategoryAdmin`，可改可审）vs 管理岗（`isManagement`，只能改不能审），审核相关接口必须走 `PermissionService.canReview(auth, category)`，只按角色名判断会放过管理岗越权审核。
