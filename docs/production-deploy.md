@@ -37,9 +37,9 @@
 ### 3.1 构建后端
 
 ```bash
-cd /path/to/middleware_resource_manager
+cd /path/to/middleware_resource_manager/backend
 mvn clean package -DskipTests
-# 产物：target/middleware-resource-manager-0.0.1-SNAPSHOT.jar
+# 产物：backend/target/middleware-resource-manager-0.0.1-SNAPSHOT.jar
 ```
 
 ### 3.2 构建前端
@@ -350,12 +350,12 @@ mysql -u root middleware_resource_manager < db/seed_data.sql
 
 ```bash
 # 构建新版本
-mvn clean package -DskipTests
+(cd backend && mvn clean package -DskipTests)
 cd frontend && npm run build && cd ..
 
 # 替换后端 JAR
 sudo systemctl stop middleware-resource-manager
-cp target/middleware-resource-manager-0.0.1-SNAPSHOT.jar /opt/middleware-resource-manager/backend/
+cp backend/target/middleware-resource-manager-0.0.1-SNAPSHOT.jar /opt/middleware-resource-manager/backend/
 sudo systemctl start middleware-resource-manager
 
 # 替换前端

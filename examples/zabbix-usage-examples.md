@@ -11,7 +11,7 @@ export ZABBIX_USERNAME="your_username"
 export ZABBIX_PASSWORD="your_password"
 
 # 启动应用
-mvn spring-boot:run
+cd backend && mvn spring-boot:run
 ```
 
 ### 2. 测试连接

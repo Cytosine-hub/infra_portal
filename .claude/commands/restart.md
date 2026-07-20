@@ -45,7 +45,7 @@ sleep 2
 
 ```bash
 cd /Users/zhushihao/Projects/middleware_resource_manager
-mvn compile -q
+(cd backend && mvn compile -q)
 ```
 
 如果编译失败，输出错误信息并停止。
@@ -55,7 +55,7 @@ mvn compile -q
 ```bash
 cd /Users/zhushihao/Projects/middleware_resource_manager
 > /tmp/backend.log
-nohup mvn spring-boot:run -DskipTests >> /tmp/backend.log 2>&1 &
+(cd backend && nohup mvn spring-boot:run -DskipTests >> /tmp/backend.log 2>&1 &)
 ```
 
 等待启动完成（约 15-20 秒，Milvus 未就绪时可能需要 4 分钟）：

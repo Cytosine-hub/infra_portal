@@ -203,7 +203,7 @@ AgentScope Java 原生支持 MCP 协议，可直接连接外部 MCP Server。
 #### 4.4.1 Skill YAML 定义
 
 ```yaml
-# src/main/resources/skills/oom-troubleshoot.yaml
+# backend/src/main/resources/skills/oom-troubleshoot.yaml
 name: oom-troubleshoot
 description: "排查 JVM OOM 问题"
 trigger:

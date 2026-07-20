@@ -31,16 +31,16 @@ sed -n '/<!-- CHANGES_START -->/,/<!-- CHANGES_END -->/p' .claude/changes.md | g
 ### 来源 A：变更记录文件
 从 `.claude/changes.md` 中提取的记录，格式如：
 - [DB] 2026-06-10 db/init.sql — 数据库初始化/种子数据变更
-- [CONFIG] 2026-06-10 src/main/resources/application.yml — 应用配置变更
+- [CONFIG] 2026-06-10 backend/src/main/resources/application.yml — 应用配置变更
 
 ### 来源 B：Git diff
 通过 git diff 分析文件变更：
 
 | 变更路径 | 发布模块 |
 |----------|----------|
-| `src/main/java/**`, `src/main/resources/**`, `pom.xml` | backend |
+| `backend/src/main/java/**`, `backend/src/main/resources/**`, `backend/pom.xml` | backend |
 | `frontend/src/**`, `frontend/package.json`, `frontend/vite.config.*` | frontend |
-| `src/main/resources/db/**`, schema/migration changes | db |
+| `backend/src/main/resources/db/**`, schema/migration changes | db |
 | `docs/**`, deployment docs | docs |
 | `.claude/**`, `.agents/**`, scripts only | usually no runtime release |
 
@@ -94,10 +94,10 @@ cd /Users/zhushihao/Projects/middleware_resource_manager
 
 ```bash
 cd /Users/zhushihao/Projects/middleware_resource_manager
-mvn clean package -DskipTests -q
+(cd backend && mvn clean package -DskipTests -q)
 mkdir -p release/backend
-cp target/middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar release/backend/
-cp src/main/resources/application.yml release/backend/application.yml.example
+cp backend/target/middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar release/backend/
+cp backend/src/main/resources/application.yml release/backend/application.yml.example
 ```
 
 ### 前端（仅在需要时执行）

@@ -4,9 +4,10 @@ This project now has a Spring Boot backend API and a separate Vue frontend.
 
 ## Backend
 
-Run from the project root:
+Run from the `backend/` directory:
 
 ```powershell
+cd backend
 mvn spring-boot:run
 ```
 

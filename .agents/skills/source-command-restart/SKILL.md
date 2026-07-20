@@ -26,7 +26,7 @@ Default behavior is change-aware:
 1. Determine whether a restart is needed.
    - Inspect changed files with `git status --short` and, when needed, the latest relevant commit with `git diff --name-only HEAD~1 HEAD`.
    - Ignore unrelated local noise such as `.DS_Store`, screenshots, release notes, or documentation-only changes unless they directly affect runtime behavior.
-   - Backend restart is needed for changes under `src/main/`, `pom.xml`, backend config, database migrations used at runtime, or backend resources.
+   - Backend restart is needed for changes under `backend/src/main/`, `backend/pom.xml`, backend config, database migrations used at runtime, or backend resources.
    - Frontend restart is needed for changes under `frontend/src/`, `frontend/public/`, `frontend/package*.json`, `frontend/vite.config.*`, or frontend env/config files.
    - If neither backend nor frontend restart is needed, skip stop/start steps and perform only the verification checks in step 6.
 2. Check dependency services.
@@ -36,12 +36,12 @@ Default behavior is change-aware:
    - Prefer port/process-targeted commands for backend Spring Boot and Vite.
    - Do not stop unrelated Docker containers.
 4. Compile backend before starting when backend restart is needed.
-   - Run `mvn compile -q` from the project root.
+   - Run `mvn compile -q` from the `backend/` directory.
    - If compile fails, report the compiler errors and stop.
 5. Start affected services.
    - Start backend only when backend restart is needed.
    - Truncate `/tmp/backend.log`.
-   - Run `nohup mvn spring-boot:run -DskipTests >> /tmp/backend.log 2>&1 &`.
+   - Run `(cd backend && nohup mvn spring-boot:run -DskipTests >> /tmp/backend.log 2>&1 &)`.
    - Wait and check `Started`, `APPLICATION FAILED`, `BUILD FAILURE`, and `ERROR`.
    - Start frontend only when frontend restart is needed.
    - Run from `frontend`: `nohup npx vite --host 0.0.0.0 > /tmp/frontend.log 2>&1 &`.

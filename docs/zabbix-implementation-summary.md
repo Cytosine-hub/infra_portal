@@ -5,7 +5,7 @@
 ### 1. 核心组件实现
 
 #### 1.1 Zabbix 配置类
-- **文件**: `src/main/java/com/middleware/manager/agent/zabbix/ZabbixConfig.java`
+- **文件**: `backend/src/main/java/com/middleware/manager/agent/zabbix/ZabbixConfig.java`
 - **功能**: 管理 Zabbix 连接配置
 - **配置项**:
   - `url`: Zabbix API 地址
@@ -14,7 +14,7 @@
   - `timeout`: 连接超时时间
 
 #### 1.2 Zabbix 客户端
-- **文件**: `src/main/java/com/middleware/manager/agent/zabbix/ZabbixClient.java`
+- **文件**: `backend/src/main/java/com/middleware/manager/agent/zabbix/ZabbixClient.java`
 - **功能**: 封装 Zabbix API 调用
 - **支持的操作**:
   - `login()`: 用户认证
@@ -27,7 +27,7 @@
   - `queryMetrics()`: 综合查询监控数据
 
 #### 1.3 Zabbix 查询工具
-- **文件**: `src/main/java/com/middleware/manager/agent/tool/ZabbixTool.java`
+- **文件**: `backend/src/main/java/com/middleware/manager/agent/tool/ZabbixTool.java`
 - **功能**: Agent 可调用的监控查询工具
 - **参数**:
   - `host`: 主机名（必填）
@@ -36,13 +36,13 @@
   - `limit`: 返回条数（可选，默认 100）
 
 #### 1.4 Zabbix 导出工具
-- **文件**: `src/main/java/com/middleware/manager/agent/tool/ZabbixExportTool.java`
+- **文件**: `backend/src/main/java/com/middleware/manager/agent/tool/ZabbixExportTool.java`
 - **功能**: Agent 可调用的 Excel 导出工具
 - **参数**: 与 ZabbixTool 相同
 - **输出**: 生成 Excel 文件并返回文件路径
 
 #### 1.5 Excel 导出服务
-- **文件**: `src/main/java/com/middleware/manager/agent/export/ExcelExportService.java`
+- **文件**: `backend/src/main/java/com/middleware/manager/agent/export/ExcelExportService.java`
 - **功能**: 生成 Excel 文件
 - **支持**:
   - 单主机数据导出
@@ -50,7 +50,7 @@
   - 自动格式化和样式设置
 
 #### 1.6 导出控制器
-- **文件**: `src/main/java/com/middleware/manager/agent/web/ExportController.java`
+- **文件**: `backend/src/main/java/com/middleware/manager/agent/web/ExportController.java`
 - **功能**: REST API 接口
 - **接口**:
   - `GET /api/ops-agent/export/zabbix`: 单主机导出
@@ -77,7 +77,7 @@ app:
 ### 3. Skill 配置
 
 #### 3.1 Zabbix 监控 Skill
-- **文件**: `src/main/resources/skills/zabbix-monitor.yaml`
+- **文件**: `backend/src/main/resources/skills/zabbix-monitor.yaml`
 - **触发关键词**: zabbix, 监控, 监控数据, 主机监控, 性能监控, 导出监控
 - **执行步骤**:
   1. 调用 zabbix_query 查询数据
@@ -86,7 +86,7 @@ app:
 ### 4. 测试
 
 #### 4.1 单元测试
-- **文件**: `src/test/java/com/middleware/manager/agent/tool/ZabbixToolTest.java`
+- **文件**: `backend/src/test/java/com/middleware/manager/agent/tool/ZabbixToolTest.java`
 - **测试覆盖**: 7 个测试用例，全部通过
 - **测试内容**:
   - 工具名称和描述
