@@ -149,7 +149,7 @@
             </article>
           </div>
         </section>
-        <EmptyState v-if="filteredStandards.length === 0" message="当前岗位暂无已发布标准，可切换其他岗位查看。" />
+        <EmptyState v-if="filteredStandards.length === 0" message="当前类别暂无已发布标准，可切换其他类别查看。" />
       </div>
     </template>
       </div>

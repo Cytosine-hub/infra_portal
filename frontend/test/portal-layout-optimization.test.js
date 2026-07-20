@@ -91,16 +91,21 @@ afterEach(() => {
 describe('门户页面优化2验收用例（需求 #17 · Issue #10）', () => {
   test('TC-01 公共模块左侧导航栏按钮尺寸优化', async () => {
     const navSource = await readSource('../src/shared/jobs/JobNavigation.vue')
-    // 按钮不再渲染二级小字子标签，且使用收敛后的紧凑间距令牌，避免按钮尺寸过大
+    // 按钮不再渲染二级小字子标签，容器自身使用收敛后的紧凑间距令牌
     expect(navSource).not.toContain('<small>')
     expect(navSource).toMatch(/min-height:\s*32px/)
-    expect(navSource).toMatch(/padding:\s*var\(--space-xs\)\s*var\(--space-sm\)/)
 
     const wrapper = track(mount(DownloadsPage))
     await flushPromises()
 
     const buttons = wrapper.findAll('.job-navigation-button')
     expect(buttons).toHaveLength(6)
+    // 校验真实渲染结果：BaseButton 必须显式使用紧凑尺寸 sm，
+    // 否则其默认 md 尺寸的 `.btn.md` 内边距规则特异性高于父组件的 scoped 样式，会覆盖掉紧凑样式
+    buttons.forEach((button) => {
+      expect(button.classes()).toContain('sm')
+      expect(button.classes()).not.toContain('md')
+    })
     // 每个按钮仅一行文案，无二级说明文字
     buttons.forEach((button) => expect(button.findAll('small')).toHaveLength(0))
 

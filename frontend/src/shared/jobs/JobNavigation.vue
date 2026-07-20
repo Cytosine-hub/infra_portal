@@ -1,13 +1,14 @@
 <template>
   <aside class="job-navigation" aria-label="类别筛选">
     <p class="job-navigation-label">按类别查看</p>
-    <BaseButton class="job-navigation-button" :class="{ active: modelValue === 'all' }" variant="ghost" @click="$emit('update:modelValue', 'all')">全部</BaseButton>
+    <BaseButton class="job-navigation-button" :class="{ active: modelValue === 'all' }" variant="ghost" size="sm" @click="$emit('update:modelValue', 'all')">全部</BaseButton>
     <BaseButton
       v-for="job in jobModules"
       :key="job.id"
       class="job-navigation-button"
       :class="{ active: modelValue === job.id }"
       variant="ghost"
+      size="sm"
       @click="$emit('update:modelValue', job.id)"
     >
       {{ job.shortName }}
