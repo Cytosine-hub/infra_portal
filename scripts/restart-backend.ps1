@@ -2,7 +2,7 @@
 # Usage: powershell -ExecutionPolicy Bypass -File .\scripts\restart-backend.ps1
 
 $projectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-Set-Location $projectRoot
+Set-Location (Join-Path $projectRoot 'backend')
 
 Write-Host "==> Stopping backend on port 8080..." -ForegroundColor Yellow
 $pid8080 = (netstat -ano | Select-String ':8080.*LISTENING' | ForEach-Object { ($_ -split '\s+')[-1] } | Select-Object -First 1)
@@ -17,7 +17,7 @@ if ($pid8080) {
 Write-Host "==> Starting backend..." -ForegroundColor Yellow
 $env:JAVA_HOME = if (Test-Path "C:\Program Files\Java\jdk-1.8") { "C:\Program Files\Java\jdk-1.8" } else { $env:JAVA_HOME }
 
-mvn -gs maven-local-settings.xml -s maven-local-settings.xml "-Dmaven.repo.local=.m2" spring-boot:run 1>backend-local.out.log 2>backend-local.err.log &
+mvn spring-boot:run 1>backend-local.out.log 2>backend-local.err.log &
 $mvnPid = $LASTPROCESSID
 
 Write-Host "    Maven PID: $mvnPid" -ForegroundColor Gray

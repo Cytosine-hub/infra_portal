@@ -38,7 +38,7 @@
 ## 建议包结构
 
 ```text
-src/main/java/com/middleware/manager/migration/
+backend/src/main/java/com/middleware/manager/migration/
 ├── api/                  # REST API 和 DTO
 ├── core/                 # 迁移编排、计划、上下文、执行管道
 ├── plugin/               # 插件接口、注册中心、能力声明

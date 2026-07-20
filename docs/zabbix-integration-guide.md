@@ -36,7 +36,7 @@ app:
 
 ```bash
 # 使用默认配置
-mvn spring-boot:run
+cd backend && mvn spring-boot:run
 
 # 自定义 Zabbix 地址
 ZABBIX_URL=http://zabbix.example.com/api_jsonrpc.php \
@@ -244,7 +244,7 @@ Agent: [自动匹配 zabbix-monitor Skill]
 
 ### 添加新的监控工具
 
-1. 在 `src/main/java/com/middleware/manager/agent/tool/` 目录下创建新的 Tool 类
+1. 在 `backend/src/main/java/com/middleware/manager/agent/tool/` 目录下创建新的 Tool 类
 2. 实现 `Tool` 接口
 3. 使用 `@Component` 注解注册为 Spring Bean
 4. 系统会自动将其注册到 Agent
@@ -270,7 +270,7 @@ public class CustomMonitorTool implements Tool {
 
 ### 添加新的 Skill
 
-在 `src/main/resources/skills/` 目录下创建 YAML 文件：
+在 `backend/src/main/resources/skills/` 目录下创建 YAML 文件：
 
 ```yaml
 name: custom-skill

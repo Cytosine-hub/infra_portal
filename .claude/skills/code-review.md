@@ -118,6 +118,6 @@ git diff --name-only HEAD~1
 
 - 完整规范：`docs/development-standards.md`
 - 设计令牌：`frontend/src/styles/tokens.css`
-- 错误码：`src/main/java/com/middleware/manager/constant/ErrorCode.java`
-- 错误消息：`src/main/java/com/middleware/manager/constant/ErrorMessages.java`
-- 状态常量：`src/main/java/com/middleware/manager/constant/StatusConstants.java`
+- 错误码：`backend/src/main/java/com/middleware/manager/constant/ErrorCode.java`
+- 错误消息：`backend/src/main/java/com/middleware/manager/constant/ErrorMessages.java`
+- 状态常量：`backend/src/main/java/com/middleware/manager/constant/StatusConstants.java`

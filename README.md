@@ -50,6 +50,7 @@
 ### 后端
 
 ```bash
+cd backend
 mvn clean package -DskipTests
 mvn spring-boot:run
 ```
@@ -129,25 +130,26 @@ mysql -u root middleware_resource_manager < db/seed_data.sql
 ## 项目结构
 
 ```
-├── src/main/java/com/middleware/manager/
-│   ├── wiki/                    # Wiki 知识库模块
-│   │   ├── service/             # IngestAgent, LinkResolver, WikiGraphService
-│   │   ├── repository/          # MyBatis Mapper
-│   │   ├── entity/              # WikiPage, WikiSource, WikiLink
-│   │   └── web/                 # WikiController
-│   ├── agent/                   # 运维 Agent 模块
-│   │   ├── service/             # AgentService
-│   │   ├── tool/                # ZabbixTool, SearchTool
-│   │   └── zabbix/              # ZabbixClient
-│   ├── knowledge/               # 知识库 & 智能排查模块
-│   ├── service/                 # 业务服务层
-│   ├── repository/              # 数据访问层
-│   ├── security/                # RBAC 权限
-│   └── config/                  # 配置类
-├── src/main/resources/
-│   ├── mapper/                  # MyBatis XML
-│   ├── db/                      # 数据库脚本
-│   └── application.yml          # 应用配置
+├── backend/                     # 后端 Spring Boot 工程（Maven，与 frontend/ 平级）
+│   ├── src/main/java/com/middleware/manager/
+│   │   ├── wiki/                    # Wiki 知识库模块
+│   │   │   ├── service/             # IngestAgent, LinkResolver, WikiGraphService
+│   │   │   ├── repository/          # MyBatis Mapper
+│   │   │   ├── entity/              # WikiPage, WikiSource, WikiLink
+│   │   │   └── web/                 # WikiController
+│   │   ├── agent/                   # 运维 Agent 模块
+│   │   │   ├── service/             # AgentService
+│   │   │   ├── tool/                # ZabbixTool, SearchTool
+│   │   │   └── zabbix/              # ZabbixClient
+│   │   ├── knowledge/               # 知识库 & 智能排查模块
+│   │   ├── service/                 # 业务服务层
+│   │   ├── repository/              # 数据访问层
+│   │   ├── security/                # RBAC 权限
+│   │   └── config/                  # 配置类
+│   └── src/main/resources/
+│   │   ├── mapper/                  # MyBatis XML
+│   │   ├── db/                      # 数据库脚本
+│   │   └── application.yml          # 应用配置
 ├── frontend/
 │   ├── src/components/          # Vue 组件
 │   └── src/composables/         # 组合式函数

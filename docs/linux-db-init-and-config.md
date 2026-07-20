@@ -6,7 +6,7 @@
 
 - JDK：17
 - 数据库：MySQL 8.x
-- 应用包：`target/middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar`
+- 应用包：`backend/target/middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar`
 
 ## 2. 当前项目涉及的数据库与配置项
 
@@ -20,7 +20,7 @@
 - `APP_DB_USERNAME`，默认 `root`
 - `APP_DB_PASSWORD`，默认 `OlgDqdJfehRwBUITqFpi`
 
-对应应用配置见 `src/main/resources/application.yml`：
+对应应用配置见 `backend/src/main/resources/application.yml`：
 
 ```yaml
 spring:
@@ -134,7 +134,7 @@ FLUSH PRIVILEGES;
 知识库相关表需手动执行 DDL：
 
 ```bash
-mysql -u root -p middleware_resource_manager < src/main/resources/db/knowledge_ddl.sql
+mysql -u root -p middleware_resource_manager < backend/src/main/resources/db/knowledge_ddl.sql
 ```
 
 启动完成后，可以执行检查：

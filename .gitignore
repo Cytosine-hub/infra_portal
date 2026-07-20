@@ -1,13 +1,13 @@
-/target/
+/backend/target/
 /.idea/
 /.vscode/
 /.settings/
 /.classpath
 /.project
 /.factorypath
-/data/
-/storage/
-/config/local-db.yml
+/backend/data/
+/backend/storage/
+/backend/config/local-db.yml
 *.log
 *.err
 *.out
@@ -28,4 +28,4 @@
 *.xlsx
 /frontend/.claude/
 /docs/.DS_Store
-/src/.DS_Store
+/backend/src/.DS_Store

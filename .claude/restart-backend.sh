@@ -18,7 +18,7 @@ fi
   # Start backend
   export JAVA_HOME=$(/usr/libexec/java_home -v 17 2>/dev/null || echo "/opt/homebrew/opt/openjdk@17")
   export PATH="$JAVA_HOME/bin:$PATH"
-  cd /Users/zhushihao/Projects/middleware_resource_manager
+  cd /Users/zhushihao/Projects/middleware_resource_manager/backend
 
   nohup mvn spring-boot:run > /tmp/backend.log 2>&1 &
   echo "[Hook] Backend starting (PID: $!), check /tmp/backend.log" >&2

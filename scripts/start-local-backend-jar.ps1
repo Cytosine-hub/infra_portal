@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$JarPath = Join-Path $ProjectRoot "target\middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar"
+$JarPath = Join-Path $ProjectRoot "backend\target\middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar"
 $RunnerPath = Join-Path $PSScriptRoot "run-local-backend-jar.ps1"
 $OutLogPath = Join-Path $ProjectRoot "backend-local.out.log"
 $ErrLogPath = Join-Path $ProjectRoot "backend-local.err.log"
@@ -22,7 +22,7 @@ if ($listener) {
 
 $process = Start-Process -FilePath "powershell.exe" `
     -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $RunnerPath) `
-    -WorkingDirectory $ProjectRoot `
+    -WorkingDirectory (Join-Path $ProjectRoot 'backend') `
     -RedirectStandardOutput $OutLogPath `
     -RedirectStandardError $ErrLogPath `
     -WindowStyle Hidden `

@@ -115,7 +115,7 @@ docker start milvus
 
 # 3. 启动后端
 JAVA_HOME=$(/usr/libexec/java_home -v 17) \
-mvn spring-boot:run -Dspring-boot.run.profiles=local
+cd backend && mvn spring-boot:run -Dspring-boot.run.profiles=local
 
 # 4. 启动前端
 cd frontend && npm run dev

@@ -38,7 +38,7 @@ sleep 2
 ```bash
 cd /Users/zhushihao/Projects/middleware_resource_manager
 > /tmp/backend.log
-nohup mvn spring-boot:run -DskipTests >> /tmp/backend.log 2>&1 &
+(cd backend && nohup mvn spring-boot:run -DskipTests >> /tmp/backend.log 2>&1 &)
 ```
 
 等待启动完成（约 15-20 秒，Milvus 未就绪时可能更久）：
@@ -77,4 +77,4 @@ docker ps --filter "name=milvus" --format "{{.Names}}: {{.Status}}"
 
 - **后端启动慢**：Milvus 未就绪会重试 75 次（约 4 分钟），等 Milvus 启动后自动继续
 - **端口占用**：`lsof -i :8080` 或 `lsof -i :5173` 检查并 kill
-- **编译错误**：`mvn compile` 检查，常见是新增 mapper 方法未同步 XML
+- **编译错误**：`(cd backend && mvn compile)` 检查，常见是新增 mapper 方法未同步 XML

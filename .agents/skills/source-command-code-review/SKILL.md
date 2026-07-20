@@ -16,9 +16,9 @@ Read these files before judging project-specific rules:
 - `docs/development-standards.md`
 - `docs/code-review-rules.md`
 - `frontend/src/styles/tokens.css` when checking frontend style tokens
-- `src/main/java/com/middleware/manager/constant/ErrorCode.java` when checking backend errors
-- `src/main/java/com/middleware/manager/constant/ErrorMessages.java` when checking backend messages
-- `src/main/java/com/middleware/manager/constant/StatusConstants.java` when checking backend status constants
+- `backend/src/main/java/com/middleware/manager/constant/ErrorCode.java` when checking backend errors
+- `backend/src/main/java/com/middleware/manager/constant/ErrorMessages.java` when checking backend messages
+- `backend/src/main/java/com/middleware/manager/constant/StatusConstants.java` when checking backend status constants
 
 ## Scope
 
