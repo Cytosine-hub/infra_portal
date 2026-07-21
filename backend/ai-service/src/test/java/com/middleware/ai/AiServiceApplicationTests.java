@@ -59,6 +59,14 @@ class AiServiceApplicationTests {
         assertUnauthorized("/api/ops-agent/export/zabbix");
     }
 
+    @Test
+    @DisplayName("TC-AI-003 ai-service 类路径不再包含 TokenService")
+    void aiServiceDoesNotContainTokenValidationService() {
+        assertThat(AiServiceApplication.class.getClassLoader()
+                .getResource("com/middleware/manager/service/TokenService.class"))
+                .isNull();
+    }
+
     private void assertUnauthorized(String path) throws Exception {
         mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
     }

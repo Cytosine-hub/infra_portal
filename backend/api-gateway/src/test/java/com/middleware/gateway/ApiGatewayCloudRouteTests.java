@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.gateway.route.RouteDefinitionLocator;
+import org.springframework.core.env.Environment;
 import org.springframework.test.context.ActiveProfiles;
 
 @ActiveProfiles("cloud")
@@ -24,6 +25,9 @@ class ApiGatewayCloudRouteTests {
 
     @Autowired
     private RouteDefinitionLocator routeDefinitionLocator;
+
+    @Autowired
+    private Environment environment;
 
     @Test
     @DisplayName("TC-GATEWAY-002 cloud profile 分别路由论坛、AI、平台核心与岗位 API")
@@ -40,5 +44,9 @@ class ApiGatewayCloudRouteTests {
         assertThat(routes).containsEntry("ai-api", URI.create("lb://ai-service"));
         assertThat(routes).containsEntry("core-api", URI.create("lb://core-service"));
         assertThat(routes).containsEntry("app-api", URI.create("lb://middleware-resource-manager-app"));
+        assertThat(environment.getProperty("app.security.introspection-base-url"))
+                .isEqualTo("http://core-service");
+        assertThat(environment.getProperty("app.security.introspection-load-balanced", Boolean.class))
+                .isTrue();
     }
 }

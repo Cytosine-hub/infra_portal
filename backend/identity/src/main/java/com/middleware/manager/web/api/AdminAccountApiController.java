@@ -4,8 +4,8 @@ import com.middleware.manager.domain.RoleEntity;
 import com.middleware.manager.constant.ErrorCode;
 import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.exception.BusinessException;
-import com.middleware.manager.security.PermissionService;
 import com.middleware.manager.service.AdminAccountService;
+import com.middleware.manager.service.RoleService;
 import com.middleware.manager.web.api.dto.AuthResponse;
 import com.middleware.manager.web.api.dto.PasswordRequest;
 import org.springframework.security.core.Authentication;
@@ -19,11 +19,11 @@ import jakarta.validation.Valid;
 @RequestMapping("/api/admin/account")
 public class AdminAccountApiController {
     private final AdminAccountService adminAccountService;
-    private final PermissionService permissionService;
+    private final RoleService roleService;
 
-    public AdminAccountApiController(AdminAccountService adminAccountService, PermissionService permissionService) {
+    public AdminAccountApiController(AdminAccountService adminAccountService, RoleService roleService) {
         this.adminAccountService = adminAccountService;
-        this.permissionService = permissionService;
+        this.roleService = roleService;
     }
 
     @PostMapping("/password")
@@ -34,7 +34,11 @@ public class AdminAccountApiController {
         }
 
         adminAccountService.changePassword(authentication.getName(), request.getCurrentPassword(), request.getNewPassword());
-        RoleEntity role = permissionService.getCurrentRole(authentication);
+        RoleEntity role = authentication.getAuthorities().stream()
+                .map(authority -> roleService.getByAuthority(authority.getAuthority()))
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
         return new AuthResponse(authentication.getName(), adminAccountService.getDisplayNameByUsername(authentication.getName()), role != null ? role.getDisplayName() : "系统管理员");
     }
 }

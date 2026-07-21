@@ -43,3 +43,8 @@ spring:
               uri: lb://middleware-resource-manager-app
               predicates:
                 - Path=/api/**
+
+app:
+  security:
+    introspection-base-url: http://core-service
+    introspection-load-balanced: true

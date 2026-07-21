@@ -155,6 +155,7 @@
                     <systemPropertyVariables>
                         <app.vector.type>memory</app.vector.type>
                         <app.startup.runners-enabled>false</app.startup.runners-enabled>
+                        <app.security.gateway-signing-secret>test-only-gateway-signing-secret</app.security.gateway-signing-secret>
                         <AI_API_KEY>test-only-key</AI_API_KEY>
                         <WIKI_EXPORT_SIGNATURE_SECRET>test-only-signature</WIKI_EXPORT_SIGNATURE_SECRET>
                     </systemPropertyVariables>

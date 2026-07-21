@@ -36,6 +36,14 @@ spring:
               predicates:
                 - Path=/api/**
 
+app:
+  security:
+    gateway-signing-secret: ${GATEWAY_SIGNING_SECRET:}
+    introspection-base-url: "${CORE_SERVICE_URL:http://127.0.0.1:8084}"
+    introspection-load-balanced: false
+    introspection-cache-ttl: ${GATEWAY_AUTH_CACHE_TTL:PT15S}
+    introspection-cache-max-size: ${GATEWAY_AUTH_CACHE_MAX_SIZE:10000}
+
 logging:
   level:
     root: INFO

@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: community-service
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   cloud:
     nacos:
       discovery:
@@ -35,6 +37,8 @@ logging:
 app:
   storage:
     location: ./storage
+  security:
+    gateway-signing-secret: ${GATEWAY_SIGNING_SECRET:}
 
 mybatis:
   mapper-locations:
@@ -42,9 +46,6 @@ mybatis:
     - classpath*:mapper/ForumCommentMapper.xml
     - classpath*:mapper/ForumTagMapper.xml
     - classpath*:mapper/PostLikeMapper.xml
-    - classpath*:mapper/UserTokenMapper.xml
-    - classpath*:mapper/AdminAccountMapper.xml
-    - classpath*:mapper/RoleMapper.xml
     - classpath*:mapper/ApiAuditLogMapper.xml
   type-aliases-package: com.middleware.manager.domain
   configuration:

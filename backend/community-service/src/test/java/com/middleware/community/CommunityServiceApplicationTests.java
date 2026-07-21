@@ -7,15 +7,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.github.pagehelper.PageInfo;
 import com.middleware.manager.config.ApiAuditLogger;
-import com.middleware.manager.domain.AdminAccount;
 import com.middleware.manager.domain.ForumPost;
-import com.middleware.manager.domain.RoleEntity;
-import com.middleware.manager.repository.AdminAccountMapper;
-import com.middleware.manager.repository.RoleMapper;
-import com.middleware.manager.repository.UserTokenMapper;
+import com.middleware.manager.security.gateway.GatewayIdentityHeaders;
+import com.middleware.manager.security.gateway.GatewaySignatureService;
 import com.middleware.manager.service.ForumService;
 import com.middleware.manager.web.api.ForumController;
-import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +24,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -39,6 +36,9 @@ import org.springframework.transaction.support.SimpleTransactionStatus;
 @AutoConfigureMockMvc
 @Import(CommunityServiceApplicationTests.ForumTestConfiguration.class)
 class CommunityServiceApplicationTests {
+
+    private static final GatewaySignatureService SIGNATURE_SERVICE =
+            new GatewaySignatureService("test-only-gateway-signing-secret");
 
     @Autowired
     private ApplicationContext applicationContext;
@@ -83,13 +83,45 @@ class CommunityServiceApplicationTests {
     }
 
     @Test
-    @DisplayName("TC-COMMUNITY-005 有效 Bearer Token 可访问论坛写接口")
-    void validSharedDatabaseTokenAuthenticatesForumWrite() throws Exception {
+    @DisplayName("TC-COMMUNITY-005 正确签名身份头可访问论坛写接口")
+    void validGatewayIdentityAuthenticatesForumWrite() throws Exception {
         mockMvc.perform(post("/api/forum/posts")
-                        .header("Authorization", "Bearer valid-token")
+                        .headers(signedIdentityHeaders())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"title\":\"test\",\"content\":\"content\"}"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("TC-COMMUNITY-006 直连伪造管理员身份头但无签名返回 401")
+    void forgedAdminHeadersWithoutSignatureAreRejected() throws Exception {
+        mockMvc.perform(post("/api/forum/posts")
+                        .header(GatewayIdentityHeaders.USER, "mallory")
+                        .header(GatewayIdentityHeaders.ROLES, "ROLE_SYS_ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"test\",\"content\":\"content\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("TC-COMMUNITY-007 community-service 类路径不再包含 TokenService")
+    void communityServiceDoesNotContainTokenValidationService() {
+        assertThat(CommunityServiceApplication.class.getClassLoader()
+                .getResource("com/middleware/manager/service/TokenService.class"))
+                .isNull();
+    }
+
+    private HttpHeaders signedIdentityHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(GatewayIdentityHeaders.USER, "alice");
+        headers.set(GatewayIdentityHeaders.DISPLAY_NAME, "Alice");
+        headers.set(GatewayIdentityHeaders.ROLES, "ROLE_DEV_MGR");
+        headers.set(GatewayIdentityHeaders.CATEGORY, "");
+        headers.set(GatewayIdentityHeaders.CATEGORY_ADMIN, "false");
+        headers.set(GatewayIdentityHeaders.SIGNATURE,
+                SIGNATURE_SERVICE.signIdentityHeaders(
+                        "alice", "Alice", "ROLE_DEV_MGR", "", "false"));
+        return headers;
     }
 
     @TestConfiguration
@@ -122,151 +154,6 @@ class CommunityServiceApplicationTests {
         @Primary
         ApiAuditLogger noopApiAuditLogger() {
             return (username, method, path, queryString, statusCode, ipAddress, userAgent, durationMs) -> { };
-        }
-
-        @Bean
-        @Primary
-        UserTokenMapper stubUserTokenMapper() {
-            return new UserTokenMapper() {
-                @Override
-                public int insert(String token, String username, LocalDateTime expiresAt) {
-                    return 1;
-                }
-
-                @Override
-                public String findUsernameByToken(String token) {
-                    return "valid-token".equals(token) ? "alice" : null;
-                }
-
-                @Override
-                public int updateExpiry(String token, LocalDateTime expiresAt) {
-                    return 1;
-                }
-
-                @Override
-                public int deleteByToken(String token) {
-                    return 1;
-                }
-
-                @Override
-                public int deleteByUsername(String username) {
-                    return 1;
-                }
-
-                @Override
-                public int deleteExpired() {
-                    return 0;
-                }
-            };
-        }
-
-        @Bean
-        @Primary
-        AdminAccountMapper stubAdminAccountMapper() {
-            return new AdminAccountMapper() {
-                @Override
-                public AdminAccount findById(Long id) {
-                    return account();
-                }
-
-                @Override
-                public AdminAccount findByUsername(String username) {
-                    return "alice".equals(username) ? account() : null;
-                }
-
-                @Override
-                public List<AdminAccount> findAllByOrderByCreatedAtAsc() {
-                    return List.of(account());
-                }
-
-                @Override
-                public long countByRole(String role) {
-                    return 1;
-                }
-
-                @Override
-                public int insert(AdminAccount account) {
-                    return 1;
-                }
-
-                @Override
-                public int update(AdminAccount account) {
-                    return 1;
-                }
-
-                @Override
-                public int deleteById(Long id) {
-                    return 1;
-                }
-
-                @Override
-                public long count() {
-                    return 1;
-                }
-
-                private AdminAccount account() {
-                    AdminAccount account = new AdminAccount();
-                    account.setId(1L);
-                    account.setUsername("alice");
-                    account.setPasswordHash("{noop}unused");
-                    account.setRole("开发经理");
-                    return account;
-                }
-            };
-        }
-
-        @Bean
-        @Primary
-        RoleMapper stubRoleMapper() {
-            return new RoleMapper() {
-                @Override
-                public RoleEntity findById(Long id) {
-                    return role();
-                }
-
-                @Override
-                public RoleEntity findByDisplayName(String displayName) {
-                    return role();
-                }
-
-                @Override
-                public RoleEntity findByAuthority(String authority) {
-                    return role();
-                }
-
-                @Override
-                public List<RoleEntity> findAll() {
-                    return List.of(role());
-                }
-
-                @Override
-                public int insert(RoleEntity role) {
-                    return 1;
-                }
-
-                @Override
-                public int update(RoleEntity role) {
-                    return 1;
-                }
-
-                @Override
-                public int deleteById(Long id) {
-                    return 1;
-                }
-
-                @Override
-                public long count() {
-                    return 1;
-                }
-
-                private RoleEntity role() {
-                    RoleEntity role = new RoleEntity();
-                    role.setId(1L);
-                    role.setDisplayName("开发经理");
-                    role.setAuthority("ROLE_DEV_MGR");
-                    return role;
-                }
-            };
         }
 
         @Bean

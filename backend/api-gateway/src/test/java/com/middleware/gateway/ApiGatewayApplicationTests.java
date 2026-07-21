@@ -74,6 +74,10 @@ class ApiGatewayApplicationTests {
                 .isFalse();
         assertThat(environment.getProperty("spring.cloud.nacos.config.enabled", Boolean.class))
                 .isFalse();
+        assertThat(environment.getProperty("app.security.introspection-base-url"))
+                .isEqualTo("http://127.0.0.1:8084");
+        assertThat(environment.getProperty("app.security.introspection-load-balanced", Boolean.class))
+                .isFalse();
     }
 
     private RouteDefinition findRoute(String routeId) {

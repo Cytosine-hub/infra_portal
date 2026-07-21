@@ -2,7 +2,7 @@
 
 > 目标：把当前单体后端按「岗位」组织成模块，并演进为微服务架构，与前端已有的岗位化模块对齐。
 > 本文档既是给人审阅的设计方案，也是交给实现 Agent（codex gpt-5.6-sol / xhigh）的规格书。
-> 进度：阶段 0-4 已完成；阶段 4 已将 identity + catalog + standards 闭环剥离为 core-service。落地细节见 `docs/microservices-stage4-core-service.md`。
+> 进度：阶段 0-5 已完成；阶段 5 已将 Token 校验集中到 Gateway + identity，并由 Gateway 向下游下发签名身份头。落地细节见 `docs/microservices-stage5-gateway-authentication.md`。
 
 ---
 
@@ -10,7 +10,7 @@
 
 - **规模**：`backend/` 单体 Spring Boot 3.5（Java 17），194 个 Java 文件 ~22k 行，16 个测试类；单进程 `:8080`，单 MySQL。
 - **技术栈**：Spring Web + Spring Security + MyBatis(+PageHelper) + MySQL；AI 侧 LangChain4j + Milvus + OpenAI 兼容大模型；运维侧 Zabbix JSON-RPC。
-- **认证**：Bearer Token（`user_tokens` 表）经 `TokenAuthenticationFilter` 校验；`SecurityConfig` 按路径授权；`PermissionService` 按「分类(category)」做管理/审批授权。
+- **认证**：Bearer Token（`user_tokens` 表）只由 identity 的 introspect 校验和滑动续期；Gateway 集中调用并注入 HMAC 签名的用户/角色/岗位头；下游 `SecurityConfig` 按原路径授权，`PermissionService` 按签名的「分类(category)」做管理/审批授权。
 - **关键发现 — 「分类(category)」即「岗位」**：`roles` 种子里 `managed_category` 正是 5 个岗位：**中间件 / 数据库 / 主机 / 网络 / 安全**，每岗位有「管理员(可审)」+「管理岗(只改)」两级角色；外加系统管理员 / 开发经理 / 运维经理三个横切角色。内容表（`parameter_standards`/`standard_documents`/`knowledge_*`/`wiki_*`）均带 `category` 字段。
 - **前端已岗位化**：`frontend/src/modules/{middleware,database,host,network,network-security}`，每岗位模块自带独立 API 基址 `VITE_<岗位>_API_BASE_URL`（默认 `/api`）——**天然为微服务预留了按岗位路由的入口**。
 - **岗位内容现状**：中间件有「运维命令」(`/api/middleware-commands`)；数据库有「数据迁移」(前端页面)；主机/网络/安全岗位后端暂无专属端点，内容走通用的 category 打标机制。
@@ -55,10 +55,10 @@
    基础设施：注册中心+配置中心(建议 Nacos) · 共享库 common-{core,security,web}
 ```
 
-- **api-gateway**：统一 `/api/**` 入口，做鉴权前置、路由、限流。前端岗位模块的 `VITE_*_API_BASE_URL` 指向网关（或经网关按岗位前缀路由到岗位服务）。
+- **api-gateway**：统一 `/api/**` 入口，做集中认证、身份头清洗与签名注入、路由、限流。前端岗位模块的 `VITE_*_API_BASE_URL` 指向网关（或经网关按岗位前缀路由到岗位服务）。
 - **平台能力服务**：把当前横切能力按边界上下文抽出，服务全岗位；内容按 `category` 分区。
 - **岗位服务**：薄服务，承载岗位专属端点（如中间件命令、数据库迁移），并作为该岗位的聚合层(BFF)按需编排平台能力。主机/网络/安全先建空骨架，随业务填充。
-- **共享库**：`common-core`(DTO/ApiError/错误码/常量)、`common-security`(Token 校验、PermissionService、category 模型)、`common-web`(过滤器/全局异常)。
+- **共享库**：`common-core`(DTO/ApiError/错误码/常量、网关签名协议)、`common-security`(身份头验签、PermissionService、category 上下文)、`common-web`(SecurityConfig/全局异常)。
 
 ### 2.2 数据策略
 
@@ -68,8 +68,9 @@
 
 ### 2.3 认证与鉴权
 
-- Token 校验下沉到网关（或 `common-security` 库各服务自校验）；下游服务信任网关注入的用户/角色/岗位上下文（如 `X-User`, `X-Roles`, `X-Category`）。
-- `PermissionService` 的 category(岗位) 授权模型抽到 `common-security`，各服务复用，保持「岗位管理员/管理岗」两级语义不变。
+- Token 校验集中在 Gateway + identity：Gateway 调用 core-service 内部 introspect，identity 独占 token 表、角色表和滑动续期逻辑。
+- Gateway 先删除客户端提交的全部身份头，再注入并 HMAC 签名 `X-User`、`X-Display-Name`、`X-Roles`、`X-Category`、`X-Category-Admin`；下游验签后构建认证上下文，非 Java 服务可实现同一协议。
+- `PermissionService` 的 category(岗位) 授权模型在 `common-security` 复用，只读签名上下文，保持「岗位管理员/管理岗」两级语义不变。
 
 ---
 
@@ -88,7 +89,8 @@
 - **阶段 2 — community-service 剥离（已落地）**：论坛成为首个独立业务服务，Gateway 按 `/api/forum/**` 路由。
 - **阶段 3 — ai-service 剥离（已落地）**：knowledge、wiki、ops-agent 作为紧耦合 AI/Agent 边界上下文整体剥离，Gateway 按原路径路由，避免集群内部远程调用。
 - **阶段 4 — core-service 剥离（已落地）**：identity、catalog、standards 因三个内部端口闭环整体剥离，Gateway 按原路径和 `/files/**` 路由，app 仅保留岗位模块。
-- **阶段 5 — 数据与运维**：物理拆库、分布式配置、可观测性(链路/日志/指标)、每服务独立 CI/CD。
+- **阶段 5 — 网关集中认证（已落地）**：identity 提供 HMAC 保护的内部 introspect；Gateway 集中校验并短 TTL 缓存，清洗和签名注入身份头；下游停止查询 token/角色表，只按签名身份上下文授权。
+- **阶段 6 — 数据与运维**：物理拆库、分布式配置、可观测性(链路/日志/指标)、每服务独立 CI/CD。
 
 ---
 

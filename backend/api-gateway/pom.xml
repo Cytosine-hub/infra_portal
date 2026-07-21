@@ -15,6 +15,17 @@
 
     <dependencies>
         <dependency>
+            <groupId>com.middleware</groupId>
+            <artifactId>common-core</artifactId>
+            <version>${project.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
         </dependency>
@@ -49,6 +60,9 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
                     <argLine>-javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${byte-buddy.version}/byte-buddy-agent-${byte-buddy.version}.jar</argLine>
+                    <systemPropertyVariables>
+                        <app.security.gateway-signing-secret>test-only-gateway-signing-secret</app.security.gateway-signing-secret>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <plugin>

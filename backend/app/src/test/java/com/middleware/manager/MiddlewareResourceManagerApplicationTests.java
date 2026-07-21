@@ -1,15 +1,22 @@
 package com.middleware.manager;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.middleware.manager.security.gateway.GatewayIdentityHeaders;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.env.Environment;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 class MiddlewareResourceManagerApplicationTests {
 
     @Autowired
@@ -17,6 +24,9 @@ class MiddlewareResourceManagerApplicationTests {
 
     @Autowired
     private ApplicationContext applicationContext;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     @Test
     @DisplayName("TC-APP-001 默认 profile 加载上下文且不启用 Nacos")
@@ -103,5 +113,20 @@ class MiddlewareResourceManagerApplicationTests {
     void appStillLoadsMiddlewareJobController() {
         assertThat(applicationContext.getBean(
                 com.middleware.manager.web.api.MiddlewareCommandApiController.class)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("TC-APP-007 app 不再包含 TokenService 且伪造管理员头无签名返回 401")
+    void appRejectsUnsignedIdentityWithoutTokenDatabaseAuthentication() throws Exception {
+        assertThat(MiddlewareResourceManagerApplication.class.getClassLoader()
+                .getResource("com/middleware/manager/service/TokenService.class"))
+                .isNull();
+
+        mockMvc.perform(post("/api/middleware-commands")
+                        .header(GatewayIdentityHeaders.USER, "mallory")
+                        .header(GatewayIdentityHeaders.ROLES, "ROLE_SYS_ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
     }
 }

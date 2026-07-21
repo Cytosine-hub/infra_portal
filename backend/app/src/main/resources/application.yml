@@ -18,6 +18,8 @@ logging:
 spring:
   application:
     name: middleware-resource-manager-app
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   cloud:
     nacos:
       discovery:
@@ -45,14 +47,13 @@ spring:
 app:
   storage:
     location: ./storage
+  security:
+    gateway-signing-secret: ${GATEWAY_SIGNING_SECRET:}
 
 # MyBatis 配置
 mybatis:
   mapper-locations:
-    - classpath*:mapper/AdminAccountMapper.xml
     - classpath*:mapper/SoftwareTypeMapper.xml
-    - classpath*:mapper/RoleMapper.xml
-    - classpath*:mapper/UserTokenMapper.xml
     - classpath*:mapper/ApiAuditLogMapper.xml
     - classpath*:mapper/MiddlewareCommandMapper.xml
   type-aliases-package: com.middleware.manager.domain

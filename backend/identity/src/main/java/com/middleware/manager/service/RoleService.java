@@ -6,7 +6,6 @@ import com.middleware.manager.domain.RoleEntity;
 import com.middleware.manager.exception.BusinessException;
 import com.middleware.manager.exception.NotFoundException;
 import com.middleware.manager.repository.RoleMapper;
-import com.middleware.manager.security.RolePermissionProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -17,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
-public class RoleService implements RolePermissionProvider {
+public class RoleService {
     private static final String ROLE_SYS_ADMIN = "ROLE_SYS_ADMIN";
 
     private final RoleMapper mapper;
@@ -80,7 +79,6 @@ public class RoleService implements RolePermissionProvider {
         return byDisplayName.get(displayName);
     }
 
-    @Override
     public RoleEntity getByAuthority(String authority) {
         return byAuthority.get(authority);
     }
@@ -127,12 +125,10 @@ public class RoleService implements RolePermissionProvider {
 
     // ── Permission helpers ──
 
-    @Override
     public boolean isAdmin(RoleEntity role) {
         return role != null && ROLE_SYS_ADMIN.equals(role.getAuthority());
     }
 
-    @Override
     public boolean isCategoryAdmin(RoleEntity role) {
         return role != null && role.isCategoryAdmin();
     }
@@ -141,7 +137,6 @@ public class RoleService implements RolePermissionProvider {
         return role != null && (isAdmin(role) || role.isCategoryAdmin() || role.getManagedCategory() != null);
     }
 
-    @Override
     public boolean canManageCategory(RoleEntity role, String category) {
         if (role == null) return false;
         if (isAdmin(role)) return true;
@@ -149,7 +144,6 @@ public class RoleService implements RolePermissionProvider {
         return role.getManagedCategory().equals(category);
     }
 
-    @Override
     public boolean canReviewCategory(RoleEntity role, String category) {
         if (role == null) return false;
         if (isAdmin(role)) return true;

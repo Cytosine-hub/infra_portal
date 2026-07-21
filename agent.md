@@ -12,7 +12,7 @@
 │   ├── pom.xml                      # 聚合根父 POM，统一 Boot/Cloud/Alibaba BOM 与插件
 │   ├── modular-monolith-parent/     # 既有业务模块的依赖父 POM，隔离 Gateway WebFlux 依赖
 │   ├── common-core/                 # DTO、异常/错误码、常量、共享模型及跨模块业务端口
-│   ├── common-security/             # Token 校验、PermissionService、角色/岗位权限端口
+│   ├── common-security/             # 网关身份头验签、PermissionService、角色/岗位权限上下文
 │   ├── common-web/                  # SecurityConfig、过滤器、全局异常处理、Web 通用配置
 │   ├── identity/                    # core-service 业务库：账号、Token、角色、系统设置、API 审计
 │   ├── catalog/                     # core-service 业务库：软件分类、软件类型、发布包与文件下载
@@ -26,7 +26,7 @@
 │   ├── job-host/                    # 主机岗位边界（待演进）
 │   ├── job-network/                 # 网络岗位边界（待演进）
 │   ├── job-security/                # 网络安全岗位边界（待演进）
-│   ├── api-gateway/                 # 独立 Gateway 应用（:8080）；cloud 下经 Nacos lb:// 路由
+│   ├── api-gateway/                 # 集中认证与路由（:8080）；cloud 下经 Nacos lb:// 调 core-service
 │   ├── community-service/           # 独立论坛应用（:8082）；聚合 common-* + community
 │   ├── ai-service/                  # 独立 AI/Agent 应用（:8083）；聚合 knowledge + wiki + ops-agent
 │   ├── core-service/                # 独立平台核心应用（:8084）；聚合 identity + catalog + standards
@@ -179,7 +179,9 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 
 数据库：MySQL 8.0 `127.0.0.1:3306/middleware_resource_manager`，用户 `root`，凭据在 `~/.my.cnf`；连接可用 `APP_DB_*` 环境变量覆盖。
 
-Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，服务名为 `middleware-resource-manager-app`、`community-service`、`ai-service`、`core-service` 和 `api-gateway`。Gateway 将 `/api/forum/**` 路由到 community-service，将 `/api/knowledge/**`、`/api/agent/**`、`/api/wiki/**`、`/api/ops-agent/**` 路由到 ai-service，将 identity/catalog/standards 的原路径和 `/files/**` 路由到 core-service，其余 `/api/**`（当前为岗位端点）路由到 app。端口、环境变量和联通清单见 `docs/microservices-stage4-core-service.md`。
+认证：五个进程启动前必须设置同一个至少 32 UTF-8 字节的 `GATEWAY_SIGNING_SECRET`，配置无生产默认值。外部请求只进 Gateway；Token 校验、滑动续期、角色和岗位权威归 core-service 的 identity，app/community/ai/core 的业务端点只接受 Gateway 签名的身份头。协议和联通验证见 `docs/microservices-stage5-gateway-authentication.md`。
+
+Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，服务名为 `middleware-resource-manager-app`、`community-service`、`ai-service`、`core-service` 和 `api-gateway`。Gateway 将 `/api/forum/**` 路由到 community-service，将 `/api/knowledge/**`、`/api/agent/**`、`/api/wiki/**`、`/api/ops-agent/**` 路由到 ai-service，将 identity/catalog/standards 的原路径和 `/files/**` 路由到 core-service，其余 `/api/**`（当前为岗位端点）路由到 app；Gateway 对 introspect 的调用在 `cloud` profile 下通过负载均衡的 `http://core-service` 完成。端口和路由见 `docs/microservices-stage4-core-service.md`，认证联通见 `docs/microservices-stage5-gateway-authentication.md`。
 
 ## 8. 测试（严格 TDD）
 
@@ -226,7 +228,7 @@ void getMissingThrows() { ... }
 
 ## 11. 踩坑与经验
 
-- **认证已是 Bearer Token**：前端登录后 token 存 `localStorage`（`mrm.token`/`mrm.user`/`mrm.expiresAt`，见 `api.js`），带过期校验；后端有 `TokenService` + `user_token` 表。旧文档提到的 HTTP Basic + sessionStorage 已过时，勿照抄。
+- **认证集中在 Gateway + identity**：前端登录后 token 存 `localStorage`（`mrm.token`/`mrm.user`/`mrm.expiresAt`，见 `api.js`）；Gateway 用 token 调 identity introspect，identity 独占 `TokenService` + `user_tokens` 表并做滑动续期。其他服务禁止恢复 token/角色表查询，只能验 `X-Gateway-Sign` 后使用签名身份头。
 - **两套数据访问并存**：主业务用 MyBatis（Mapper 接口 + XML），knowledge 模块用 JdbcTemplate——在 knowledge 下不要引入 MyBatis Mapper，反之亦然。
 - **Mapper 接口方法名是 JPA 风格但实现在 XML**：新增查询要同时改接口和 `resources/mapper/*.xml`，两边 id 必须一致，漏改 XML 只在运行时报错。
 - **种子数据在 Service 里**：`SoftwareTypeService` 实现 `ApplicationRunner` 在启动时 seed 类目/类型；改类目相关逻辑注意幂等，别造成重复插入。
@@ -234,4 +236,4 @@ void getMissingThrows() { ... }
 - **外部服务全部走环境变量**：Zabbix（`ZABBIX_URL` 等）、大模型（`AI_BASE_URL`/`AI_API_KEY`）、Milvus（`VECTOR_HOST`/`VECTOR_PORT`）；本地没起 Milvus 时知识库相关功能会失败，开发可用 `InMemoryVectorStore`。
 - **模块开关在 `system_settings` 表**（knowledge-enabled、diagnostics-enabled）：功能"不见了"先查开关再查代码。
 - **权限模型有两级**：管理员（`isCategoryAdmin`，可改可审）vs 管理岗（`isManagement`，只能改不能审），审核相关接口必须走 `PermissionService.canReview(auth, category)`，只按角色名判断会放过管理岗越权审核。
-- **文件存储路径**：上传文件落在 `./storage/<middlewareName>/`，下载走 `/files/**` 且需登录；本地调试删库不删 storage 会出现悬空记录。
+- **文件存储路径**：上传文件落在 `./storage/<middlewareName>/`，下载走公开的 `/files/**`；本地调试删库不删 storage 会出现悬空记录。

@@ -1,7 +1,6 @@
 package com.middleware.manager.service;
 
 import com.middleware.manager.repository.UserTokenMapper;
-import com.middleware.manager.security.TokenValidator;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
@@ -9,7 +8,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 @Slf4j
-public class TokenService implements TokenValidator {
+public class TokenService {
     private static final long TOKEN_EXPIRY_HOURS = 2;
 
     private final UserTokenMapper tokenMapper;
@@ -28,7 +27,6 @@ public class TokenService implements TokenValidator {
         return token;
     }
 
-    @Override
     public String validateToken(String token) {
         if (token == null || token.isBlank()) {
             return null;

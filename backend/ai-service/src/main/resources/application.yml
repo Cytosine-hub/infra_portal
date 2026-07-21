@@ -16,6 +16,8 @@ logging:
 spring:
   application:
     name: ai-service
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   cloud:
     nacos:
       discovery:
@@ -41,6 +43,8 @@ spring:
 app:
   storage:
     location: ./storage
+  security:
+    gateway-signing-secret: ${GATEWAY_SIGNING_SECRET:}
   modules:
     knowledge-enabled: ${KNOWLEDGE_ENABLED:true}
     diagnostics-enabled: ${DIAGNOSTICS_ENABLED:true}
@@ -99,8 +103,6 @@ skills:
 mybatis:
   mapper-locations:
     - classpath*:mapper/AdminAccountMapper.xml
-    - classpath*:mapper/RoleMapper.xml
-    - classpath*:mapper/UserTokenMapper.xml
     - classpath*:mapper/ChatMessageMapper.xml
     - classpath*:mapper/ChatSessionMapper.xml
     - classpath*:mapper/StandardDocumentMapper.xml

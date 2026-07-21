@@ -69,6 +69,7 @@
                     <systemPropertyVariables>
                         <app.vector.type>memory</app.vector.type>
                         <app.startup.runners-enabled>false</app.startup.runners-enabled>
+                        <app.security.gateway-signing-secret>test-only-gateway-signing-secret</app.security.gateway-signing-secret>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

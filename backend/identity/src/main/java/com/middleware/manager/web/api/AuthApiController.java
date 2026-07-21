@@ -1,7 +1,6 @@
 package com.middleware.manager.web.api;
 
 import com.middleware.manager.domain.RoleEntity;
-import com.middleware.manager.security.PermissionService;
 import com.middleware.manager.service.AdminAccountService;
 import com.middleware.manager.service.RoleService;
 import com.middleware.manager.service.TokenService;
@@ -29,16 +28,13 @@ public class AuthApiController {
 
     private final AdminAccountService adminAccountService;
     private final PasswordEncoder passwordEncoder;
-    private final PermissionService permissionService;
     private final RoleService roleService;
     private final TokenService tokenService;
 
     public AuthApiController(AdminAccountService adminAccountService, PasswordEncoder passwordEncoder,
-                             PermissionService permissionService, RoleService roleService,
-                             TokenService tokenService) {
+                             RoleService roleService, TokenService tokenService) {
         this.adminAccountService = adminAccountService;
         this.passwordEncoder = passwordEncoder;
-        this.permissionService = permissionService;
         this.roleService = roleService;
         this.tokenService = tokenService;
     }
@@ -76,7 +72,11 @@ public class AuthApiController {
 
     @GetMapping("/me")
     public AuthResponse currentUser(Authentication authentication) {
-        RoleEntity role = permissionService.getCurrentRole(authentication);
+        RoleEntity role = authentication.getAuthorities().stream()
+                .map(authority -> roleService.getByAuthority(authority.getAuthority()))
+                .filter(java.util.Objects::nonNull)
+                .findFirst()
+                .orElse(null);
         return new AuthResponse(authentication.getName(),
                 adminAccountService.getDisplayNameByUsername(authentication.getName()),
                 role != null ? role.getDisplayName() : "系统管理员");

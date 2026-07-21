@@ -5,9 +5,10 @@ import com.middleware.manager.exception.NotFoundException;
 import com.middleware.manager.knowledge.agent.ChatSession;
 import com.middleware.manager.knowledge.agent.ChatSessionMapper;
 import com.middleware.manager.repository.AdminAccountMapper;
+import com.middleware.manager.security.GatewayAuthenticationToken;
 import com.middleware.manager.security.PermissionService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -22,12 +23,13 @@ import static org.junit.jupiter.api.Assertions.*;
 class AgentControllerSecurityTest {
 
     @Test
+    @DisplayName("TC-AGENT-SEC-001 普通用户只可查看自己的会话")
     void nonAdminOnlyListsOwnSessions() {
         InMemorySessionMapper sessions = new InMemorySessionMapper();
         sessions.add(session(1L, 10L, "rag"));
         sessions.add(session(2L, 20L, "ops"));
 
-        AgentController controller = controller(sessions, false);
+        AgentController controller = controller(sessions);
 
         List<ChatSession> result = controller.getSessions(auth("alice"));
 
@@ -36,20 +38,22 @@ class AgentControllerSecurityTest {
     }
 
     @Test
+    @DisplayName("TC-AGENT-SEC-002 普通用户不能修改他人的会话模式")
     void nonOwnerCannotChangeSessionMode() {
         InMemorySessionMapper sessions = new InMemorySessionMapper();
         sessions.add(session(1L, 20L, "rag"));
 
-        AgentController controller = controller(sessions, false);
+        AgentController controller = controller(sessions);
 
         assertThrows(NotFoundException.class,
                 () -> controller.updateSessionMode(1L, java.util.Map.of("mode", "ops"), auth("alice")));
     }
 
     @Test
+    @DisplayName("TC-AGENT-SEC-003 新会话记录签名身份中的当前用户")
     void createdSessionStoresCurrentUser() {
         InMemorySessionMapper sessions = new InMemorySessionMapper();
-        AgentController controller = controller(sessions, false);
+        AgentController controller = controller(sessions);
 
         ChatSession created = controller.createSession(java.util.Map.of("mode", "ops"), auth("alice"));
 
@@ -57,11 +61,11 @@ class AgentControllerSecurityTest {
         assertEquals("ops", created.getMode());
     }
 
-    private AgentController controller(InMemorySessionMapper sessions, boolean admin) {
+    private AgentController controller(InMemorySessionMapper sessions) {
         AgentController controller = new AgentController();
         ReflectionTestUtils.setField(controller, "chatSessionMapper", sessions);
         ReflectionTestUtils.setField(controller, "adminAccountMapper", new StubAdminAccountMapper());
-        ReflectionTestUtils.setField(controller, "permissionService", new StubPermissionService(admin, false));
+        ReflectionTestUtils.setField(controller, "permissionService", new PermissionService());
         return controller;
     }
 
@@ -75,7 +79,8 @@ class AgentControllerSecurityTest {
     }
 
     private static Authentication auth(String username) {
-        return new UsernamePasswordAuthenticationToken(username, "n/a");
+        return GatewayAuthenticationToken.authenticated(
+                username, username, List.of("ROLE_DEV_MGR"), null, false);
     }
 
     private static class InMemorySessionMapper implements ChatSessionMapper {
@@ -169,24 +174,4 @@ class AgentControllerSecurityTest {
         }
     }
 
-    private static class StubPermissionService extends PermissionService {
-        private final boolean admin;
-        private final boolean categoryAdmin;
-
-        StubPermissionService(boolean admin, boolean categoryAdmin) {
-            super(null);
-            this.admin = admin;
-            this.categoryAdmin = categoryAdmin;
-        }
-
-        @Override
-        public boolean isAdmin(Authentication authentication) {
-            return admin;
-        }
-
-        @Override
-        public boolean isCategoryAdmin(Authentication authentication) {
-            return categoryAdmin;
-        }
-    }
 }

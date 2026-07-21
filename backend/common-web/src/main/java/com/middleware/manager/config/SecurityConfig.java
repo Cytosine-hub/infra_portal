@@ -1,6 +1,6 @@
 package com.middleware.manager.config;
 
-import com.middleware.manager.security.TokenAuthenticationFilter;
+import com.middleware.manager.security.GatewayHeaderAuthenticationFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -28,10 +28,10 @@ public class SecurityConfig {
         SecurityContextHolder.setStrategyName(SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);
     }
 
-    private final TokenAuthenticationFilter tokenAuthenticationFilter;
+    private final GatewayHeaderAuthenticationFilter gatewayHeaderAuthenticationFilter;
 
-    public SecurityConfig(TokenAuthenticationFilter tokenAuthenticationFilter) {
-        this.tokenAuthenticationFilter = tokenAuthenticationFilter;
+    public SecurityConfig(GatewayHeaderAuthenticationFilter gatewayHeaderAuthenticationFilter) {
+        this.gatewayHeaderAuthenticationFilter = gatewayHeaderAuthenticationFilter;
     }
 
     @Bean
@@ -39,7 +39,7 @@ public class SecurityConfig {
         http
                 .cors(cors -> {})
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
-                .addFilterBefore(tokenAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(gatewayHeaderAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex
                         .defaultAuthenticationEntryPointFor(
                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
@@ -60,6 +60,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/middleware-commands/**").authenticated()
                         // 登录接口公开
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        // 仅由控制器内的网关 HMAC 校验保护
+                        .requestMatchers(HttpMethod.POST, "/api/auth/introspect").permitAll()
                         // 其他 auth 接口需认证
                         .requestMatchers("/api/auth/**").authenticated()
                         // 用户管理：仅系统管理员
