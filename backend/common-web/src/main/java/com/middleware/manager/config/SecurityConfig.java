@@ -47,6 +47,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers("/error").permitAll()
+                        .requestMatchers("/health").permitAll()
                         // 文件下载与图片：对所有人公开，无需登录
                         .requestMatchers("/files/**").permitAll()
                         // 论坛：个人中心需认证，其余读公开，写需登录

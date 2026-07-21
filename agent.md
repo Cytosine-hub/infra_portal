@@ -2,13 +2,13 @@
 
 ## 1. 项目一句话定位与形态
 
-**中间件资源管理平台**：一个面向基础设施团队的内部门户，管理软件下载包（ReleaseAsset）、参数标准（含草稿→审核→发布版本流）、标准文档、论坛，并集成 AI 知识库/RAG 排查（LangChain4j + Milvus）、Wiki 知识图谱和 Zabbix 监控 Agent。业务运行时为 Spring Boot 3.5.3（Java 17，MyBatis + MySQL 8）：identity + catalog + standards 由独立 core-service 提供，论坛由 community-service 提供，knowledge + wiki + ops-agent 集群由 ai-service 提供，app 仅聚合岗位模块，前置 Spring Cloud Gateway；`cloud` profile 下通过 Nacos 注册、发现和配置。前端为 Vue 3 单页应用（Vite，无 vue-router，hash 路由）。
+**中间件资源管理平台**：一个面向基础设施团队的内部门户，管理软件下载包（ReleaseAsset）、参数标准（含草稿→审核→发布版本流）、标准文档、论坛，并集成 AI 知识库/RAG 排查（LangChain4j + Milvus）、Wiki 知识图谱和 Zabbix 监控 Agent。业务运行时为 Spring Boot 3.5.3（Java 17，MyBatis + MySQL 8）：identity + catalog + standards 由独立 core-service 提供，论坛由 community-service 提供，knowledge + wiki + ops-agent 集群由 ai-service 提供，5 个岗位模块分别由 middleware/database/host/network/security-service 提供，前置 Spring Cloud Gateway；`cloud` profile 下通过 Nacos 注册、发现和配置。前端为 Vue 3 单页应用（Vite，无 vue-router，hash 路由）。
 
 ## 2. 代码地图
 
 ```
 .
-├── backend/                         # Maven 多模块：5 个可执行部署单元 + 业务库模块
+├── backend/                         # Maven 多模块：9 个可执行部署单元 + 业务库模块
 │   ├── pom.xml                      # 聚合根父 POM，统一 Boot/Cloud/Alibaba BOM 与插件
 │   ├── modular-monolith-parent/     # 既有业务模块的依赖父 POM，隔离 Gateway WebFlux 依赖
 │   ├── common-core/                 # DTO、异常/错误码、常量、共享模型及跨模块业务端口
@@ -30,8 +30,11 @@
 │   ├── community-service/           # 独立论坛应用（:8082）；聚合 common-* + community
 │   ├── ai-service/                  # 独立 AI/Agent 应用（:8083）；聚合 knowledge + wiki + ops-agent
 │   ├── core-service/                # 独立平台核心应用（:8084）；聚合 identity + catalog + standards
-│   └── app/                         # 岗位业务启动模块（:8081）；当前仅暴露 job-middleware 端点
-│       └── src/main/java/com/middleware/manager/MiddlewareResourceManagerApplication.java
+│   ├── middleware-service/          # 中间件岗位应用（:8085）；聚合 job-middleware
+│   ├── database-service/            # 数据库岗位薄服务（:8086）；聚合 job-database
+│   ├── host-service/                # 主机岗位薄服务（:8087）；聚合 job-host
+│   ├── network-service/             # 网络岗位薄服务（:8088）；聚合 job-network
+│   └── security-service/            # 网络安全岗位薄服务（:8089）；聚合 job-security
 ├── frontend/
 │   ├── src/main.js      # 前端入口
 │   ├── src/App.vue      # 应用骨架 + hash 路由分发
@@ -162,10 +165,14 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 | 目的 | 命令 |
 |------|------|
 | 后端编译打包 | `cd backend && mvn clean package -DskipTests` |
-| app 启动（:8081） | `cd backend && mvn -pl app -am spring-boot:run` |
 | community-service 启动（:8082） | `cd backend && mvn -pl community-service -am spring-boot:run` |
 | ai-service 启动（:8083） | `cd backend && mvn -pl ai-service -am spring-boot:run` |
 | core-service 启动（:8084） | `cd backend && mvn -pl core-service -am spring-boot:run` |
+| middleware-service 启动（:8085） | `cd backend && mvn -pl middleware-service -am spring-boot:run` |
+| database-service 启动（:8086） | `cd backend && mvn -pl database-service -am spring-boot:run` |
+| host-service 启动（:8087） | `cd backend && mvn -pl host-service -am spring-boot:run` |
+| network-service 启动（:8088） | `cd backend && mvn -pl network-service -am spring-boot:run` |
+| security-service 启动（:8089） | `cd backend && mvn -pl security-service -am spring-boot:run` |
 | Gateway 启动（:8080） | `cd backend && mvn -pl api-gateway -am spring-boot:run` |
 | 后端测试 | `cd backend && mvn test` |
 | 前端安装 | `cd frontend && npm install` |
@@ -179,9 +186,9 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 
 数据库：MySQL 8.0 `127.0.0.1:3306/middleware_resource_manager`，用户 `root`，凭据在 `~/.my.cnf`；连接可用 `APP_DB_*` 环境变量覆盖。
 
-认证：五个进程启动前必须设置同一个至少 32 UTF-8 字节的 `GATEWAY_SIGNING_SECRET`，配置无生产默认值。外部请求只进 Gateway；Token 校验、滑动续期、角色和岗位权威归 core-service 的 identity，app/community/ai/core 的业务端点只接受 Gateway 签名的身份头。协议和联通验证见 `docs/microservices-stage5-gateway-authentication.md`。
+认证：九个后端进程启动前必须设置同一个至少 32 UTF-8 字节的 `GATEWAY_SIGNING_SECRET`，配置无生产默认值。外部请求只进 Gateway；Token 校验、滑动续期、角色和岗位权威归 core-service 的 identity，各业务服务的受保护端点只接受 Gateway 签名的身份头。协议和联通验证见 `docs/microservices-stage5-gateway-authentication.md`。
 
-Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，服务名为 `middleware-resource-manager-app`、`community-service`、`ai-service`、`core-service` 和 `api-gateway`。Gateway 将 `/api/forum/**` 路由到 community-service，将 `/api/knowledge/**`、`/api/agent/**`、`/api/wiki/**`、`/api/ops-agent/**` 路由到 ai-service，将 identity/catalog/standards 的原路径和 `/files/**` 路由到 core-service，其余 `/api/**`（当前为岗位端点）路由到 app；Gateway 对 introspect 的调用在 `cloud` profile 下通过负载均衡的 `http://core-service` 完成。端口和路由见 `docs/microservices-stage4-core-service.md`，认证联通见 `docs/microservices-stage5-gateway-authentication.md`。
+Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，9 个服务名与 Maven 服务目录一致。Gateway 将 `/api/forum/**` 路由到 community-service，将 `/api/knowledge/**`、`/api/agent/**`、`/api/wiki/**`、`/api/ops-agent/**` 路由到 ai-service，将 identity/catalog/standards 的原路径和 `/files/**` 路由到 core-service，将 `/api/middleware-commands/**` 路由到 middleware-service；其余 4 个岗位服务仅注册 Nacos，新增业务端点时再增加精确网关路由，禁止恢复 `/api/**` 泛路由。Gateway 对 introspect 的调用在 `cloud` profile 下通过负载均衡的 `http://core-service` 完成。端口和路由见 `docs/microservices-stage6-job-services.md`，认证联通见 `docs/microservices-stage5-gateway-authentication.md`。
 
 ## 8. 测试（严格 TDD）
 

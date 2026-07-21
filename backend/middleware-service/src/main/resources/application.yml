@@ -1,0 +1,53 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: middleware-service
+  autoconfigure:
+    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+        register-enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+  datasource:
+    url: jdbc:mysql://${APP_DB_HOST:127.0.0.1}:${APP_DB_PORT:3306}/${APP_DB_NAME:middleware_resource_manager}?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${APP_DB_USERNAME:root}
+    password: ${APP_DB_PASSWORD:}
+    hikari:
+      initialization-fail-timeout: -1
+      minimum-idle: 2
+
+logging:
+  level:
+    root: INFO
+    com.middleware: INFO
+  file:
+    name: logs/middleware-service.log
+
+app:
+  storage:
+    location: ./storage
+  security:
+    gateway-signing-secret: ${GATEWAY_SIGNING_SECRET:}
+
+mybatis:
+  mapper-locations:
+    - classpath*:mapper/SoftwareTypeMapper.xml
+    - classpath*:mapper/ApiAuditLogMapper.xml
+    - classpath*:mapper/MiddlewareCommandMapper.xml
+  type-aliases-package: com.middleware.manager.domain
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+pagehelper:
+  helper-dialect: mysql
+  reasonable: true
+  support-methods-arguments: true

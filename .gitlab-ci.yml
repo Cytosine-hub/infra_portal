@@ -105,16 +105,68 @@ verify:community-service:
         - backend/common-web/**/*
         - .gitlab-ci.yml
 
-verify:app:
+verify:middleware-service:
   extends: .svc-verify
-  variables: { SVC: app }
+  variables: { SVC: middleware-service }
   rules:
     - changes:
-        - backend/app/**/*
+        - backend/middleware-service/**/*
         - backend/job-middleware/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+        - .gitlab-ci.yml
+
+verify:database-service:
+  extends: .svc-verify
+  variables: { SVC: database-service }
+  rules:
+    - changes:
+        - backend/database-service/**/*
         - backend/job-database/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+        - .gitlab-ci.yml
+
+verify:host-service:
+  extends: .svc-verify
+  variables: { SVC: host-service }
+  rules:
+    - changes:
+        - backend/host-service/**/*
         - backend/job-host/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+        - .gitlab-ci.yml
+
+verify:network-service:
+  extends: .svc-verify
+  variables: { SVC: network-service }
+  rules:
+    - changes:
+        - backend/network-service/**/*
         - backend/job-network/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+        - .gitlab-ci.yml
+
+verify:security-service:
+  extends: .svc-verify
+  variables: { SVC: security-service }
+  rules:
+    - changes:
+        - backend/security-service/**/*
         - backend/job-security/**/*
         - backend/pom.xml
         - backend/modular-monolith-parent/pom.xml
@@ -191,7 +243,27 @@ deploy:community-service:
   variables: { SVC: community-service }
   needs: ["verify:community-service"]
 
-deploy:app:
+deploy:middleware-service:
   extends: .deploy-tpl
-  variables: { SVC: app }
-  needs: ["verify:app"]
+  variables: { SVC: middleware-service }
+  needs: ["verify:middleware-service"]
+
+deploy:database-service:
+  extends: .deploy-tpl
+  variables: { SVC: database-service }
+  needs: ["verify:database-service"]
+
+deploy:host-service:
+  extends: .deploy-tpl
+  variables: { SVC: host-service }
+  needs: ["verify:host-service"]
+
+deploy:network-service:
+  extends: .deploy-tpl
+  variables: { SVC: network-service }
+  needs: ["verify:network-service"]
+
+deploy:security-service:
+  extends: .deploy-tpl
+  variables: { SVC: security-service }
+  needs: ["verify:security-service"]

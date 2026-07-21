@@ -1,118 +1,80 @@
 # 本地前后端启动脚本
 
-本文档记录本项目的本地启动方式。下次需要启动时，直接查看本文档即可，不需要重新扫描代码库。
-
 ## 一键启动
 
-在项目根目录执行：
+先在 `backend/` 执行 `mvn -DskipTests package` 生成 9 个可执行 JAR，再从项目根目录执行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-full.ps1
 ```
 
-启动后访问：
+启动地址：
 
-```text
-前端：http://localhost:5173
-网关：http://localhost:8080
-后端 app：http://localhost:8081
-论坛服务：http://localhost:8082
-AI 服务：http://localhost:8083
-平台核心：http://localhost:8084
-```
+| 进程 | 地址 |
+|------|------|
+| api-gateway | http://localhost:8080 |
+| community-service | http://localhost:8082 |
+| ai-service | http://localhost:8083 |
+| core-service | http://localhost:8084 |
+| middleware-service | http://localhost:8085 |
+| database-service | http://localhost:8086 |
+| host-service | http://localhost:8087 |
+| network-service | http://localhost:8088 |
+| security-service | http://localhost:8089 |
+| 前端 | http://localhost:5173 |
 
-常用接口检查：
-
-```text
-http://localhost:8080/api/public/releases
-http://localhost:8080/api/forum/posts
-http://localhost:8080/api/wiki/pages
-```
+`8081` 不再使用；`app` 已退役。
 
 ## 分别启动
 
-后端 app 使用 `target` 目录下已经打好的可执行 jar：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start-local-backend-jar.ps1
-```
-
-Gateway 使用自己的可执行 jar；默认 profile 将论坛转发到 community-service、AI 集群请求转发到 ai-service、其余请求转发到 app，不要求 Nacos：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start-local-gateway-jar.ps1
-```
-
-community-service 使用独立可执行 jar：
+平台服务沿用各自脚本：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-community-jar.ps1
-```
-
-ai-service 使用独立可执行 jar：
-
-```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-ai-jar.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-core-jar.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-gateway-jar.ps1
 ```
 
-core-service 使用独立可执行 jar：
+岗位服务使用统一脚本：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start-local-core-jar.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-job-service-jar.ps1 -ServiceName middleware-service -Port 8085
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-job-service-jar.ps1 -ServiceName database-service -Port 8086
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-job-service-jar.ps1 -ServiceName host-service -Port 8087
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-job-service-jar.ps1 -ServiceName network-service -Port 8088
+powershell -ExecutionPolicy Bypass -File .\scripts\start-local-job-service-jar.ps1 -ServiceName security-service -Port 8089
 ```
 
-前端项目位于 `frontend` 目录，使用 Vite 开发服务：
+前端：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-frontend-dev.ps1
 ```
 
-## 日志文件
-
-脚本会把服务输出写入项目根目录：
+## 健康检查
 
 ```text
-backend-local.out.log
-backend-local.err.log
-gateway-local.out.log
-gateway-local.err.log
-community-local.out.log
-community-local.err.log
-ai-local.out.log
-ai-local.err.log
-core-local.out.log
-core-local.err.log
-frontend-local.out.log
-frontend-local.err.log
+http://localhost:8086/health
+http://localhost:8087/health
+http://localhost:8088/health
+http://localhost:8089/health
+http://localhost:8080/api/middleware-commands/types
 ```
 
-如果页面打不开，先看这几个日志文件。
+Gateway 默认 profile 将中间件命令转发到 `middleware-service:8085`。其余 4 个岗位服务暂无业务路径，不配置网关路由。
 
-## 端口
+## 日志
 
-默认端口：
+脚本将日志写到项目根目录，岗位服务命名为 `<service>-local.out.log` 和 `<service>-local.err.log`。已有平台服务继续使用 `gateway/community/ai/core-local.*.log`，前端使用 `frontend-local.*.log`。
 
-```text
-Gateway：8080
-后端 app：8081
-community-service：8082
-ai-service：8083
-core-service：8084
-前端：5173
-```
+## 数据库与密钥
 
-脚本启动前会检查默认端口是否已经被监听。如果端口已经在使用，脚本会提示已有 PID 并跳过重复启动。
+所有业务服务连接同一 MySQL。数据库密码由 `APP_DB_PASSWORD` 提供；网关及业务服务必须使用同一个至少 32 UTF-8 字节的 `GATEWAY_SIGNING_SECRET`。仓库不提供真实默认值。
 
-## 数据库
-
-后端连接本地 MySQL。如果数据库未启动，可先执行：
+数据库脚本：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start-local-mysql.ps1
-```
-
-停止本地 MySQL：
-
-```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\stop-local-mysql.ps1
 ```

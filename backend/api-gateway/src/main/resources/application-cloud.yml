@@ -39,10 +39,10 @@ spring:
               uri: lb://core-service
               predicates:
                 - Path=/api/auth/**,/api/admin/users/**,/api/admin/account/**,/api/admin/settings/**,/api/admin/releases/**,/api/admin/software-types/**,/api/admin/software-type-categories/**,/api/admin/parameter-standards/**,/api/admin/standard-documents/**,/api/admin/standard-parameters/**,/api/admin/reviews/**,/api/admin/revisions/**,/api/admin/images/**,/api/public/**,/files/**
-            - id: app-api
-              uri: lb://middleware-resource-manager-app
+            - id: middleware-api
+              uri: lb://middleware-service
               predicates:
-                - Path=/api/**
+                - Path=/api/middleware-commands/**
 
 app:
   security:

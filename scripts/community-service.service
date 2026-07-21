@@ -6,6 +6,7 @@ After=network.target mysql.service
 Type=simple
 User=root
 WorkingDirectory=/app/infra_portal/backend
+EnvironmentFile=-/app/infra_portal/backend/services.env
 ExecStart=/usr/local/java/bisheng-jdk-17.0.12/bin/java -Xms512m -Xmx512m -jar /app/infra_portal/backend/community-service-0.0.1-SNAPSHOT-exec.jar --spring.config.additional-location=optional:file:/app/infra_portal/backend/community-application.yml
 ExecStop=/bin/kill -SIGTERM $MAINPID
 Restart=on-failure

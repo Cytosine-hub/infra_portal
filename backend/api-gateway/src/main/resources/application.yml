@@ -31,10 +31,10 @@ spring:
               uri: "${CORE_SERVICE_URL:http://127.0.0.1:8084}"
               predicates:
                 - Path=/api/auth/**,/api/admin/users/**,/api/admin/account/**,/api/admin/settings/**,/api/admin/releases/**,/api/admin/software-types/**,/api/admin/software-type-categories/**,/api/admin/parameter-standards/**,/api/admin/standard-documents/**,/api/admin/standard-parameters/**,/api/admin/reviews/**,/api/admin/revisions/**,/api/admin/images/**,/api/public/**,/files/**
-            - id: app-api
-              uri: "${APP_SERVICE_URL:http://127.0.0.1:8081}"
+            - id: middleware-api
+              uri: "${MIDDLEWARE_SERVICE_URL:http://127.0.0.1:8085}"
               predicates:
-                - Path=/api/**
+                - Path=/api/middleware-commands/**
 
 app:
   security:

@@ -1,12 +1,13 @@
 [Unit]
 Description=Middleware Resource Manager API Gateway
-After=network.target infra-portal.service community-service.service ai-service.service core-service.service
-Wants=infra-portal.service community-service.service ai-service.service core-service.service
+After=network.target community-service.service ai-service.service core-service.service middleware-service.service database-service.service host-service.service network-service.service security-service.service
+Wants=community-service.service ai-service.service core-service.service middleware-service.service database-service.service host-service.service network-service.service security-service.service
 
 [Service]
 Type=simple
 User=root
 WorkingDirectory=/app/infra_portal/backend
+EnvironmentFile=-/app/infra_portal/backend/services.env
 ExecStart=/usr/local/java/bisheng-jdk-17.0.12/bin/java -Xms512m -Xmx512m -jar /app/infra_portal/backend/api-gateway-0.0.1-SNAPSHOT-exec.jar
 ExecStop=/bin/kill -SIGTERM $MAINPID
 Restart=on-failure

@@ -23,12 +23,12 @@ class ApiGatewayApplicationTests {
     private Environment environment;
 
     @Test
-    @DisplayName("TC-GATEWAY-001 默认 profile 将论坛、AI 和平台核心静态路由到独立服务")
+    @DisplayName("TC-GATEWAY-001 默认 profile 将中间件命令静态路由到 middleware-service")
     void defaultProfileUsesStaticRouteWithNacosDisabled() {
         RouteDefinition communityRoute = findRoute("community-api");
         RouteDefinition aiRoute = findRoute("ai-api");
         RouteDefinition coreRoute = findRoute("core-api");
-        RouteDefinition appRoute = findRoute("app-api");
+        RouteDefinition middlewareRoute = findRoute("middleware-api");
 
         assertThat(communityRoute.getUri()).isEqualTo(URI.create("http://127.0.0.1:8082"));
         assertThat(communityRoute.getPredicates()).singleElement().satisfies(predicate -> {
@@ -65,10 +65,10 @@ class ApiGatewayApplicationTests {
                     "/api/public/**",
                     "/files/**");
         });
-        assertThat(appRoute.getUri()).isEqualTo(URI.create("http://127.0.0.1:8081"));
-        assertThat(appRoute.getPredicates()).singleElement().satisfies(predicate -> {
+        assertThat(middlewareRoute.getUri()).isEqualTo(URI.create("http://127.0.0.1:8085"));
+        assertThat(middlewareRoute.getPredicates()).singleElement().satisfies(predicate -> {
             assertThat(predicate.getName()).isEqualTo("Path");
-            assertThat(predicate.getArgs()).containsValue("/api/**");
+            assertThat(predicate.getArgs()).containsValue("/api/middleware-commands/**");
         });
         assertThat(environment.getProperty("spring.cloud.nacos.discovery.enabled", Boolean.class))
                 .isFalse();

@@ -1,42 +1,29 @@
-# Restart Spring Boot Backend
-# Usage: powershell -ExecutionPolicy Bypass -File .\scripts\restart-backend.ps1
+$ErrorActionPreference = "Stop"
 
-$projectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-Set-Location (Join-Path $projectRoot 'backend')
+$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$Services = @(
+    @{ Name = "middleware-service"; Port = 8085 },
+    @{ Name = "database-service"; Port = 8086 },
+    @{ Name = "host-service"; Port = 8087 },
+    @{ Name = "network-service"; Port = 8088 },
+    @{ Name = "security-service"; Port = 8089 }
+)
 
-Write-Host "==> Stopping backend on port 8081..." -ForegroundColor Yellow
-$pid8081 = (netstat -ano | Select-String ':8081.*LISTENING' | ForEach-Object { ($_ -split '\s+')[-1] } | Select-Object -First 1)
-if ($pid8081) {
-    Stop-Process -Id $pid8081 -Force -ErrorAction SilentlyContinue
-    Write-Host "    Stopped PID $pid8081" -ForegroundColor Gray
-    Start-Sleep -Seconds 2
-} else {
-    Write-Host "    No process on port 8081" -ForegroundColor Gray
-}
-
-Write-Host "==> Starting backend..." -ForegroundColor Yellow
-
-mvn -pl app -am spring-boot:run 1>backend-local.out.log 2>backend-local.err.log &
-$mvnPid = $LASTPROCESSID
-
-Write-Host "    Maven PID: $mvnPid" -ForegroundColor Gray
-Write-Host "==> Waiting for backend to start (max 120s)..." -ForegroundColor Yellow
-
-$timeout = 120
-$elapsed = 0
-while ($elapsed -lt $timeout) {
-    Start-Sleep -Seconds 3
-    $elapsed += 3
-    $pid = (netstat -ano | Select-String ':8081.*LISTENING' | ForEach-Object { ($_ -split '\s+')[-1] } | Select-Object -First 1)
-    if ($pid) {
-        Write-Host "==> Backend started on port 8081 (PID $pid) in ${elapsed}s" -ForegroundColor Green
-        Write-Host "    Logs: $projectRoot\backend-local.out.log" -ForegroundColor Gray
-        Write-Host "    Direct API:  http://localhost:8081/api/middleware-commands/types" -ForegroundColor Gray
-        exit 0
+foreach ($service in $Services) {
+    Write-Host "==> Stopping $($service.Name) on port $($service.Port)..." -ForegroundColor Yellow
+    $listener = Get-NetTCPConnection -State Listen -LocalPort $service.Port -ErrorAction SilentlyContinue
+    if ($listener) {
+        Stop-Process -Id $listener.OwningProcess -Force -ErrorAction SilentlyContinue
     }
-    Write-Host "    ... ${elapsed}s" -ForegroundColor Gray
 }
 
-Write-Host "==> ERROR: Backend failed to start within ${timeout}s" -ForegroundColor Red
-Write-Host "    Check $projectRoot\backend-local.out.log" -ForegroundColor Red
-exit 1
+Set-Location (Join-Path $ProjectRoot "backend")
+mvn -pl middleware-service,database-service,host-service,network-service,security-service -am package -DskipTests
+
+foreach ($service in $Services) {
+    & (Join-Path $PSScriptRoot "start-local-job-service-jar.ps1") `
+        -ServiceName $service.Name `
+        -Port $service.Port
+}
+
+Write-Host "==> Five job services restarted." -ForegroundColor Green

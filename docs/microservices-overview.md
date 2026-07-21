@@ -1,20 +1,18 @@
 # 后端微服务化 · 全景与备忘
 
-> 中间件资源管理平台后端按**岗位边界**拆分为微服务的总览、关键决策与待办。
-> 交互版全景图（可视化，私有 artifact）：<https://claude.ai/code/artifact/74a097a9-a97e-401a-826b-b2ab54fca570>
-> 各阶段详细说明见 `docs/microservices-split-plan.md` 与 `docs/microservices-stage*.md`。
+> 中间件资源管理平台后端按平台能力与岗位边界拆分后的总览。各阶段详细说明见 `docs/microservices-split-plan.md` 与 `docs/microservices-stage*.md`。
 
 ## 概览
 
 | 指标 | 值 |
 |------|----|
-| 可部署单元 | 6（网关 + 5 服务） |
-| Maven 模块 | 22 |
-| 测试 | 126 · 全绿 |
-| 业务端点 | 148 · 逐字不变 |
+| 可部署单元 | 9（网关 + 3 个平台能力服务 + 5 个岗位服务） |
+| Maven Reactor 项目 | 26 |
+| 测试 | 134 · 全绿 |
+| 业务端点 | 148 · 路径、鉴权、SQL 不变 |
 | DB / 前端改动 | 0 |
 
-运行时仍是**单进程集合 + 单 MySQL**（共享库 + 逻辑归属，二期再物理拆库）；行为与拆分前逐字一致。
+运行时为 9 个 Java 进程 + 单 MySQL（共享库 + 逻辑归属，二期再物理拆库）。`app` 已在阶段 6 退役。
 
 ## 服务拓扑
 
@@ -25,23 +23,40 @@ graph TD
   GW --> CORE["core-service :8084<br/>identity + catalog + standards"]
   GW --> AI["ai-service :8083<br/>knowledge + wiki + ops-agent"]
   GW --> COMM["community-service :8082<br/>forum"]
-  GW --> APP["app · 岗位服务 :8081<br/>middleware-commands + 岗位骨架"]
+  GW --> MW["middleware-service :8085<br/>middleware-commands"]
+  DBJOB["database-service :8086<br/>岗位骨架 · /health"]
+  HOST["host-service :8087<br/>岗位骨架 · /health"]
+  NET["network-service :8088<br/>岗位骨架 · /health"]
+  SEC["security-service :8089<br/>岗位骨架 · /health"]
   GW -. introspect 校验 .-> CORE
   NACOS[("Nacos<br/>注册 + 配置")] -.- GW
+  NACOS -.- CORE
+  NACOS -.- AI
+  NACOS -.- COMM
+  NACOS -.- MW
+  NACOS -.- DBJOB
+  NACOS -.- HOST
+  NACOS -.- NET
+  NACOS -.- SEC
   DB[("MySQL 单库<br/>逻辑归属")] -.- CORE
+  DB -.- MW
 ```
+
+database/host/network/security-service 当前没有业务路径，只在 `cloud` profile 注册 Nacos，不配置网关路由。新增业务端点时必须使用精确路径增加路由，禁止恢复 `/api/**` 兜底路由。
 
 ## 服务职责 / 端点 / 数据归属
 
 | 服务 | 端口 | 职责 | 主要对外端点 | 数据表 |
 |------|------|------|------|------|
-| **api-gateway** | 8080 | 统一入口 · 集中认证 · 路由（无业务表） | `/api/**`（转发） | — |
-| **core-service** | 8084 | 平台核心：身份 + 资源目录 + 标准（identity+catalog+standards） | `/api/auth` `/api/admin/users\|account\|settings` `/api/admin/releases\|software-types` `/api/admin/parameter-standards\|standard-documents\|reviews` `/api/public/*` | admin_accounts, roles, user_tokens, system_settings, api_audit_log, software_types, release_assets, parameter_standards, standard_documents, review_records … |
-| **ai-service** | 8083 | AI/Agent 集群：知识库 RAG + Wiki + Zabbix Agent | `/api/knowledge` `/api/agent` `/api/wiki` `/api/ops-agent(/export)` | knowledge_chunks, chat_sessions, chat_messages, wiki_*, agent_tool_invocations |
-| **community-service** | 8082 | 论坛社区 | `/api/forum` | forum_posts, forum_comments, forum_tags, forum_post_likes, forum_post_tags |
-| **app · 岗位服务** | 8081 | 岗位专属能力（对齐前端 5 岗位） | `/api/middleware-commands` | middleware_commands, middleware_types |
-
-**专属重依赖**：Milvus / LangChain4j / Apache POI 归 ai-service（已从单体移出）。
+| **api-gateway** | 8080 | 统一入口、集中认证、路由 | `/api/**`（按精确规则转发） | - |
+| **community-service** | 8082 | 论坛社区 | `/api/forum/**` | forum_* |
+| **ai-service** | 8083 | 知识库 RAG、Wiki、Zabbix Agent | `/api/knowledge/**` `/api/agent/**` `/api/wiki/**` `/api/ops-agent/**` | knowledge_*、wiki_*、agent_tool_invocations |
+| **core-service** | 8084 | 身份、资源目录、标准 | `/api/auth/**` `/api/admin/**` `/api/public/**` `/files/**` | admin_accounts、roles、user_tokens、catalog/standards 相关表 |
+| **middleware-service** | 8085 | 中间件岗位专属命令 | `/api/middleware-commands/**` | middleware_commands、middleware_types；只读 software_types |
+| **database-service** | 8086 | 数据库岗位骨架 | 直连 `/health`，暂无网关业务路由 | 暂无专属表 |
+| **host-service** | 8087 | 主机岗位骨架 | 直连 `/health`，暂无网关业务路由 | 暂无专属表 |
+| **network-service** | 8088 | 网络岗位骨架 | 直连 `/health`，暂无网关业务路由 | 暂无专属表 |
+| **security-service** | 8089 | 网络安全岗位骨架 | 直连 `/health`，暂无网关业务路由 | 暂无专属表 |
 
 ## 集中认证流
 
@@ -51,71 +66,49 @@ sequenceDiagram
   participant G as api-gateway
   participant I as core-service · identity
   participant S as 下游服务
-  C->>G: Authorization: Bearer <token>
-  G->>G: ① 剥掉客户端一切身份头（防伪造提权）
-  G->>I: ② POST /api/auth/introspect（带 X-Gateway-Sign）
-  I-->>G: { user, roles, category }（短 TTL 缓存）
-  G->>S: ③ 注入 X-User/X-Roles/X-Category + HMAC 签名 X-Gateway-Sign
-  S->>S: 先验签，通过才信任身份头 → 构建 SecurityContext 鉴权
+  C->>G: Authorization: Bearer token
+  G->>G: 删除客户端身份头
+  G->>I: POST /api/auth/introspect + 网关签名
+  I-->>G: user / roles / category
+  G->>S: 注入身份头 + HMAC 签名
+  S->>S: 验签后构建 SecurityContext
 ```
 
-**安全护栏**：网关剥客户端头（防伪造）· 下游验 HMAC 签名（防绕网关直连）· introspect 仅认网关签名（否则 403）· `GATEWAY_SIGNING_SECRET` ≥32 字节纯环境变量。
+所有服务复用 `common-security` 与 `common-web`。`GATEWAY_SIGNING_SECRET` 必须由环境变量提供且至少 32 UTF-8 字节，配置文件不提供真实默认值。
 
 ## 共享基础库
 
 | 库 | 内容 |
 |----|------|
-| `common-core` | DTO · 错误码 · 跨模块端口契约（SoftwareTypeLookup / AccountDirectory 等） |
-| `common-security` | 网关头信任 Filter · HMAC 签名服务 · 岗位(category)权限模型 |
-| `common-web` | 过滤器 · 全局异常 · SecurityConfig 路径规则（逐字未改） |
+| `common-core` | DTO、错误码、共享模型、跨模块端口契约 |
+| `common-security` | 网关身份头验签、HMAC、岗位(category)权限模型 |
+| `common-web` | SecurityConfig、访问日志、审计、全局异常处理；公开 `/health` |
 
-## 拆分历程（strangler-fig）
+## 拆分历程
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
-| 0 | 模块化单体（Maven 多模块，261 rename、0 内容改动） | ✅ |
-| 1 | api-gateway + Nacos 地基（默认 profile 不依赖 Nacos） | ✅ |
-| 2 | 剥离 community-service | ✅ |
-| 3 | 剥离 ai-service（Milvus/LangChain4j 移出单体） | ✅ |
-| 4 | 剥离 core-service（app 变为岗位服务） | ✅ |
-| 5 | 网关集中认证（多语言开关；角色权限归 identity） | ✅ |
-| CI | 按路径触发的 monorepo 流水线（`.gitlab-ci.yml`，Lint 通过） | ✅ |
+| 0 | 模块化单体 | 已完成 |
+| 1 | api-gateway + Nacos 地基 | 已完成 |
+| 2 | 剥离 community-service | 已完成 |
+| 3 | 剥离 ai-service | 已完成 |
+| 4 | 剥离 core-service | 已完成 |
+| 5 | 网关集中认证 | 已完成 |
+| 6 | 5 个岗位服务独立部署，app 退役 | 已完成 |
+| 7 | 物理拆库、可观测性、完整预发集成 | 待实施 |
 
-节奏：写规格 → codex(gpt-5.6-sol/xhigh) 实现 → 独立验收 → 推分支，全部累积在 `refactor/backend-modular-monolith`（MR !6 Draft）。
+## 关键不变量
 
----
+- 9 个可执行 JAR：api-gateway、core-service、ai-service、community-service 与 5 个岗位服务，无 app。
+- `/api/middleware-commands/**` 的 Controller、Service、Mapper XML、DDL/DML 均未修改，只变更承载进程和网关目标。
+- 148 个业务端点保持不变；四个 `/health` 是运维端点，不计入业务端点集合。
+- 默认 profile 所有服务关闭 Nacos；只有 `cloud` profile 注册和读取 Nacos 配置。
+- 服务间零编译依赖；部署服务只依赖 `common-*` 与自身能力模块。
+- 仓库不存真实密钥。DB、Nacos、AI、Zabbix 与网关签名凭据均通过环境变量注入。
 
-## 备忘 · 关键决策与不变量
+## 后续待办
 
-- **仓库/分支**：`zhugl/middleware_resource_manager` · `refactor/backend-modular-monolith`（MR !6 Draft，改造完成再合并 master）。
-- **部署**：**jar + systemd** 上 VM（非容器）。起停顺序 Nacos → core-service → 其余服务 → api-gateway。
-- **数据**：单 MySQL（共享库 + 逻辑归属）；**服务间禁跨库 join**，只走 API/事件；二期再 db-per-service。
-- **认证**：网关校验 token（调 core 的 `/api/auth/introspect`）+ 剥客户端头 + 注入 HMAC 签名身份头；下游**验签才信任**；`GATEWAY_SIGNING_SECRET` ≥32 字节、纯环境变量。
-- **构建**：服务间**零编译依赖**（只依赖同仓 `common-*`）；单服务构建用 `mvn -pl <svc> -am`；`common-*` 变更扇出全建。
-- **不变量**：148 业务端点 / SQL / SecurityConfig **逐字未改**；126 测试全绿。
-- **版本**：Spring Boot 3.5 · Java 17 · Spring Cloud 2025.0.0 + Spring Cloud Alibaba 2025.0.0.0。
-- **🔴 安全**：仓库历史曾提交**真实密钥**（DB 密码 / AI Key 等）；最新文件已止血为环境变量，但**历史与公开镜像未清洗** → 必须在源头**轮换**。
-
-## TODO
-
-### 🔴 优先 / 仅负责人可做
-- [ ] **源头轮换已泄露密钥**（DB 密码、AI Key、Zabbix、Wiki 签名），配到环境变量
-- [ ] **注册 GitLab Runner**（docker executor），否则 CI 流水线 pending
-- [ ] **Review 分支并合并** MR !6 到 master（改造完成后）
-
-### 部署（jar + systemd）
-- [ ] 补全 deploy 脚本：每服务 systemd unit + scp/restart（替换 CI 骨架）
-- [ ] 生产配置：各服务端口 / Nacos 地址 / `GATEWAY_SIGNING_SECRET` 等 env 下发
-- [ ] 部署手册：起停顺序 + 健康检查
-
-### 真实环境验证
-- [ ] 认证越权 3 条（伪造头直连 / 经网关塞头 / 无签名 introspect）
-- [ ] Nacos + 多进程注册发现、网关动态路由
-- [ ] 外部依赖联通：Milvus / LLM / Zabbix
-- [ ] 集成流水线补全（起服务跑上述断言）
-
-### 后续演进（可选）
-- [ ] db-per-service 物理拆库（二期）
-- [ ] 可观测性：链路 / 日志 / 指标（OpenTelemetry）
-- [ ] 多语言试水：一个 Go / Python 服务验证网关身份头接入
-- [ ] 岗位业务补全：主机 / 网络 / 安全岗位后端目前是骨架
+- 注册 GitLab Runner，并补全 `integration:e2e` 的真实 Nacos/MySQL 多进程验证。
+- 按服务物理拆库，建立跨服务事件与对账机制。
+- 引入 OpenTelemetry 指标、日志与链路追踪。
+- database/host/network/security 岗位新增业务端点时补精确网关路由、鉴权和契约测试。

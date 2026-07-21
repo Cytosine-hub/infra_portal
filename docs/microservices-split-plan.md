@@ -2,7 +2,7 @@
 
 > 目标：把当前单体后端按「岗位」组织成模块，并演进为微服务架构，与前端已有的岗位化模块对齐。
 > 本文档既是给人审阅的设计方案，也是交给实现 Agent（codex gpt-5.6-sol / xhigh）的规格书。
-> 进度：阶段 0-5 已完成；阶段 5 已将 Token 校验集中到 Gateway + identity，并由 Gateway 向下游下发签名身份头。落地细节见 `docs/microservices-stage5-gateway-authentication.md`。
+> 进度：阶段 0-6 已完成；阶段 6 已将 5 个岗位模块拆为独立服务并退役 app。落地细节见 `docs/microservices-stage6-job-services.md`。
 
 ---
 
@@ -90,7 +90,8 @@
 - **阶段 3 — ai-service 剥离（已落地）**：knowledge、wiki、ops-agent 作为紧耦合 AI/Agent 边界上下文整体剥离，Gateway 按原路径路由，避免集群内部远程调用。
 - **阶段 4 — core-service 剥离（已落地）**：identity、catalog、standards 因三个内部端口闭环整体剥离，Gateway 按原路径和 `/files/**` 路由，app 仅保留岗位模块。
 - **阶段 5 — 网关集中认证（已落地）**：identity 提供 HMAC 保护的内部 introspect；Gateway 集中校验并短 TTL 缓存，清洗和签名注入身份头；下游停止查询 token/角色表，只按签名身份上下文授权。
-- **阶段 6 — 数据与运维**：物理拆库、分布式配置、可观测性(链路/日志/指标)、每服务独立 CI/CD。
+- **阶段 6 — 岗位服务拆分（已落地）**：job-middleware/database/host/network/security 分别由 5 个独立 Spring Boot 服务承载；`/api/middleware-commands/**` 精确路由到 middleware-service；4 个薄服务提供 `/health`；app 退役。
+- **阶段 7 — 数据与运维**：物理拆库、可观测性(链路/日志/指标)、完整预发集成与服务级配置治理。
 
 ---
 

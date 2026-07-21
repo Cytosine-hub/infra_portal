@@ -38,7 +38,11 @@
         <module>community-service</module>
         <module>ai-service</module>
         <module>core-service</module>
-        <module>app</module>
+        <module>middleware-service</module>
+        <module>database-service</module>
+        <module>host-service</module>
+        <module>network-service</module>
+        <module>security-service</module>
     </modules>
 
     <properties>

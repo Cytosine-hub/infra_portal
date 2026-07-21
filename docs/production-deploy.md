@@ -1,6 +1,6 @@
 # 生产环境部署手册
 
-> 本文主体保留早期单体直连部署说明，仅供历史环境参考。当前阶段 4 拓扑为 Gateway `:8080` + app `:8081` + community-service `:8082` + ai-service `:8083` + core-service `:8084`；新部署以 `docs/microservices-stage4-core-service.md` 为准。
+> 本文主体保留早期单体直连部署说明，仅供历史环境参考。当前阶段 6 为 9 进程拓扑，`app` 与 `:8081` 已退役；新部署以 `docs/microservices-stage6-job-services.md` 和 `scripts/package-for-deploy.sh` 为准。
 
 ## 1. 架构概览
 
@@ -41,7 +41,7 @@
 ```bash
 cd /path/to/middleware_resource_manager/backend
 mvn clean package -DskipTests
-# 产物：backend/app/target/middleware-resource-manager-0.0.1-SNAPSHOT-exec.jar
+# 产物：9 个 `backend/*-service/target/*-exec.jar`（含 api-gateway，无 app）
 ```
 
 ### 3.2 构建前端

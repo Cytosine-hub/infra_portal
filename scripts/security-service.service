@@ -1,0 +1,20 @@
+[Unit]
+Description=Security Job Service
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/app/infra_portal/backend
+EnvironmentFile=-/app/infra_portal/backend/services.env
+ExecStart=/usr/local/java/bisheng-jdk-17.0.12/bin/java -Xms256m -Xmx512m -jar /app/infra_portal/backend/security-service-0.0.1-SNAPSHOT-exec.jar --spring.config.additional-location=optional:file:/app/infra_portal/backend/security-application.yml
+ExecStop=/bin/kill -SIGTERM $MAINPID
+Restart=on-failure
+RestartSec=10
+SuccessExitStatus=143
+
+StandardOutput=append:/app/infra_portal/logs/security-service.log
+StandardError=append:/app/infra_portal/logs/security-service.log
+
+[Install]
+WantedBy=multi-user.target

@@ -63,8 +63,8 @@ DB_PORT="${APP_DB_PORT:-3306}"
 DB_USER="${APP_DB_USERNAME:-root}"
 DB_PASS="${APP_DB_PASSWORD:-}"
 
-if [[ -z "$DB_PASS" && -f "$DEPLOY_DIR/backend/application.yml" ]]; then
-    DB_PASS=$(grep -A1 'password:' "$DEPLOY_DIR/backend/application.yml" | tail -1 | sed 's/.*password: *//;s/ *$//' | tr -d '"')
+if [[ -z "$DB_PASS" && -f "$DEPLOY_DIR/backend/core-application.yml" ]]; then
+    DB_PASS=$(grep -A1 'password:' "$DEPLOY_DIR/backend/core-application.yml" | tail -1 | sed 's/.*password: *//;s/ *$//' | tr -d '"')
 fi
 
 MYSQL_CMD="$MYSQL -h$DB_HOST -P$DB_PORT -u$DB_USER"
@@ -87,7 +87,7 @@ if [[ "$MODULE" == "all" || "$MODULE" == "backend" ]]; then
         log "备份旧后端..."
         mkdir -p "$BACKUP_DIR/$TIMESTAMP/backend"
         cp "$DEPLOY_DIR/backend/"*.jar "$BACKUP_DIR/$TIMESTAMP/backend/" 2>/dev/null || true
-        cp "$DEPLOY_DIR/backend/application.yml" "$BACKUP_DIR/$TIMESTAMP/backend/" 2>/dev/null || true
+        cp "$DEPLOY_DIR/backend/"*-application.yml "$BACKUP_DIR/$TIMESTAMP/backend/" 2>/dev/null || true
     fi
 fi
 
@@ -120,12 +120,34 @@ fi
 # --- 部署后端 ---
 if [[ "$MODULE" == "all" || "$MODULE" == "backend" ]]; then
     if [[ -d "$TMPDIR/backend" ]]; then
+        if [[ ! -f "$DEPLOY_DIR/backend/services.env" && -f "$TMPDIR/backend/services.env.example" ]]; then
+            cp "$TMPDIR/backend/services.env.example" "$DEPLOY_DIR/backend/services.env"
+            chmod 600 "$DEPLOY_DIR/backend/services.env"
+            warn "已创建 services.env；请设置至少 32 字节的 GATEWAY_SIGNING_SECRET 后重新部署"
+        fi
+        SIGNING_SECRET_VALUE=$(sed -n 's/^GATEWAY_SIGNING_SECRET=//p' "$DEPLOY_DIR/backend/services.env" | tail -1)
+        SIGNING_SECRET_BYTES=$(printf '%s' "$SIGNING_SECRET_VALUE" | LC_ALL=C wc -c | tr -d ' ')
+        if [[ "$SIGNING_SECRET_BYTES" -lt 32 ]]; then
+            err "services.env 中 GATEWAY_SIGNING_SECRET 少于 32 字节，未停止现有服务"
+            exit 1
+        fi
+
         log "停止旧后端..."
         systemctl stop api-gateway 2>/dev/null || true
         systemctl stop core-service 2>/dev/null || true
         systemctl stop ai-service 2>/dev/null || true
         systemctl stop community-service 2>/dev/null || true
-        systemctl stop infra-portal 2>/dev/null || true
+        systemctl stop middleware-service 2>/dev/null || true
+        systemctl stop database-service 2>/dev/null || true
+        systemctl stop host-service 2>/dev/null || true
+        systemctl stop network-service 2>/dev/null || true
+        systemctl stop security-service 2>/dev/null || true
+        systemctl disable --now infra-portal 2>/dev/null || true
+        if [[ -f /etc/systemd/system/infra-portal.service ]]; then
+            mkdir -p "$BACKUP_DIR/$TIMESTAMP/systemd"
+            mv /etc/systemd/system/infra-portal.service "$BACKUP_DIR/$TIMESTAMP/systemd/"
+            log "旧 app systemd unit 已移入备份目录"
+        fi
         sleep 3
 
         log "部署新后端..."
@@ -138,14 +160,6 @@ if [[ "$MODULE" == "all" || "$MODULE" == "backend" ]]; then
         fi
 
         # 配置文件：首次部署复制 example，已有则保留
-        if [[ ! -f "$DEPLOY_DIR/backend/application.yml" ]]; then
-            if [[ -f "$TMPDIR/backend/application.yml.example" ]]; then
-                cp "$TMPDIR/backend/application.yml.example" "$DEPLOY_DIR/backend/application.yml"
-                warn "已创建 application.yml，请检查数据库密码等配置"
-            fi
-        else
-            log "  保留已有 application.yml"
-        fi
         if [[ ! -f "$DEPLOY_DIR/backend/community-application.yml" && -f "$TMPDIR/backend/community-application.yml.example" ]]; then
             cp "$TMPDIR/backend/community-application.yml.example" "$DEPLOY_DIR/backend/community-application.yml"
             warn "已创建 community-application.yml，请检查数据库密码等配置"
@@ -158,26 +172,35 @@ if [[ "$MODULE" == "all" || "$MODULE" == "backend" ]]; then
             cp "$TMPDIR/backend/core-application.yml.example" "$DEPLOY_DIR/backend/core-application.yml"
             warn "已创建 core-application.yml，请设置数据库密码和 ADMIN_DEFAULT_PASSWORD"
         fi
-
+        for service in middleware database host network security; do
+            if [[ ! -f "$DEPLOY_DIR/backend/${service}-application.yml" && -f "$TMPDIR/backend/${service}-application.yml.example" ]]; then
+                cp "$TMPDIR/backend/${service}-application.yml.example" "$DEPLOY_DIR/backend/${service}-application.yml"
+                warn "已创建 ${service}-application.yml，请通过环境变量提供数据库密码和网关签名密钥"
+            fi
+        done
         # 确保日志目录存在
         mkdir -p "$DEPLOY_DIR/logs"
 
-        log "启动 app、community-service、ai-service、core-service 与 api-gateway..."
+        log "启动 8 个业务服务与 api-gateway..."
         systemctl daemon-reload
-        systemctl start infra-portal
+        systemctl start core-service
         systemctl start community-service
         systemctl start ai-service
-        systemctl start core-service
+        systemctl start middleware-service
+        systemctl start database-service
+        systemctl start host-service
+        systemctl start network-service
+        systemctl start security-service
 
-        # 四个下游服务均就绪后，再启动默认静态路由的网关
-        log "等待 app 启动..."
+        # 八个下游服务均就绪后，再启动默认静态路由的网关
+        log "等待 middleware-service 启动..."
         for i in $(seq 1 30); do
-            if curl -sf http://localhost:8081/api/middleware-commands/types > /dev/null 2>&1; then
-                log "app 启动成功"
+            if curl -sf http://localhost:8085/api/middleware-commands/types > /dev/null 2>&1; then
+                log "middleware-service 启动成功"
                 break
             fi
             if [[ $i -eq 30 ]]; then
-                err "app 启动超时，请检查日志: $DEPLOY_DIR/logs/infra-portal.log"
+                err "middleware-service 启动超时，请检查日志: $DEPLOY_DIR/logs/middleware-service.log"
             fi
             sleep 2
         done
@@ -217,6 +240,22 @@ if [[ "$MODULE" == "all" || "$MODULE" == "backend" ]]; then
                 err "ai-service 启动超时，请检查日志: $DEPLOY_DIR/logs/ai-service.log"
             fi
             sleep 2
+        done
+
+        for service_port in database-service:8086 host-service:8087 network-service:8088 security-service:8089; do
+            service_name=${service_port%%:*}
+            port=${service_port##*:}
+            log "等待 $service_name 启动..."
+            for i in $(seq 1 30); do
+                if curl -sf "http://localhost:$port/health" > /dev/null 2>&1; then
+                    log "$service_name 启动成功"
+                    break
+                fi
+                if [[ $i -eq 30 ]]; then
+                    err "$service_name 启动超时，请检查日志: $DEPLOY_DIR/logs/$service_name.log"
+                fi
+                sleep 2
+            done
         done
 
         systemctl start api-gateway
