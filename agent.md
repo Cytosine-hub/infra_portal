@@ -2,7 +2,7 @@
 
 ## 1. 项目一句话定位与形态
 
-**集成中心门户**：一个面向基础设施/运维团队，服务中间件、数据库、主机、网络和安全等多个运维岗位的内部门户，管理软件下载包（ReleaseAsset）、参数标准（含草稿→审核→发布版本流）、标准文档、论坛，并集成 AI 知识库/RAG 排查（LangChain4j + Milvus）、Wiki 知识图谱和 Zabbix 监控 Agent。业务运行时为 Spring Boot 3.5.3（Java 17，MyBatis + MySQL 8）：identity + catalog + standards 由独立 core-service 提供，论坛由 community-service 提供，knowledge + wiki + ops-agent 集群由 ai-service 提供，5 个岗位模块分别由 middleware/database/host/network/security-service 提供，前置 Spring Cloud Gateway；`cloud` profile 下通过 Nacos 注册、发现和配置。前端为 Vue 3 单页应用（Vite，无 vue-router，hash 路由）。
+**集成中心门户**：一个面向基础设施/运维团队，服务中间件、数据库、主机、网络和安全等多个运维岗位的内部门户，管理软件下载包（ReleaseAsset）、参数标准（含草稿→审核→发布版本流）、标准文档、论坛，并集成 AI 知识库/RAG 排查（LangChain4j + Milvus）、Wiki 知识图谱和 Zabbix 监控 Agent。业务运行时为 Spring Boot 3.5.3（Java 17，MyBatis + MySQL 8）：identity + catalog + standards 由独立 core-service 提供，论坛由 community-service 提供，knowledge + wiki + ops-agent 集群由 ai-service 提供，5 个岗位模块分别由 middleware/database/host/network/security-service 提供，前置 Spring Cloud Gateway；`cloud` profile 下通过 Nacos 注册、发现和配置。前端为 Vue 3 单页应用（Vite，无 vue-router，hash 路由），测试用 Vitest。
 
 ## 2. 代码地图
 
@@ -13,7 +13,7 @@
 │   ├── modular-monolith-parent/     # 既有业务模块的依赖父 POM，隔离 Gateway WebFlux 依赖
 │   ├── common-core/                 # DTO、异常/错误码、常量、共享模型及跨模块业务端口
 │   ├── common-security/             # 网关身份头验签、PermissionService、角色/岗位权限上下文
-│   ├── common-web/                  # SecurityConfig、过滤器、全局异常处理、Web 通用配置
+│   ├── common-web/                  # SecurityConfig、过滤器、ApiExceptionHandler、Web 通用配置
 │   ├── identity/                    # core-service 业务库：账号、Token、角色、系统设置、API 审计
 │   ├── catalog/                     # core-service 业务库：软件分类、软件类型、发布包与文件下载
 │   ├── standards/                   # core-service 业务库：参数标准、标准文档、审核、版本与转换
@@ -22,10 +22,7 @@
 │   ├── community/                   # 论坛帖子、评论、标签与点赞
 │   ├── ops-agent/                   # ai-service 业务库：运维 Agent、工具、Skill、Zabbix 与导出
 │   ├── job-middleware/              # 中间件岗位专属命令端点
-│   ├── job-database/                # 数据库岗位边界（待演进）
-│   ├── job-host/                    # 主机岗位边界（待演进）
-│   ├── job-network/                 # 网络岗位边界（待演进）
-│   ├── job-security/                # 网络安全岗位边界（待演进）
+│   ├── job-database/ job-host/ job-network/ job-security/  # 其余岗位边界（待演进）
 │   ├── api-gateway/                 # 集中认证与路由（:8080）；cloud 下经 Nacos lb:// 调 core-service
 │   ├── community-service/           # 独立论坛应用（:8082）；聚合 common-* + community
 │   ├── ai-service/                  # 独立 AI/Agent 应用（:8083）；聚合 knowledge + wiki + ops-agent
@@ -36,34 +33,45 @@
 │   ├── network-service/             # 网络岗位薄服务（:8088）；聚合 job-network
 │   └── security-service/            # 网络安全岗位薄服务（:8089）；聚合 job-security
 ├── frontend/
-│   ├── src/main.js      # 前端入口
-│   ├── src/App.vue      # 应用骨架 + hash 路由分发
-│   ├── src/api.js       # fetch 封装：Bearer Token（localStorage：mrm.token）
-│   ├── src/pages/       # HomePage/DownloadsPage/StandardsPage/CommandsPage/DataMigrationPage + admin/*Section.vue
-│   ├── src/components/  # 业务组件（DocumentEditor、Forum*、KnowledgePanel、DiagnosticsPanel、WikiPanel…）
-│   ├── src/components/ui/  # Base* 通用组件（BaseButton/BaseModal/DataTable/Toast…，仅用设计令牌）
-│   ├── src/composables/ # useAuth/useNotify/useRoute/useAdmin（模块级单例状态）
-│   └── src/styles/tokens.css  # 设计令牌（--color-* 等）
-├── docs/                # development-standards.md、microservices-stage1-gateway-nacos.md 等
-├── scripts/             # 启动/打包脚本（package-for-deploy.sh、start-local-*.ps1）
-├── db/ deploy/ release/ # DDL、部署物、发布包
-└── commands/ examples/  # 中间件命令库、示例
+│   ├── src/main.js          # 前端入口
+│   ├── src/App.vue          # 应用骨架 + hash 路由分发
+│   ├── src/api.js           # fetch 封装：Bearer Token（localStorage：mrm.token）
+│   ├── src/pages/           # HomePage/DownloadsPage/StandardsPage + admin/*Section.vue（AdminPage、Types/Files/Standards/Documents/Reviews/Users/SettingsSection）
+│   ├── src/modules/         # 岗位模块：middleware/database/host/network/network-security，index.js 汇总 jobModules；中间件命令页在 modules/middleware/pages/CommandsPage.vue
+│   ├── src/shared/          # 跨岗位复用：shared/api/createModuleApi.js、shared/jobs/（JobModuleEntry/JobNavigation/JobWorkspace/createJobModule/useJobFilter）
+│   ├── src/components/      # 业务组件（DocumentEditor、Forum*、KnowledgePanel、DiagnosticsPanel、WikiPanel…）
+│   ├── src/components/ui/   # Base* 通用组件（BaseButton/BaseModal/DataTable/FormModal/Toast…，仅用设计令牌）
+│   ├── src/composables/     # useAuth/useNotify/useRoute/useAdmin（模块级单例状态）
+│   ├── src/config/          # portalFeatures.js 门户功能配置
+│   ├── src/utils/           # browserSupport 等工具函数
+│   ├── src/styles/tokens.css  # 设计令牌（--color-* 等）
+│   └── test/                # Vitest 测试（portal-structure.test.js 等）
+├── docs/                # development-standards.md、code-review-rules.md、microservices-stage1~6、startup-manual.md 等
+├── scripts/             # deploy.sh、package-for-deploy.sh、start-local-*.ps1、systemd *.service
+├── db/ deploy/ release/ # DDL（init.sql、schema、升级脚本）、Milvus 离线部署物、发布说明
+└── commands/ examples/  # 中间件命令库（middleware-types.json）、Zabbix 示例
 ```
 
-查看代码时**必须优先使用 CodeGraph MCP 工具**（`codegraph_search` 找定义、`codegraph_callers`/`codegraph_callees` 查调用链、`codegraph_impact` 评估影响、`codegraph_files` 看结构），禁止直接 Read 整个 Java/Vue 文件、禁止用 grep 找函数定义。
+理解代码**必须优先使用 codegraph 索引**：`codegraph explore <关键词>` 找相关代码、`codegraph query <符号>` 查定义与引用、`codegraph node <符号>` 看符号详情、`codegraph files` 看结构；禁止直接 Read 整个 Java/Vue 大文件、禁止用 grep 找函数定义。
 
 ## 3. 必须模仿的核心模式
 
-**模式一：Service 层 —— 构造器注入 + @Transactional + 常量化业务异常**（`service/SoftwareTypeService.java`）：
+**模式一：Service 层 —— 构造器注入 + @Transactional + 常量化业务异常**（`backend/catalog/src/main/java/com/middleware/manager/service/SoftwareTypeService.java`）：
 
 ```java
 @Service
 @Slf4j
-public class SoftwareTypeService {
+public class SoftwareTypeService implements SoftwareTypeLookup {
     private final SoftwareTypeMapper softwareTypeMapper;
+    private final SoftwareCategoryMapper softwareCategoryMapper;
+    private final ReleaseAssetMapper releaseAssetMapper;
 
-    public SoftwareTypeService(SoftwareTypeMapper softwareTypeMapper, ...) {
+    public SoftwareTypeService(SoftwareTypeMapper softwareTypeMapper,
+                               SoftwareCategoryMapper softwareCategoryMapper,
+                               ReleaseAssetMapper releaseAssetMapper) {
         this.softwareTypeMapper = softwareTypeMapper;
+        this.softwareCategoryMapper = softwareCategoryMapper;
+        this.releaseAssetMapper = releaseAssetMapper;
     }
 
     public SoftwareType get(Long id) {
@@ -79,17 +87,27 @@ public class SoftwareTypeService {
         if (softwareTypeMapper.existsByCategoryIgnoreCaseAndNameIgnoreCase(category, name)) {
             throw new BusinessException(ErrorCode.SOFTWARE_TYPE_DUPLICATE, ErrorMessages.SOFTWARE_TYPE_DUPLICATE);
         }
-        ...
+        // ...
     }
 }
 ```
 
-**模式二：全局异常处理 —— 只返回错误码 + 中文消息，堆栈只进日志**（`web/api/ApiExceptionHandler.java`）：
+**模式二：全局异常处理 —— 只返回错误码 + 中文消息，堆栈只进日志**（`backend/common-web/src/main/java/com/middleware/manager/web/api/ApiExceptionHandler.java`）：
 
 ```java
 @RestControllerAdvice(basePackages = "com.middleware.manager.web.api")
 @Slf4j
 public class ApiExceptionHandler {
+
+    @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
+    public ResponseEntity<ApiError> handleValidation(Exception ex) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        // ... 收集 FieldError
+        log.warn("参数校验失败 fields={}", errors);
+        return ResponseEntity.badRequest()
+                .body(new ApiError(400, ErrorCode.PARAM_INVALID, ErrorMessages.PARAM_INVALID, errors));
+    }
+
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(NotFoundException ex) {
         log.warn("资源未找到: {}", ex.getMessage());
@@ -101,12 +119,13 @@ public class ApiExceptionHandler {
 
 Controller 只做参数校验（`@Valid`）+ 权限判断（`PermissionService`）+ DTO 转换，业务规则全部下沉 Service。
 
-**模式三：前端组合式函数 —— 模块级单例状态，返回 { state, methods }**（`composables/useNotify.js`）：
+**模式三：前端组合式函数 —— 模块级单例状态，返回 { state, methods }**（`frontend/src/composables/useNotify.js`）：
 
 ```js
 import { ref } from 'vue'
 
 const notice = ref(null)          // 模块级：所有调用方共享同一份状态
+const confirmDialog = ref(null)
 
 export function useNotify() {
   function notify(message, type = 'info') {
@@ -116,25 +135,31 @@ export function useNotify() {
       if (notice.value?.message === message) notice.value = null
     }, duration)
   }
-  return { notice, notify, /* confirm 等 */ }
+
+  function confirm(message, onConfirm) {
+    confirmDialog.value = { message, onConfirm }
+  }
+
+  return { notice, notify, confirmDialog, confirm, /* handleConfirm、cancelConfirm */ }
 }
 ```
 
-API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bearer <token>`），错误处理统一 `catch (error) { notify(error.message, 'error') }`。
+API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bearer <token>`），错误处理统一 `catch (error) { notify(error.message, 'error') }`。岗位模块统一用 `modules/index.js` 的 `jobModules` 注册、`shared/jobs/createJobModule.js` 创建，接口走 `shared/api/createModuleApi.js`。
 
 ## 4. 新增一个功能的配方（以"新增一个受权限管控的管理端 CRUD"为例）
 
-1. **建表**：DDL 加入所属模块的 `src/main/resources/db/`（例如知识模块放 `backend/knowledge/src/main/resources/db/`），在 MySQL `middleware_resource_manager` 库执行。
-2. **domain/**：新建 Lombok POJO（`@Data @NoArgsConstructor @AllArgsConstructor`）。
-3. **repository/**：新建 Mapper 接口 + `resources/mapper/XxxMapper.xml`（方法命名仿现有：`findById`、`findAllByOrderBy…`、`existsBy…`、`insert`、`update`、`deleteById`）。
-4. **constant/**：在 `ErrorCode.java` 加错误码常量、`ErrorMessages.java` 加中文消息（成对出现）。
-5. **先写测试**（TDD，见第 8 节）：`backend/<所属模块>/src/test/java/.../service/XxxServiceTest.java`，Mockito mock Mapper，覆盖正常/重复/不存在/无权限分支。
-6. **service/**：实现业务逻辑，构造器注入，写操作 `@Transactional`，校验失败抛 `BusinessException(ErrorCode.X, ErrorMessages.X)`。
-7. **web/api/dto/**：新建 `XxxRequest`（带 `jakarta.validation` 注解）和 `XxxResponse`。
-8. **web/api/**：新建 `AdminXxxApiController`，路径 `/api/admin/xxx`，注入 `PermissionService` 做类目权限过滤；公共只读接口另建 `PublicXxxApiController` 于 `/api/public/xxx`。
-9. **SecurityConfig**：为新路径配置角色映射（参照现有 `/api/admin/**` 规则）。
-10. **前端**：在 `pages/admin/` 新建 `XxxSection.vue`（`<script setup>`），复用 `components/ui/` 的 `DataTable`/`FormModal`/`BaseButton`；在 `api.js` 加 API 函数；在 `AdminPage.vue` 挂载入口。
-11. **验证**：`mvn test`（在 `backend/` 下执行）全绿 → git commit → 调用 `/code-review` skill 检查规范 → 修复问题 → 重启服务（`/restart` skill）人工验证。
+1. **建 Issue、拉分支**：从 `master` 拉 `feature/req-<门户ID>-issue-<Issue号>`（见第 9 节）。
+2. **建表**：DDL 加入所属模块的 `src/main/resources/db/`（例如知识模块放 `backend/knowledge/src/main/resources/db/`），并同步 `db/` 目录的 schema/升级脚本，在 MySQL `middleware_resource_manager` 库执行。
+3. **domain/**：新建 Lombok POJO（`@Data @NoArgsConstructor @AllArgsConstructor`）。
+4. **repository/**：新建 Mapper 接口 + `resources/mapper/XxxMapper.xml`（方法命名仿现有：`findById`、`findAllByOrderBy…`、`existsBy…`、`insert`、`update`、`deleteById`）。
+5. **constant/**：在 `ErrorCode.java` 加错误码常量、`ErrorMessages.java` 加中文消息（成对出现）。
+6. **先写测试**（TDD，见第 8 节）：`backend/<所属模块>/src/test/java/.../service/XxxServiceTest.java`，Mockito mock Mapper，覆盖正常/重复/不存在/无权限分支，每条用例带 TC 编号；此时运行必须是 Red。
+7. **service/**：实现业务逻辑，构造器注入，写操作 `@Transactional`，校验失败抛 `BusinessException(ErrorCode.X, ErrorMessages.X)`，跑到 Green 后重构。
+8. **web/api/dto/**：新建 `XxxRequest`（带 `jakarta.validation` 注解）和 `XxxResponse`。
+9. **web/api/**：新建 `AdminXxxApiController`，路径 `/api/admin/xxx`，注入 `PermissionService` 做类目权限过滤；公共只读接口另建 `PublicXxxApiController` 于 `/api/public/xxx`。
+10. **SecurityConfig**：为新路径配置角色映射（参照现有 `/api/admin/**` 规则）；若端点归属独立服务且需对外暴露，在 api-gateway 增加**精确**路由（禁止 `/api/**` 泛路由）。
+11. **前端**：在 `pages/admin/` 新建 `XxxSection.vue`（`<script setup>`），复用 `components/ui/` 的 `DataTable`/`FormModal`/`BaseButton`；在 `api.js` 加 API 函数；在 `AdminPage.vue` 挂载入口。岗位功能则放 `modules/<job>/`，通用逻辑沉淀到 `shared/`。
+12. **验证**：`cd backend && mvn test` 全绿、前端相关时 `cd frontend && npm test` 全绿 → git commit → 调用 `/code-review` skill 检查规范 → 修复问题 → 重启服务（`/restart` skill）人工验证 → 提 PR（含 `Closes #<issue>` 与 TC 清单）。
 
 ## 5. 命名与文件布局约定
 
@@ -144,6 +169,7 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 - Service：`XxxService`；Mapper：`XxxMapper`（接口）+ 同名 XML；DTO：`XxxRequest` / `XxxResponse`。
 - 常量类 `final` + 私有构造器；异常继承 `BusinessException`。
 - 日志：`@Slf4j`，变量名 `log`，参数化占位符 `log.info("msg key={}", value)`。
+- 跨模块调用只走 common-core 里的端口接口（如 `SoftwareTypeLookup`、`WikiSearchPort`），禁止业务库模块互相直接依赖实现类。
 
 **前端**
 - UI 通用组件：`components/ui/Base*.vue`（或功能名如 `DataTable.vue`）；业务组件 PascalCase 放 `components/`；页面放 `pages/`；管理模块 `pages/admin/*Section.vue`。
@@ -152,8 +178,8 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 - 样式只用 `styles/tokens.css` 中的 `var(--color-*)` 等设计令牌。
 
 **门户岗位模块**
-- 岗位模块编码独立：中间件、数据库、主机、网络和网络安全分别放在 `frontend/src/modules/<job>/`，各自维护入口、路由能力与接口配置；单个岗位可通过独立的 `VITE_<JOB>_API_BASE_URL` 连接自己的后端，也可回退使用门户后端，禁止跨岗位直接依赖业务实现。
-- 通用能力代码复用：岗位导航、列表筛选、空状态、详情查看、复制与错误提示等跨岗位能力必须沉淀到 `frontend/src/shared/`、`frontend/src/components/ui/` 或公共组合式函数，禁止复制核心逻辑形成多个版本。
+- 岗位模块编码独立：中间件、数据库、主机、网络和网络安全分别放在 `frontend/src/modules/<job>/`（现有目录：middleware/database/host/network/network-security），各自有 `index.js` + `ModuleEntry.vue`（+ `pages/`），统一注册进 `modules/index.js` 的 `jobModules`；单个岗位可通过独立的 `VITE_<JOB>_API_BASE_URL` 连接自己的后端，也可回退使用门户后端，禁止跨岗位直接依赖业务实现。
+- 通用能力代码复用：岗位导航、列表筛选、空状态、详情查看、复制与错误提示等跨岗位能力必须沉淀到 `frontend/src/shared/`（如 `shared/jobs/JobNavigation.vue`、`useJobFilter.js`）、`frontend/src/components/ui/` 或公共组合式函数，禁止复制核心逻辑形成多个版本。
 - UI 风格保持一致：公共模块与岗位模块统一使用 `styles/tokens.css` 设计令牌和共享 UI 组件；同类功能的布局、按钮、列表、空状态、错误提示和交互流程必须一致，岗位模块不得自行硬编码颜色、间距或另建重复组件。
 
 ## 6. 风格由工具强制
@@ -165,38 +191,39 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 | 目的 | 命令 |
 |------|------|
 | 后端编译打包 | `cd backend && mvn clean package -DskipTests` |
+| Gateway 启动（:8080） | `cd backend && mvn -pl api-gateway -am spring-boot:run` |
 | community-service 启动（:8082） | `cd backend && mvn -pl community-service -am spring-boot:run` |
 | ai-service 启动（:8083） | `cd backend && mvn -pl ai-service -am spring-boot:run` |
 | core-service 启动（:8084） | `cd backend && mvn -pl core-service -am spring-boot:run` |
 | middleware-service 启动（:8085） | `cd backend && mvn -pl middleware-service -am spring-boot:run` |
-| database-service 启动（:8086） | `cd backend && mvn -pl database-service -am spring-boot:run` |
-| host-service 启动（:8087） | `cd backend && mvn -pl host-service -am spring-boot:run` |
-| network-service 启动（:8088） | `cd backend && mvn -pl network-service -am spring-boot:run` |
-| security-service 启动（:8089） | `cd backend && mvn -pl security-service -am spring-boot:run` |
-| Gateway 启动（:8080） | `cd backend && mvn -pl api-gateway -am spring-boot:run` |
+| database/host/network/security-service（:8086~:8089） | `cd backend && mvn -pl <service> -am spring-boot:run` |
 | 后端测试 | `cd backend && mvn test` |
-| 前端安装 | `cd frontend && npm install` |
+| 单模块后端测试 | `cd backend && mvn -pl <模块> -am test` |
+| 前端安装（Node >=20.19 <21，见 `.nvmrc`） | `cd frontend && npm install` |
 | 前端开发（:5173，代理 /api、/files 到 Gateway :8080） | `cd frontend && npm run dev` |
+| 前端测试（Vitest） | `cd frontend && npm test` |
 | 前端构建 | `cd frontend && npm run build` |
-| 打部署包 | `scripts/package-for-deploy.sh` |
+| 打部署包 | `scripts/package-for-deploy.sh`（部署 `scripts/deploy.sh` + systemd `*.service`） |
 | 重启前后端（含 Docker/Milvus） | `/restart` skill |
 | 登录拿 Token 做 API 测试 | `/test-login` skill |
 | 规范检查 | `/code-review` skill |
 | Lint | 暂无（见第 6 节） |
 
-数据库：MySQL 8.0 `127.0.0.1:3306/middleware_resource_manager`，用户 `root`，凭据在 `~/.my.cnf`；连接可用 `APP_DB_*` 环境变量覆盖。
+数据库：MySQL 8.0 `127.0.0.1:3306/middleware_resource_manager`，用户 `root`，凭据在 `~/.my.cnf`；连接可用 `APP_DB_*` 环境变量覆盖；DDL 与种子见 `db/init.sql`、`db/seed.sql`。
 
-认证：九个后端进程启动前必须设置同一个至少 32 UTF-8 字节的 `GATEWAY_SIGNING_SECRET`，配置无生产默认值。外部请求只进 Gateway；Token 校验、滑动续期、角色和岗位权威归 core-service 的 identity，各业务服务的受保护端点只接受 Gateway 签名的身份头。协议和联通验证见 `docs/microservices-stage5-gateway-authentication.md`。
+认证：九个后端进程启动前必须设置同一个至少 32 UTF-8 字节的 `GATEWAY_SIGNING_SECRET`，配置无生产默认值。外部请求只进 Gateway；Token 校验、滑动续期、角色和岗位权威归 core-service 的 identity，各业务服务的受保护端点只接受 Gateway 签名的身份头（`GatewayHeaderAuthenticationFilter` 验 `X-Gateway-Sign`）。协议和联通验证见 `docs/microservices-stage5-gateway-authentication.md`。
 
-Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，9 个服务名与 Maven 服务目录一致。Gateway 将 `/api/forum/**` 路由到 community-service，将 `/api/knowledge/**`、`/api/agent/**`、`/api/wiki/**`、`/api/ops-agent/**` 路由到 ai-service，将 identity/catalog/standards 的原路径和 `/files/**` 路由到 core-service，将 `/api/middleware-commands/**` 路由到 middleware-service；其余 4 个岗位服务仅注册 Nacos，新增业务端点时再增加精确网关路由，禁止恢复 `/api/**` 泛路由。Gateway 对 introspect 的调用在 `cloud` profile 下通过负载均衡的 `http://core-service` 完成。端口和路由见 `docs/microservices-stage6-job-services.md`，认证联通见 `docs/microservices-stage5-gateway-authentication.md`。
+Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，9 个服务名与 Maven 服务目录一致。Gateway 将 `/api/forum/**` 路由到 community-service，将 `/api/knowledge/**`、`/api/agent/**`、`/api/wiki/**`、`/api/ops-agent/**` 路由到 ai-service，将 identity/catalog/standards 的原路径和 `/files/**` 路由到 core-service，将 `/api/middleware-commands/**` 路由到 middleware-service；其余 4 个岗位服务仅注册 Nacos，新增业务端点时再增加精确网关路由，禁止恢复 `/api/**` 泛路由。Gateway 对 introspect 的调用在 `cloud` profile 下通过负载均衡的 `http://core-service` 完成。端口和路由见 `docs/microservices-stage6-job-services.md`。
 
 ## 8. 测试（严格 TDD）
 
-**测试先行**：任何功能/修复，先在 `backend/<所属模块>/src/test/java` 写失败的测试（Red），再实现（Green），再重构。技术栈：JUnit 5 + Mockito + `spring-boot-starter-test`；Web 层安全用 `@WebMvcTest` 风格的 `*ControllerSecurityTest`（参照 `ai-service` 模块的 `agent/web/OpsAgentControllerSecurityTest.java`）。
+**测试先行**：任何功能/修复，先写失败的测试（Red），再实现（Green），再重构；实现先于测试的提交会被打回。
 
-组织方式仿 `wiki/service/LinkResolverTest.java`：`@Mock` mock Mapper，`@BeforeEach` 中 `MockitoAnnotations.openMocks(this)` 后手动 new 被测类；用 `@Nested` + `@DisplayName` 按方法分组。
+**后端**：JUnit 5 + Mockito + `spring-boot-starter-test`，测试放 `backend/<所属模块>/src/test/java`。组织方式仿 `backend/ai-service/src/test/java/com/middleware/manager/wiki/service/LinkResolverTest.java`：`@Mock` mock Mapper，`@BeforeEach` 中 `MockitoAnnotations.openMocks(this)` 后手动 new 被测类；用 `@Nested` + `@DisplayName` 按方法分组。Web 层安全用 `*ControllerSecurityTest`（参照同目录 `agent/web/OpsAgentControllerSecurityTest.java`），验证未授权 401/越权 403。
 
-**每条验收用例带 TC 编号**，写在 `@DisplayName` 中，格式 `TC-<模块>-<三位序号>`，例如：
+**前端**：Vitest + @vue/test-utils + jsdom，测试放 `frontend/test/*.test.js`（参照 `portal-structure.test.js`），`npm test` 运行。
+
+**每条验收用例带 TC 编号**，写在 `@DisplayName`（前端写在 `it()` 描述）中，格式 `TC-<模块>-<三位序号>`，例如：
 
 ```java
 @Test
@@ -208,14 +235,14 @@ void createDuplicateThrows() { ... }
 void getMissingThrows() { ... }
 ```
 
-最低要求：每个 Service 公开方法覆盖正常路径 + 每个 `BusinessException` 分支；受权限管控的 Controller 必须有 SecurityTest 验证未授权 401/越权 403。PR 中的验收用例清单需列出全部 TC 编号及通过状态。
+最低要求：每个 Service 公开方法覆盖正常路径 + 每个 `BusinessException` 分支；受权限管控的 Controller 必须有 SecurityTest。PR 中的验收用例清单需列出全部 TC 编号及通过状态。
 
 ## 9. 分支与提交
 
 - **一需求 = 一 Issue = 一分支 = 一 PR**。分支命名：`feature/req-<门户ID>-issue-<Issue号>`（例：`feature/req-10086-issue-42`），从 `master` 拉出。
 - **禁止直推** `master`；所有变更必须走 PR，评审通过后合入。
-- PR 描述必须含 `Closes #<issue>`，并附验收用例 TC 清单与 `mvn test` 结果。
-- 提交信息**中文**，格式：`feat(<模块>): <说明> (#<issue>)`，例：`feat(标准管理): 新增参数标准复制功能 (#42)`；类型沿用 feat/fix/docs/chore/release（与现有历史一致，如 `docs: add migration solution reuse principles`）。
+- PR 描述必须含 `Closes #<issue>`，并附验收用例 TC 清单与 `mvn test`（及涉及前端时的 `npm test`）结果。
+- 提交信息**中文**，格式：`feat(<模块>): <说明> (#<issue>)`，例：`feat(标准管理): 新增参数标准复制功能 (#42)`；类型沿用 feat/fix/docs/chore/release（与现有历史一致，如 `chore: 项目更名 infra_portal，身份修正为集成中心门户`）。
 - 每次提交后执行 `/code-review` skill，修复问题再进入下一步。
 
 ## 10. 禁区与反模式（会被评审打回）
@@ -227,20 +254,24 @@ void getMissingThrows() { ... }
 - ❌ Service 用字段注入 `@Autowired`；写操作漏 `@Transactional`；Controller 里写业务规则。
 - ❌ Controller 返回 domain 实体而非 Response DTO。
 - ❌ 绕过 `PermissionService` 自行判断角色字符串；新增管理端接口不配 SecurityConfig 路由规则。
+- ❌ 业务服务自建 token/角色表查询或绕过网关身份头验签；Gateway 恢复 `/api/**` 泛路由。
 - ❌ 前端硬编码颜色/间距（必须用 tokens.css 令牌）；`ui/` 组件里出现业务逻辑。
 - ❌ 组件间用 `$refs`/`$parent` 通信；`catch` 中 `alert()`、显示 `error.toString()` 或堆栈（必须 `notify(error.message, 'error')`）。
-- ❌ 绕过 `api.js` 直接 `fetch`；自行管理 token 存取。
+- ❌ 绕过 `api.js`/`shared/api/createModuleApi.js` 直接 `fetch`；自行管理 token 存取。
+- ❌ 岗位模块跨岗位 import 业务实现；把可复用的岗位能力复制成多份而不沉淀到 `shared/`。
 - ❌ 无测试的功能提交；实现先于测试；提交后跳过 `/code-review`。
-- ❌ 用 Read 读整个大文件、grep 找定义（必须走 CodeGraph 工具）。
+- ❌ 用 Read 读整个大文件、grep 找定义（必须走 `codegraph explore/query/node/files`）。
 
 ## 11. 踩坑与经验
 
 - **认证集中在 Gateway + identity**：前端登录后 token 存 `localStorage`（`mrm.token`/`mrm.user`/`mrm.expiresAt`，见 `api.js`）；Gateway 用 token 调 identity introspect，identity 独占 `TokenService` + `user_tokens` 表并做滑动续期。其他服务禁止恢复 token/角色表查询，只能验 `X-Gateway-Sign` 后使用签名身份头。
 - **两套数据访问并存**：主业务用 MyBatis（Mapper 接口 + XML），knowledge 模块用 JdbcTemplate——在 knowledge 下不要引入 MyBatis Mapper，反之亦然。
 - **Mapper 接口方法名是 JPA 风格但实现在 XML**：新增查询要同时改接口和 `resources/mapper/*.xml`，两边 id 必须一致，漏改 XML 只在运行时报错。
-- **种子数据在 Service 里**：`SoftwareTypeService` 实现 `ApplicationRunner` 在启动时 seed 类目/类型；改类目相关逻辑注意幂等，别造成重复插入。
-- **`@RestControllerAdvice` 限定了 basePackages**：`ApiExceptionHandler` 只覆盖 `web.api` 包；wiki/knowledge/agent 的 Controller 若不在该包需确认各自异常处理，否则会漏出 500 白页。
-- **外部服务全部走环境变量**：Zabbix（`ZABBIX_URL` 等）、大模型（`AI_BASE_URL`/`AI_API_KEY`）、Milvus（`VECTOR_HOST`/`VECTOR_PORT`）；本地没起 Milvus 时知识库相关功能会失败，开发可用 `InMemoryVectorStore`。
-- **模块开关在 `system_settings` 表**（knowledge-enabled、diagnostics-enabled）：功能"不见了"先查开关再查代码。
+- **种子数据在 Service 里**：`SoftwareTypeService.initializeDefaults()` 在启动时 seed 五大类目（中间件/主机/数据库/安全/网络）及默认类型；改类目相关逻辑注意幂等，别造成重复插入。
+- **`@RestControllerAdvice` 限定了 basePackages**：`ApiExceptionHandler` 只覆盖 `com.middleware.manager.web.api` 包；wiki/knowledge/agent 的 Controller 若不在该包需确认各自异常处理，否则会漏出 500 白页。
+- **外部服务全部走环境变量**：Zabbix（`ZABBIX_URL` 等）、大模型（`AI_BASE_URL`/`AI_API_KEY`）、Milvus（`VECTOR_HOST`/`VECTOR_PORT`，默认 19530）；本地没起 Milvus 时知识库相关功能会失败，开发可用 `InMemoryVectorStore`。
+- **模块开关在 `system_settings` 表**（knowledge-enabled、diagnostics-enabled）：功能"不见了"先查开关再查代码；前端门户级开关另见 `src/config/portalFeatures.js`。
 - **权限模型有两级**：管理员（`isCategoryAdmin`，可改可审）vs 管理岗（`isManagement`，只能改不能审），审核相关接口必须走 `PermissionService.canReview(auth, category)`，只按角色名判断会放过管理岗越权审核。
 - **文件存储路径**：上传文件落在 `./storage/<middlewareName>/`，下载走公开的 `/files/**`；本地调试删库不删 storage 会出现悬空记录。
+- **前端 Node 版本被 engines 锁定**（`>=20.19 <21`，`.nvmrc` 指定）：Node 21+ 或低版本会在 install 阶段报错，切换版本后再装依赖。
+- **9 个服务共享一个签名密钥**：本地起多服务时用 `scripts/services.env.example` 派生统一环境，漏设或不一致会导致所有受保护端点 401。
