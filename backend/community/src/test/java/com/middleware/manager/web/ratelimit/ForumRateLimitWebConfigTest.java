@@ -11,13 +11,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class RateLimitWebConfigTest {
+class ForumRateLimitWebConfigTest {
 
     @Test
-    @DisplayName("TC-06 限流拦截器只注册在下载路径 /files/**，不影响其他接口")
-    void interceptorOnlyAppliesToFilesPath() {
-        DownloadRateLimitInterceptor interceptor = mock(DownloadRateLimitInterceptor.class);
-        RateLimitWebConfig config = new RateLimitWebConfig(interceptor);
+    @DisplayName("TC-06 限流拦截器只注册在论坛文章路径 /api/forum/posts/*，不影响其他接口")
+    void interceptorOnlyAppliesToForumPostDetailPath() {
+        ForumRateLimitInterceptor interceptor = mock(ForumRateLimitInterceptor.class);
+        ForumRateLimitWebConfig config = new ForumRateLimitWebConfig(interceptor);
         InterceptorRegistry registry = mock(InterceptorRegistry.class);
         InterceptorRegistration registration = mock(InterceptorRegistration.class);
         when(registry.addInterceptor(interceptor)).thenReturn(registration);
@@ -27,6 +27,6 @@ class RateLimitWebConfigTest {
 
         ArgumentCaptor<String[]> patternsCaptor = ArgumentCaptor.forClass(String[].class);
         verify(registration).addPathPatterns(patternsCaptor.capture());
-        assertThat(patternsCaptor.getValue()).containsExactly("/files/**");
+        assertThat(patternsCaptor.getValue()).containsExactly("/api/forum/posts/*");
     }
 }

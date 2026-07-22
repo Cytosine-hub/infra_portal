@@ -5,11 +5,11 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
-public class RateLimitWebConfig implements WebMvcConfigurer {
+public class ForumRateLimitWebConfig implements WebMvcConfigurer {
 
     private final ForumRateLimitInterceptor interceptor;
 
-    public RateLimitWebConfig(ForumRateLimitInterceptor interceptor) {
+    public ForumRateLimitWebConfig(ForumRateLimitInterceptor interceptor) {
         this.interceptor = interceptor;
     }
 

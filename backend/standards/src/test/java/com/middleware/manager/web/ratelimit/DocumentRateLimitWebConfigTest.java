@@ -11,13 +11,13 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-class RateLimitWebConfigTest {
+class DocumentRateLimitWebConfigTest {
 
     @Test
-    @DisplayName("TC-06 限流拦截器只注册在论坛文章路径 /api/forum/posts/*，不影响其他接口")
-    void interceptorOnlyAppliesToForumPostDetailPath() {
-        ForumRateLimitInterceptor interceptor = mock(ForumRateLimitInterceptor.class);
-        RateLimitWebConfig config = new RateLimitWebConfig(interceptor);
+    @DisplayName("TC-06 限流拦截器只注册在公开标准文档访问路径 /api/public/standards/*，不影响其他接口")
+    void interceptorOnlyAppliesToPublicStandardDocumentPath() {
+        DocumentRateLimitInterceptor interceptor = mock(DocumentRateLimitInterceptor.class);
+        DocumentRateLimitWebConfig config = new DocumentRateLimitWebConfig(interceptor);
         InterceptorRegistry registry = mock(InterceptorRegistry.class);
         InterceptorRegistration registration = mock(InterceptorRegistration.class);
         when(registry.addInterceptor(interceptor)).thenReturn(registration);
@@ -27,6 +27,6 @@ class RateLimitWebConfigTest {
 
         ArgumentCaptor<String[]> patternsCaptor = ArgumentCaptor.forClass(String[].class);
         verify(registration).addPathPatterns(patternsCaptor.capture());
-        assertThat(patternsCaptor.getValue()).containsExactly("/api/forum/posts/*");
+        assertThat(patternsCaptor.getValue()).containsExactly("/api/public/standards/*");
     }
 }
