@@ -17,8 +17,8 @@
 | 接口组 | 路径 | 默认额度 |
 |---|---|---:|
 | 下载 | `/files/{token}`、`/files/{middlewareName}/{fileName}` | 6 次/窗口/IP |
-| 文档详情 | `/api/public/standards/{id}` | 60 次/窗口/IP |
-| 文档文件 | `/api/public/standards/preview`、`/api/public/standards/raw` | 18 次/窗口/IP |
+| 文档详情 | `/api/public/standards/{id}`、`/api/admin/standard-documents/{id}` | 60 次/窗口/IP |
+| 文档文件 | `/api/public/standards/preview`、`/api/public/standards/raw`、`/api/admin/standard-documents/{id}/preview`、`/api/admin/standard-documents/{id}/raw` | 18 次/窗口/IP |
 | 论坛文章详情 | `/api/forum/posts/{id}` | 120 次/窗口/IP |
 
 以下请求不计数：下载目录中的 `/files/images/**` 页面图片、文章和文档列表、上传、编辑、评论、点赞及其他非 `GET` 请求。
@@ -60,6 +60,8 @@ Cloud profile 可由 Nacos 在应用启动时提供同名 `app.rate-limit.*` 配
 认证过滤器顺序为 `Ordered.HIGHEST_PRECEDENCE`，限流过滤器为其后一位。管理端等受保护请求若未认证，会先返回原有 `401`，不会进入限流过滤器或消耗计数。
 
 当前 `/files/**` 下载、公开文档和论坛只读接口沿用既有公开访问行为；限流不改变这些接口的认证策略。下载页使用普通链接访问 `/files/{token}`，浏览器无需携带 Bearer Token，认证过滤器会直接转发给后置限流过滤器；达到下载额度后仍返回 `429`。客户端即使携带 Bearer Token，计数维度也仅使用接口组和 IP。
+
+后台标准文档详情、预览和原文件接口需要有效登录态。未认证请求会先由认证过滤器返回 `401`，不会进入限流过滤器或消耗对应文档接口组额度。
 
 ## 客户端 IP
 

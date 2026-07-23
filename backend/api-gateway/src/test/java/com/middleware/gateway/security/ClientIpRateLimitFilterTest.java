@@ -79,6 +79,9 @@ class ClientIpRateLimitFilterTest {
         exhaustAndAssertLimited(filter, "/api/public/standards/42", IP_A, 60);
         exhaustAndAssertLimited(filter, "/api/public/standards/preview?storedFileName=test.docx", IP_A, 18);
         exhaustAndAssertLimited(filter, "/api/forum/posts/42", IP_A, 120);
+        exhaustAndAssertLimited(filter, "/api/admin/standard-documents/42", IP_B, 60);
+        exhaustAndAssertLimited(filter, "/api/admin/standard-documents/42/preview", IP_B, 18);
+        exhaustAndAssertLimited(filter, "/api/admin/standard-documents/42/raw", "192.0.2.12", 18);
     }
 
     @Test
@@ -102,6 +105,7 @@ class ClientIpRateLimitFilterTest {
                 new RequestSpec("GET", "/api/public/standards"),
                 new RequestSpec("GET", "/api/public/standards/all"),
                 new RequestSpec("GET", "/api/forum/posts"),
+                new RequestSpec("GET", "/api/admin/standard-documents"),
                 new RequestSpec("POST", "/api/admin/standard-documents"),
                 new RequestSpec("PUT", "/api/admin/standard-documents/42"),
                 new RequestSpec("POST", "/api/forum/posts/42/comments"));
@@ -119,6 +123,7 @@ class ClientIpRateLimitFilterTest {
     @DisplayName("TC-07 未认证请求先由认证过滤器处理")
     void authenticationFilterRunsBeforeRateLimitFilter() {
         RateLimitProperties properties = defaultProperties();
+        properties.setDocumentFilePerWindow(properties.getDownloadPerWindow());
         ClientIpRateLimitFilter rateLimitFilter = filter(properties, fixedClock());
         GatewayAuthenticationFilter authenticationFilter = new GatewayAuthenticationFilter(
                 token -> Mono.just(validIdentity()),
@@ -130,7 +135,7 @@ class ClientIpRateLimitFilterTest {
         assertThat(authenticationFilter.getOrder()).isLessThan(rateLimitFilter.getOrder());
 
         for (int requestNumber = 1; requestNumber <= 7; requestNumber++) {
-            MockServerWebExchange exchange = exchange("/api/admin/releases", IP_A);
+            MockServerWebExchange exchange = exchange("/api/admin/standard-documents/42/raw", IP_A);
 
             filterThroughAuthentication(authenticationFilter, rateLimitFilter, exchange, rateLimitCalls);
 
@@ -140,7 +145,8 @@ class ClientIpRateLimitFilterTest {
         assertThat(rateLimitCalls).hasValue(0);
 
         for (int requestNumber = 1; requestNumber <= 6; requestNumber++) {
-            MockServerWebExchange exchange = exchange("/files/download-token", IP_A);
+            MockServerWebExchange exchange = exchangeWithBearer(
+                    "/api/admin/standard-documents/42/raw", IP_A);
 
             filterThroughAuthentication(authenticationFilter, rateLimitFilter, exchange, rateLimitCalls);
 
@@ -148,7 +154,8 @@ class ClientIpRateLimitFilterTest {
             assertThat(exchange.getResponse().getHeaders()).doesNotContainKey(HttpHeaders.RETRY_AFTER);
         }
 
-        MockServerWebExchange limitedExchange = exchange("/files/download-token", IP_A);
+        MockServerWebExchange limitedExchange = exchangeWithBearer(
+                "/api/admin/standard-documents/42/raw", IP_A);
         filterThroughAuthentication(authenticationFilter, rateLimitFilter, limitedExchange, rateLimitCalls);
 
         assertThat(limitedExchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
@@ -283,6 +290,17 @@ class ClientIpRateLimitFilterTest {
             return MockServerWebExchange.from(MockServerHttpRequest.get(path)
                     .remoteAddress(remoteAddress)
                     .header("X-Real-IP", realIp));
+        } catch (Exception exception) {
+            throw new AssertionError(exception);
+        }
+    }
+
+    private MockServerWebExchange exchangeWithBearer(String path, String ip) {
+        try {
+            InetSocketAddress remoteAddress = new InetSocketAddress(InetAddress.getByName(ip), 12345);
+            return MockServerWebExchange.from(MockServerHttpRequest.get(path)
+                    .remoteAddress(remoteAddress)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer valid-token"));
         } catch (Exception exception) {
             throw new AssertionError(exception);
         }

@@ -28,12 +28,18 @@ public class ClientIpRateLimitFilter implements GlobalFilter, Ordered {
     private static final PathPattern DOWNLOAD_BY_NAME =
             PATH_PATTERN_PARSER.parse("/files/{middlewareName}/{fileName}");
     private static final PathPattern IMAGE_FILE = PATH_PATTERN_PARSER.parse("/files/images/**");
-    private static final PathPattern DOCUMENT_DETAIL =
+    private static final PathPattern PUBLIC_DOCUMENT_DETAIL =
             PATH_PATTERN_PARSER.parse("/api/public/standards/{id:[0-9]+}");
-    private static final PathPattern DOCUMENT_PREVIEW =
+    private static final PathPattern PUBLIC_DOCUMENT_PREVIEW =
             PATH_PATTERN_PARSER.parse("/api/public/standards/preview");
-    private static final PathPattern DOCUMENT_RAW =
+    private static final PathPattern PUBLIC_DOCUMENT_RAW =
             PATH_PATTERN_PARSER.parse("/api/public/standards/raw");
+    private static final PathPattern ADMIN_DOCUMENT_DETAIL =
+            PATH_PATTERN_PARSER.parse("/api/admin/standard-documents/{id:[0-9]+}");
+    private static final PathPattern ADMIN_DOCUMENT_PREVIEW =
+            PATH_PATTERN_PARSER.parse("/api/admin/standard-documents/{id:[0-9]+}/preview");
+    private static final PathPattern ADMIN_DOCUMENT_RAW =
+            PATH_PATTERN_PARSER.parse("/api/admin/standard-documents/{id:[0-9]+}/raw");
     private static final PathPattern FORUM_POST_DETAIL =
             PATH_PATTERN_PARSER.parse("/api/forum/posts/{id:[0-9]+}");
     private static final String REAL_IP_HEADER = "X-Real-IP";
@@ -91,10 +97,13 @@ public class ClientIpRateLimitFilter implements GlobalFilter, Ordered {
                 && (DOWNLOAD_BY_TOKEN.matches(path) || DOWNLOAD_BY_NAME.matches(path))) {
             return new RateLimitGroup("download", properties.getDownloadPerWindow());
         }
-        if (DOCUMENT_PREVIEW.matches(path) || DOCUMENT_RAW.matches(path)) {
+        if (PUBLIC_DOCUMENT_PREVIEW.matches(path)
+                || PUBLIC_DOCUMENT_RAW.matches(path)
+                || ADMIN_DOCUMENT_PREVIEW.matches(path)
+                || ADMIN_DOCUMENT_RAW.matches(path)) {
             return new RateLimitGroup("document-file", properties.getDocumentFilePerWindow());
         }
-        if (DOCUMENT_DETAIL.matches(path)) {
+        if (PUBLIC_DOCUMENT_DETAIL.matches(path) || ADMIN_DOCUMENT_DETAIL.matches(path)) {
             return new RateLimitGroup("document", properties.getDocumentPerWindow());
         }
         if (FORUM_POST_DETAIL.matches(path)) {
