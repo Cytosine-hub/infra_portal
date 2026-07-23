@@ -37,6 +37,14 @@ spring:
                 - Path=/api/middleware-commands/**
 
 app:
+  rate-limit:
+    enabled: ${GATEWAY_RATE_LIMIT_ENABLED:true}
+    window-seconds: ${GATEWAY_RATE_LIMIT_WINDOW_SECONDS:60}
+    max-client-keys: ${GATEWAY_RATE_LIMIT_MAX_CLIENT_KEYS:10000}
+    download-per-window: ${GATEWAY_RATE_LIMIT_DOWNLOAD_PER_WINDOW:6}
+    document-per-window: ${GATEWAY_RATE_LIMIT_DOCUMENT_PER_WINDOW:60}
+    document-file-per-window: ${GATEWAY_RATE_LIMIT_DOCUMENT_FILE_PER_WINDOW:18}
+    forum-post-per-window: ${GATEWAY_RATE_LIMIT_FORUM_POST_PER_WINDOW:120}
   security:
     gateway-signing-secret: ${GATEWAY_SIGNING_SECRET:}
     introspection-base-url: "${CORE_SERVICE_URL:http://127.0.0.1:8084}"
