@@ -6,8 +6,8 @@
 # 构建期服务之间零依赖：只用 `mvn -pl <服务> -am`（also-make，连带构建 common-* 与其能力模块）。
 # 服务间真实联通（网关↔Nacos↔服务、认证越权）属【集成】层，单独一条流水线在预发环境跑。
 #
-# 需要：一个支持 Maven 镜像的 GitLab Runner（default.tags 使用项目 Runner 的 TLB 标签）。
-#       内网若无法直连 Docker Hub，把 image 换成你们镜像仓库里的 maven:3.9-eclipse-temurin-17。
+# 需要：Runner Job 可访问 Runner 主机的 Docker Socket（见 runner/config.md）。
+#       编译、镜像构建和 Docker Compose 部署均在同一台 Runner 主机完成，不推送 JAR 或镜像制品。
 # ============================================================================
 
 # 只在【后端代码 / CI 文件】改动时创建流水线（MR / push / tag）。
@@ -23,36 +23,28 @@ workflow:
 
 default:
   image:
-    name: maven:3.9-eclipse-temurin-17
+    name: docker:27-cli
     pull_policy: if-not-present       # 仅本地不存在时拉取镜像
   tags: [TLB]                          # 项目 Runner 标签
-  cache:                               # 复用 .m2，加速依赖解析
-    key: "mvn-$CI_COMMIT_REF_SLUG"
-    paths: [.m2/repository]
 
 variables:
-  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
-  MAVEN_CLI_OPTS: "--batch-mode --no-transfer-progress -Dstyle.color=never"
+  DOCKER_BUILDKIT: "1"
+  IMAGE_NAMESPACE: "infra-portal"
 
 stages:
   - verify        # 编译 + 单元测试 + 打包（每服务独立）
   - integration   # 端到端 / 认证越权（需 Nacos + 多服务，骨架，手动）
   - deploy        # 部署（每服务独立，骨架，手动）
 
-# 服务构建模板：mvn -pl <SVC> -am，只构建该服务 + 其依赖（common-* 与能力模块）
+# 服务构建模板：Docker 多阶段构建中执行 mvn -pl <SVC> -am clean verify，
+# 然后将可执行 JAR 封装为 Runner 主机镜像。镜像只保留在 Runner 主机的 Docker 守护进程中。
 .svc-verify:
   stage: verify
   script:
-    - cd backend
-    - mvn $MAVEN_CLI_OPTS -pl "$SVC" -am clean verify
-  artifacts:
-    when: always
-    paths:
-      - backend/$SVC/target/*-exec.jar
-    reports:
-      junit:
-        - backend/**/target/surefire-reports/TEST-*.xml
-    expire_in: 1 week
+    - export IMAGE_NAME="$IMAGE_NAMESPACE/$SVC"
+    - docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAME:$CI_COMMIT_SHA" --tag "$IMAGE_NAME:latest" --file deploy/Dockerfile .
+    - echo "== Runner 主机构建镜像：$IMAGE_NAME:$CI_COMMIT_SHA =="
+    - docker image inspect "$IMAGE_NAME:$CI_COMMIT_SHA" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
 
 # ----------------------------------------------------------------------------
 # 每服务流水线（路径触发）。
@@ -221,17 +213,22 @@ integration:e2e:
       allow_failure: true
 
 # ----------------------------------------------------------------------------
-# 部署（骨架）：每服务独立部署，互不依赖。改 core 不用重部 ai。
-# 手动触发；把 script 换成你们的部署方式（scp jar + systemd / k8s / 镜像推送）。
-# 注意共享运行时契约（introspect 接口 / GATEWAY_SIGNING_SECRET / Nacos 配置）需协调，别乱改。
+# 部署：使用 Runner 主机 Docker Compose 启动对应服务，镜像只读取 Runner 主机已构建版本。
+# DEPLOY_ENV_FILE 必须在 GitLab CI/CD Variables 中配置为受保护的“文件”变量，
+# 内容基于 deploy/services.env.example，禁止提交真实密钥。
 # ----------------------------------------------------------------------------
 .deploy-tpl:
   stage: deploy
   environment:
     name: "staging/$SVC"
   script:
-    - echo "部署 $SVC 到 staging（骨架）"
-    - echo "示例 scp backend/$SVC/target/*-exec.jar deploy@host:/opt/$SVC/ 然后 systemctl restart $SVC"
+    - test -n "${DEPLOY_ENV_FILE:-}" && test -f "$DEPLOY_ENV_FILE"
+    - cp "$DEPLOY_ENV_FILE" deploy/services.env
+    - trap 'rm -f deploy/services.env' EXIT
+    - export IMAGE_TAG="$CI_COMMIT_SHA"
+    - docker image inspect "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" >/dev/null
+    - docker compose --project-name infra-portal --env-file deploy/services.env --file deploy/docker-compose.yml up --detach --no-build --pull never "$SVC"
+    - docker compose --project-name infra-portal --env-file deploy/services.env --file deploy/docker-compose.yml ps "$SVC"
   rules:
     - if: '$CI_COMMIT_REF_NAME == "master"'
       when: manual

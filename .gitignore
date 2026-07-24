@@ -38,3 +38,4 @@ backend/*/storage/
 backend/app/data/
 backend/app/logs/
 backend/app/storage/
+deploy/services.env

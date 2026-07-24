@@ -1,0 +1,83 @@
+name: infra-portal
+
+x-service: &service
+  restart: unless-stopped
+  # 由 CI 将受保护的 DEPLOY_ENV_FILE 复制到此处；文件中的服务特有变量也会传入容器。
+  env_file:
+    - ./services.env
+  environment:
+    SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-cloud}
+    APP_DB_HOST: ${APP_DB_HOST:?APP_DB_HOST is required}
+    APP_DB_PORT: ${APP_DB_PORT:-3306}
+    APP_DB_NAME: ${APP_DB_NAME:?APP_DB_NAME is required}
+    APP_DB_USERNAME: ${APP_DB_USERNAME:?APP_DB_USERNAME is required}
+    APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}
+    GATEWAY_SIGNING_SECRET: ${GATEWAY_SIGNING_SECRET:?GATEWAY_SIGNING_SECRET is required}
+    NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:?NACOS_SERVER_ADDR is required}
+    NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+    NACOS_USERNAME: ${NACOS_USERNAME:-}
+    NACOS_PASSWORD: ${NACOS_PASSWORD:-}
+    NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-DEFAULT_GROUP}
+    NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-DEFAULT_GROUP}
+  extra_hosts:
+    # Docker 容器内该别名映射到 Runner 主机，不是开发机。
+    - "host.docker.internal:host-gateway"
+
+services:
+  api-gateway:
+    <<: *service
+    image: ${IMAGE_NAMESPACE:-infra-portal}/api-gateway:${IMAGE_TAG:?IMAGE_TAG is required}
+    ports: ["${API_GATEWAY_PORT:-8080}:8080"]
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-cloud}
+      GATEWAY_SIGNING_SECRET: ${GATEWAY_SIGNING_SECRET:?GATEWAY_SIGNING_SECRET is required}
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:?NACOS_SERVER_ADDR is required}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_USERNAME: ${NACOS_USERNAME:-}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-}
+      NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-DEFAULT_GROUP}
+      NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-DEFAULT_GROUP}
+      CORE_SERVICE_URL: http://core-service:8084
+      AI_SERVICE_URL: http://ai-service:8083
+      COMMUNITY_SERVICE_URL: http://community-service:8082
+      MIDDLEWARE_SERVICE_URL: http://middleware-service:8085
+
+  core-service:
+    <<: *service
+    image: ${IMAGE_NAMESPACE:-infra-portal}/core-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    ports: ["${CORE_SERVICE_PORT:-8084}:8084"]
+
+  ai-service:
+    <<: *service
+    image: ${IMAGE_NAMESPACE:-infra-portal}/ai-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    ports: ["${AI_SERVICE_PORT:-8083}:8083"]
+
+  community-service:
+    <<: *service
+    image: ${IMAGE_NAMESPACE:-infra-portal}/community-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    ports: ["${COMMUNITY_SERVICE_PORT:-8082}:8082"]
+
+  middleware-service:
+    <<: *service
+    image: ${IMAGE_NAMESPACE:-infra-portal}/middleware-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    ports: ["${MIDDLEWARE_SERVICE_PORT:-8085}:8085"]
+
+  database-service:
+    <<: *service
+    image: ${IMAGE_NAMESPACE:-infra-portal}/database-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    ports: ["${DATABASE_SERVICE_PORT:-8086}:8086"]
+
+  host-service:
+    <<: *service
+    image: ${IMAGE_NAMESPACE:-infra-portal}/host-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    ports: ["${HOST_SERVICE_PORT:-8087}:8087"]
+
+  network-service:
+    <<: *service
+    image: ${IMAGE_NAMESPACE:-infra-portal}/network-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    ports: ["${NETWORK_SERVICE_PORT:-8088}:8088"]
+
+  security-service:
+    <<: *service
+    image: ${IMAGE_NAMESPACE:-infra-portal}/security-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    ports: ["${SECURITY_SERVICE_PORT:-8089}:8089"]
