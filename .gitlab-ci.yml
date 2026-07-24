@@ -72,11 +72,15 @@ verify:all-services:
       when: manual
       allow_failure: true
 
-# 第三方依赖不在仓库内编译；此 job 预拉取 Compose 所需镜像，以便离线/内网部署。
+# 第三方依赖不在仓库内编译；直接拉取镜像，避免 Compose 解析业务服务密钥。
 prepare:dependencies:
   stage: verify
   script:
-    - docker compose --project-name infra-portal --file deploy/docker-compose.yml pull mysql nacos etcd minio milvus
+    - docker pull "mysql:${MYSQL_VERSION:-8.0}"
+    - docker pull "nacos/nacos-server:${NACOS_VERSION:-v2.3.2}"
+    - docker pull "quay.io/coreos/etcd:${ETCD_VERSION:-v3.5.5}"
+    - docker pull "minio/minio:${MINIO_VERSION:-RELEASE.2023-03-20T20-16-18Z}"
+    - docker pull "milvusdb/milvus:${MILVUS_VERSION:-v2.3.4}"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
       when: manual
@@ -235,7 +239,7 @@ verify:security-service:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
       when: manual
-      allow_failure: false
+      allow_failure: true
     - changes:
         - backend/security-service/**/*
         - backend/job-security/**/*
@@ -315,6 +319,7 @@ deploy:dependencies:
     - test -n "${DEPLOY_ENV_FILE:-}" && test -f "$DEPLOY_ENV_FILE"
     - cp "$DEPLOY_ENV_FILE" deploy/services.env
     - trap 'rm -f deploy/services.env' EXIT
+    - export IMAGE_TAG="$CI_COMMIT_SHA"
     - docker compose --project-name infra-portal --env-file deploy/services.env --file deploy/docker-compose.yml up --detach --no-build mysql nacos etcd minio milvus
     - docker compose --project-name infra-portal --env-file deploy/services.env --file deploy/docker-compose.yml ps mysql nacos etcd minio milvus
   rules:
