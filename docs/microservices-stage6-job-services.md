@@ -141,6 +141,17 @@ curl -i http://127.0.0.1:8080/api/middleware-commands/types
 mvn -pl <service> -am clean verify
 ```
 
+在 GitLab 的 **Run pipeline** 页面创建的 `web` 流水线中，可以手动运行以下作业：
+
+- `verify:<service>`：构建一个业务服务的可执行镜像；随后可运行对应的 `deploy:<service>`；
+- `verify:all-services`：按固定顺序构建 9 个业务服务镜像；
+- `prepare:dependencies`：预拉取 MySQL、Nacos、etcd、MinIO 和 Milvus 镜像；
+- `deploy:<service>`：部署一个业务服务，其 Compose 启动依赖会自动启动；
+- `deploy:dependencies`：单独部署 MySQL、Nacos 和 Milvus 依赖组；
+- `deploy:full-stack`：在一个 job 中构建全部业务镜像、预拉取依赖组件并部署完整运行栈；不需要先运行其他可选手动作业。
+
+`deploy/docker-compose.yml` 是完整运行栈定义。它使用同一个 Compose 网络连接 9 个业务服务、MySQL、Nacos 以及 Milvus/etcd/MinIO；所有有状态数据均通过宿主机目录挂载，根目录由 `DEPLOY_DATA_DIR` 控制，默认 `/data/infra-portal`。首次创建 `${DEPLOY_DATA_DIR}/mysql` 时，MySQL 会执行 `db/init.sql` 和 `db/seed.sql`；已有目录不会重复初始化。部署前应基于 `deploy/services.env.example` 配置 GitLab 受保护的文件变量 `DEPLOY_ENV_FILE`，其中必须提供数据库密码、网关签名密钥及 Nacos 服务端认证参数。
+
 ## 8. 沙箱依赖说明
 
 实现期间尝试采用 Spring Boot Actuator，但当前沙箱无法访问或写入宿主 Maven 缓存中的 `spring-boot-starter-actuator`。未修改依赖版本，也未引入替代仓库；按阶段规格允许的方案，4 个薄服务改用简单 `/health`。该端点没有外部依赖，且由上下文启动测试覆盖。后续若统一引入 Actuator，应在依赖可用的构建环境中完成，并同步替换健康检查脚本和测试。
