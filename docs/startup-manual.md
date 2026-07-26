@@ -18,7 +18,7 @@
 
 - JDK 17（必须，Spring Boot 3.x 不兼容 JDK 8）
 - Maven 3.8.x
-- Node.js 18+，当前环境已验证 Node.js 22 可用
+- Node.js 20.19.x（`package.json` 限定为 `>=20.19 <21`）
 - MySQL 8.x
 
 ### JAVA_HOME 配置
@@ -34,7 +34,51 @@ Windows 下在系统环境变量中设置 `JAVA_HOME` 为 JDK 17 安装路径。
 
 Windows PowerShell 下建议使用 `npm.cmd`，避免 `npm.ps1` 被执行策略拦截。
 
-## 2. 启动数据库
+## 2. Docker Compose 完整栈
+
+Docker Compose 覆盖裸机清单中的前端、Gateway、8 个业务服务，并包含 MySQL、Nacos、Milvus、etcd、MinIO 和一次性 `nacos-init`：
+
+```bash
+cp deploy/compose.env.example deploy/compose.env
+cp deploy/services.env.example deploy/services.env
+```
+
+配置职责必须保持分离：
+
+| 文件 | 职责 | 是否注入业务服务 |
+|------|------|------------------|
+| `deploy/compose.env` | Compose 项目名、镜像版本、端口、数据目录、MySQL/Nacos/MinIO 基础组件凭据 | 否 |
+| `deploy/services.env` | Gateway 签名、管理员初始密码、AI、Wiki、Zabbix 等运行时密钥 | 是 |
+| `deploy/nacos-config/*.properties` | 9 个 Java 服务的业务配置模板 | 由 Nacos Config 加载 |
+
+必须补齐两个环境文件中的空密钥。随后在项目根目录启动：
+
+```bash
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.yml up --detach --build
+sh deploy/smoke-test.sh
+```
+
+启动顺序由健康检查和 `depends_on` 控制：MySQL/Nacos/Milvus 先就绪，`nacos-init` 再创建缺失的 namespace 和 9 个 Data ID，最后启动 9 个 Java 服务与前端。`nacos-init` 遇到已存在的 Data ID 会跳过，人工在 Nacos 中调整的业务配置不会被覆盖。
+
+首次创建 `${DEPLOY_DATA_DIR}/mysql` 时会依次执行 `db/init.sql` 和 `db/seed.sql`，沿用现有种子账号。已有 MySQL 数据目录不会再次初始化；`ADMIN_DEFAULT_PASSWORD` 仅在账号表为空时生效。
+
+访问与停止命令：
+
+```text
+前端：http://localhost:5173
+Gateway：http://localhost:8080
+Nacos：http://localhost:8848/nacos/
+```
+
+```bash
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.yml down
+```
+
+`down` 不删除宿主机 `${DEPLOY_DATA_DIR}` 下的数据。需要重新初始化时应先备份并明确处理对应数据目录，不要直接覆盖已有 Nacos/MySQL 数据。
+
+## 3. 裸机启动数据库
 
 在项目根目录执行：
 
@@ -55,7 +99,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\stop-local-mysql.ps1
 - 用户：`root`
 - 密码：读取 `APP_DB_PASSWORD`，仓库不提供密码默认值
 
-## 3. 启动后端与 Gateway
+## 4. 裸机启动后端与 Gateway
 
 进入 `backend/` 目录执行：
 
@@ -104,7 +148,7 @@ http://localhost:8080/api/wiki/pages
 
 如果返回 JSON，说明后端接口可用。
 
-## 4. 启动前端
+## 5. 裸机启动前端
 
 进入前端目录：
 
@@ -137,7 +181,7 @@ Vite 已配置代理：
 
 `8080` 是 Gateway；8 个业务服务直连端口为 `8082-8089`（`8081` 已停用）。外部业务流量只应进入 Gateway。
 
-## 5. 登录后台
+## 6. 登录后台
 
 打开前端：
 
@@ -171,7 +215,7 @@ http://localhost:5173/#/admin
 
 可在参数标准/标准文档列表的「修订历史」按钮查看。
 
-## 6. 常用页面
+## 7. 常用页面
 
 | 页面 | 地址 | 说明 |
 |------|------|------|
@@ -202,7 +246,7 @@ http://localhost:5173/#/admin
 - 公开参数标准：`http://localhost:8080/api/public/parameter-standards`
 - 论坛帖子：`http://localhost:8080/api/forum/posts`
 
-## 7. 构建前端
+## 8. 构建前端
 
 进入 `frontend` 目录执行：
 
@@ -216,7 +260,7 @@ npm.cmd run build
 frontend/dist
 ```
 
-## 8. 后端测试
+## 9. 后端测试
 
 进入 `backend/` 目录执行：
 
@@ -225,7 +269,7 @@ cd backend
 mvn test
 ```
 
-## 9. 端口占用检查
+## 10. 端口占用检查
 
 检查后端端口：
 
@@ -247,7 +291,7 @@ netstat -ano | Select-String ':8089'
 netstat -ano | Select-String ':5173'
 ```
 
-## 10. 推荐启动顺序
+## 11. 裸机推荐启动顺序
 
 1. 启动 MySQL
 2. 启动 core-service（`:8084`）

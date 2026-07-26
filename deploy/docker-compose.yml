@@ -1,49 +1,69 @@
-name: infra-portal
+name: ${COMPOSE_PROJECT_NAME:-infra-portal}
+
+x-app-environment: &app-environment
+  SPRING_PROFILES_ACTIVE: cloud
+  APP_DB_HOST: mysql
+  APP_DB_PORT: 3306
+  APP_DB_NAME: ${APP_DB_NAME:-middleware_resource_manager}
+  APP_DB_USERNAME: ${APP_DB_USERNAME:-root}
+  APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}
+  NACOS_SERVER_ADDR: nacos:8848
+  NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+  NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+  NACOS_PASSWORD: ${NACOS_PASSWORD:?NACOS_PASSWORD is required}
+  NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-DEFAULT_GROUP}
+  NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-DEFAULT_GROUP}
+
+x-gateway-environment: &gateway-environment
+  SPRING_PROFILES_ACTIVE: cloud
+  NACOS_SERVER_ADDR: nacos:8848
+  NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+  NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+  NACOS_PASSWORD: ${NACOS_PASSWORD:?NACOS_PASSWORD is required}
+  NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-DEFAULT_GROUP}
+  NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-DEFAULT_GROUP}
 
 x-application: &application
   restart: unless-stopped
   env_file:
-    - ./services.env
-  environment:
-    SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-cloud}
-    APP_DB_HOST: mysql
-    APP_DB_PORT: 3306
-    APP_DB_NAME: ${APP_DB_NAME:-middleware_resource_manager}
-    APP_DB_USERNAME: ${APP_DB_USERNAME:-root}
-    APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}
-    GATEWAY_SIGNING_SECRET: ${GATEWAY_SIGNING_SECRET:?GATEWAY_SIGNING_SECRET is required}
-    NACOS_SERVER_ADDR: nacos:8848
-    NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
-    NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
-    NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
-    NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-DEFAULT_GROUP}
-    NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-DEFAULT_GROUP}
+    - ${BUSINESS_ENV_FILE:-./services.env}
+  extra_hosts:
+    - host.containers.internal:host-gateway
   depends_on:
     mysql:
       condition: service_healthy
-    nacos:
-      condition: service_healthy
+    nacos-init:
+      condition: service_completed_successfully
+  healthcheck:
+    test:
+      - CMD-SHELL
+      - >-
+        status=$$(curl --silent --output /dev/null --write-out '%{http_code}'
+        http://localhost:$$SERVER_PORT/); [ "$$status" != "000" ]
+    interval: 10s
+    timeout: 5s
+    retries: 18
+    start_period: 45s
 
 x-gateway: &gateway
   restart: unless-stopped
   env_file:
-    - ./services.env
-  environment:
-    SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-cloud}
-    GATEWAY_SIGNING_SECRET: ${GATEWAY_SIGNING_SECRET:?GATEWAY_SIGNING_SECRET is required}
-    NACOS_SERVER_ADDR: nacos:8848
-    NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
-    NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
-    NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
-    NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-DEFAULT_GROUP}
-    NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-DEFAULT_GROUP}
-    CORE_SERVICE_URL: http://core-service:8084
-    AI_SERVICE_URL: http://ai-service:8083
-    COMMUNITY_SERVICE_URL: http://community-service:8082
-    MIDDLEWARE_SERVICE_URL: http://middleware-service:8085
+    - ${BUSINESS_ENV_FILE:-./services.env}
+  extra_hosts:
+    - host.containers.internal:host-gateway
   depends_on:
-    nacos:
-      condition: service_healthy
+    nacos-init:
+      condition: service_completed_successfully
+  healthcheck:
+    test:
+      - CMD-SHELL
+      - >-
+        status=$$(curl --silent --output /dev/null --write-out '%{http_code}'
+        http://localhost:8080/); [ "$$status" != "000" ]
+    interval: 10s
+    timeout: 5s
+    retries: 18
+    start_period: 45s
 
 services:
   mysql:
@@ -55,7 +75,7 @@ services:
     ports:
       - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
     volumes:
-      - ${DEPLOY_DATA_DIR:-/data/infra-portal}/mysql:/var/lib/mysql
+      - ${DEPLOY_DATA_DIR:-./data}/mysql:/var/lib/mysql
       - ../db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
       - ../db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
     healthcheck:
@@ -66,7 +86,7 @@ services:
       start_period: 30s
 
   nacos:
-    image: nacos/nacos-server:${NACOS_VERSION:-v2.3.2}
+    image: nacos/nacos-server:${NACOS_VERSION:-v2.3.2-slim}
     restart: unless-stopped
     environment:
       MODE: standalone
@@ -78,14 +98,33 @@ services:
     ports:
       - "127.0.0.1:${NACOS_PORT:-8848}:8848"
     volumes:
-      - ${DEPLOY_DATA_DIR:-/data/infra-portal}/nacos/data:/home/nacos/data
-      - ${DEPLOY_DATA_DIR:-/data/infra-portal}/nacos/logs:/home/nacos/logs
+      - ${DEPLOY_DATA_DIR:-./data}/nacos/data:/home/nacos/data
+      - ${DEPLOY_DATA_DIR:-./data}/nacos/logs:/home/nacos/logs
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8848/nacos/actuator/health >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 18
       start_period: 45s
+
+  nacos-init:
+    image: ${IMAGE_NAMESPACE:-infra-portal}/nacos-init:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.nacos-init
+    restart: "no"
+    environment:
+      NACOS_URL: http://nacos:8848
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:?NACOS_PASSWORD is required}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
+      NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-DEFAULT_GROUP}
+      NACOS_CONFIG_DIR: /config
+    volumes:
+      - ./nacos-config:/config:ro
+    depends_on:
+      nacos:
+        condition: service_healthy
 
   etcd:
     image: quay.io/coreos/etcd:${ETCD_VERSION:-v3.5.5}
@@ -95,13 +134,13 @@ services:
       ETCD_AUTO_COMPACTION_RETENTION: "1000"
       ETCD_QUOTA_BACKEND_BYTES: "4294967296"
       ETCD_SNAPSHOT_COUNT: "50000"
-    command: >
+    command: >-
       etcd
       --advertise-client-urls=http://127.0.0.1:2379
       --listen-client-urls=http://0.0.0.0:2379
       --data-dir=/etcd
     volumes:
-      - ${DEPLOY_DATA_DIR:-/data/infra-portal}/milvus/etcd:/etcd
+      - ${DEPLOY_DATA_DIR:-./data}/milvus/etcd:/etcd
     healthcheck:
       test: ["CMD", "etcdctl", "endpoint", "health"]
       interval: 10s
@@ -113,15 +152,15 @@ services:
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
     command: minio server /minio_data --console-address ":9001"
     ports:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - ${DEPLOY_DATA_DIR:-/data/infra-portal}/milvus/minio:/minio_data
+      - ${DEPLOY_DATA_DIR:-./data}/milvus/minio:/minio_data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -138,14 +177,14 @@ services:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
       MINIO_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
     ports:
-      - "${MILVUS_PORT:-19530}:19530"
+      - "127.0.0.1:${MILVUS_PORT:-19530}:19530"
       - "127.0.0.1:${MILVUS_WEBUI_PORT:-9091}:9091"
     volumes:
-      - ${DEPLOY_DATA_DIR:-/data/infra-portal}/milvus/data:/var/lib/milvus
+      - ${DEPLOY_DATA_DIR:-./data}/milvus/data:/var/lib/milvus
     depends_on:
       etcd:
         condition: service_healthy
@@ -160,79 +199,182 @@ services:
 
   api-gateway:
     <<: *gateway
-    image: ${IMAGE_NAMESPACE:-infra-portal}/api-gateway:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_NAMESPACE:-infra-portal}/api-gateway:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: api-gateway
+    environment:
+      <<: *gateway-environment
     ports:
       - "${API_GATEWAY_PORT:-8080}:8080"
 
   core-service:
     <<: *application
-    image: ${IMAGE_NAMESPACE:-infra-portal}/core-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_NAMESPACE:-infra-portal}/core-service:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: core-service
+    environment:
+      <<: *app-environment
+      SERVER_PORT: 8084
     ports:
-      - "${CORE_SERVICE_PORT:-8084}:8084"
+      - "127.0.0.1:${CORE_SERVICE_PORT:-8084}:8084"
+    volumes:
+      - ${DEPLOY_DATA_DIR:-./data}/storage:/app/storage
 
   ai-service:
     <<: *application
-    image: ${IMAGE_NAMESPACE:-infra-portal}/ai-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_NAMESPACE:-infra-portal}/ai-service:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: ai-service
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-cloud}
-      APP_DB_HOST: mysql
-      APP_DB_PORT: 3306
-      APP_DB_NAME: ${APP_DB_NAME:-middleware_resource_manager}
-      APP_DB_USERNAME: ${APP_DB_USERNAME:-root}
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD is required}
-      GATEWAY_SIGNING_SECRET: ${GATEWAY_SIGNING_SECRET:?GATEWAY_SIGNING_SECRET is required}
-      NACOS_SERVER_ADDR: nacos:8848
-      NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
-      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
-      NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
-      NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-DEFAULT_GROUP}
-      NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-DEFAULT_GROUP}
-      VECTOR_TYPE: ${VECTOR_TYPE:-milvus}
+      <<: *app-environment
+      SERVER_PORT: 8083
+      VECTOR_TYPE: milvus
       VECTOR_HOST: milvus
       VECTOR_PORT: 19530
-      VECTOR_COLLECTION: ${VECTOR_COLLECTION:-knowledge_chunks}
     ports:
-      - "${AI_SERVICE_PORT:-8083}:8083"
+      - "127.0.0.1:${AI_SERVICE_PORT:-8083}:8083"
+    volumes:
+      - ${DEPLOY_DATA_DIR:-./data}/ai/storage:/app/storage
+      - ${DEPLOY_DATA_DIR:-./data}/ai/data:/app/data
     depends_on:
       mysql:
         condition: service_healthy
-      nacos:
-        condition: service_healthy
+      nacos-init:
+        condition: service_completed_successfully
       milvus:
         condition: service_healthy
 
   community-service:
     <<: *application
-    image: ${IMAGE_NAMESPACE:-infra-portal}/community-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_NAMESPACE:-infra-portal}/community-service:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: community-service
+    environment:
+      <<: *app-environment
+      SERVER_PORT: 8082
     ports:
-      - "${COMMUNITY_SERVICE_PORT:-8082}:8082"
+      - "127.0.0.1:${COMMUNITY_SERVICE_PORT:-8082}:8082"
 
   middleware-service:
     <<: *application
-    image: ${IMAGE_NAMESPACE:-infra-portal}/middleware-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_NAMESPACE:-infra-portal}/middleware-service:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: middleware-service
+    environment:
+      <<: *app-environment
+      SERVER_PORT: 8085
     ports:
-      - "${MIDDLEWARE_SERVICE_PORT:-8085}:8085"
+      - "127.0.0.1:${MIDDLEWARE_SERVICE_PORT:-8085}:8085"
 
   database-service:
     <<: *application
-    image: ${IMAGE_NAMESPACE:-infra-portal}/database-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_NAMESPACE:-infra-portal}/database-service:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: database-service
+    environment:
+      <<: *app-environment
+      SERVER_PORT: 8086
     ports:
-      - "${DATABASE_SERVICE_PORT:-8086}:8086"
+      - "127.0.0.1:${DATABASE_SERVICE_PORT:-8086}:8086"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 45s
 
   host-service:
     <<: *application
-    image: ${IMAGE_NAMESPACE:-infra-portal}/host-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_NAMESPACE:-infra-portal}/host-service:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: host-service
+    environment:
+      <<: *app-environment
+      SERVER_PORT: 8087
     ports:
-      - "${HOST_SERVICE_PORT:-8087}:8087"
+      - "127.0.0.1:${HOST_SERVICE_PORT:-8087}:8087"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8087/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 45s
 
   network-service:
     <<: *application
-    image: ${IMAGE_NAMESPACE:-infra-portal}/network-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_NAMESPACE:-infra-portal}/network-service:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: network-service
+    environment:
+      <<: *app-environment
+      SERVER_PORT: 8088
     ports:
-      - "${NETWORK_SERVICE_PORT:-8088}:8088"
+      - "127.0.0.1:${NETWORK_SERVICE_PORT:-8088}:8088"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8088/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 45s
 
   security-service:
     <<: *application
-    image: ${IMAGE_NAMESPACE:-infra-portal}/security-service:${IMAGE_TAG:?IMAGE_TAG is required}
+    image: ${IMAGE_NAMESPACE:-infra-portal}/security-service:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: security-service
+    environment:
+      <<: *app-environment
+      SERVER_PORT: 8089
     ports:
-      - "${SECURITY_SERVICE_PORT:-8089}:8089"
+      - "127.0.0.1:${SECURITY_SERVICE_PORT:-8089}:8089"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8089/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 45s
+
+  frontend:
+    image: ${IMAGE_NAMESPACE:-infra-portal}/frontend:${IMAGE_TAG:-local}
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=-", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s

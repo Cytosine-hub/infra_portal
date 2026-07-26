@@ -47,7 +47,37 @@
 
 ## 快速启动
 
-### 后端
+### Docker Compose（完整运行栈）
+
+Compose 会启动前端、Gateway、8 个业务服务、MySQL、Nacos、Milvus、etcd 和 MinIO。首次启动先创建两类环境文件：
+
+```bash
+cp deploy/compose.env.example deploy/compose.env
+cp deploy/services.env.example deploy/services.env
+```
+
+- `deploy/compose.env`：镜像版本、端口、数据目录和基础组件凭据，仅用于 Compose 插值与基础设施初始化。
+- `deploy/services.env`：只注入 Java 业务容器的运行时密钥。
+- `deploy/nacos-config/*.properties`：业务服务配置模板，由 `nacos-init` 发布到 Nacos；模板中的密钥通过业务容器环境变量解析。
+
+填写两个环境文件中的空值后启动：
+
+```bash
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.yml up --detach --build
+sh deploy/smoke-test.sh
+```
+
+`nacos-init` 只创建缺失的 namespace 和 9 个 Data ID，不覆盖 Nacos 中已有配置。MySQL 只在全新数据目录首次执行 `db/init.sql` 和 `db/seed.sql`，已有数据目录不会重放初始化脚本。前端入口为 `http://localhost:5173`。
+
+停止服务但保留数据：
+
+```bash
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.yml down
+```
+
+### 裸机后端
 
 ```bash
 cd backend
@@ -55,7 +85,7 @@ mvn clean package -DskipTests
 mvn spring-boot:run
 ```
 
-### 前端
+### 裸机前端
 
 ```bash
 cd frontend
@@ -63,12 +93,14 @@ npm install
 npm run dev
 ```
 
-### 依赖服务
+### 裸机依赖服务
 
 - MySQL 8.0：`127.0.0.1:3306`
 - Milvus（向量数据库）：`localhost:19530`
 
-## 环境变量
+## 裸机业务环境变量
+
+裸机默认 profile 继续直接读取以下环境变量；Compose 的 `cloud` profile 则优先从 Nacos 的 9 个 Data ID 加载非敏感业务配置，敏感值仍由 `deploy/services.env` 注入。
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
@@ -124,7 +156,7 @@ CREATE DATABASE IF NOT EXISTS middleware_resource_manager
 mysql -u root middleware_resource_manager < db/init.sql
 
 # 导入种子数据（可选）
-mysql -u root middleware_resource_manager < db/seed_data.sql
+mysql -u root middleware_resource_manager < db/seed.sql
 ```
 
 ## 项目结构

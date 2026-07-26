@@ -19,6 +19,8 @@ target/
 /frontend/.vite/
 /release/
 /deploy/milvus-offline/dist/
+/deploy/compose.env
+/deploy/data/
 /tools/
 /mysql/
 /.m2/
