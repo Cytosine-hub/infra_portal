@@ -89,6 +89,8 @@ docker compose --env-file compose.env --file docker-compose.yml down
 
 此时 `docker compose ls` 的配置路径应为 `/app/infra-portal/deploy/docker-compose.yml`，不再引用会被 Runner 清理的 `/builds/...`。受保护变量只会注入受保护分支或 Tag；在普通 feature 分支手动部署前必须确认变量保护范围和 Environment scope。
 
+Runner 的 Docker Executor 应保持 `pull_policy = "if-not-present"`，并挂载宿主机 `/var/run/docker.sock`。项目通过宿主机 Docker 守护进程保留 BuildKit 构建层，Maven 与 npm 依赖分别使用 Dockerfile 中的 `/root/.m2` 和 `/root/.npm` cache mount；Runner 的 `/cache` 挂载只服务于 GitLab Job cache，不能替代 BuildKit 缓存。依赖镜像仅在对应 tag 不存在时拉取。不要配置无保留策略的定时 `docker builder prune -a`，否则下一次构建会重新下载基础镜像层和依赖。
+
 测试环境也可直接将生成的两个 `.test.env` 文件内容分别配置为上述 File 变量。部署入口会统一把业务密钥文件路径覆盖为 `./services.env`，不依赖上传前的本地文件名。
 
 启动顺序由健康检查和 `depends_on` 控制：MySQL/Nacos/Milvus 先就绪，`nacos-init` 再创建缺失的 namespace 和 9 个 Data ID，最后启动 9 个 Java 服务与前端。`nacos-init` 遇到已存在的 Data ID 会跳过，人工在 Nacos 中调整的业务配置不会被覆盖。

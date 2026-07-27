@@ -24,6 +24,13 @@ assert_text() {
     pass "$3"
 }
 
+assert_no_text() {
+    if grep -Eq "$2" "$ROOT_DIR/$1"; then
+        fail "$3 unexpected pattern $2"
+    fi
+    pass "$3"
+}
+
 env_value() {
     file=$1
     key=$2
@@ -92,5 +99,12 @@ assert_text .gitlab-ci.yml 'sed -i .*BUSINESS_ENV_FILE=\./services\.env.*DEPLOY_
     'TC-CI-011 persisted services env path'
 assert_text .gitlab-ci.yml 'docker compose --env-file "\$DEPLOY_COMPOSE_ENV" --file "\$DEPLOY_COMPOSE_FILE"' \
     'TC-CI-011 deployment uses persisted compose file'
+inspect_count=$(grep -Fc 'docker image inspect "$IMAGE"' "$ROOT_DIR/.gitlab-ci.yml" || true)
+[ "$inspect_count" -ge 2 ] \
+    || fail 'TC-CI-012 dependency image cache check must cover prepare and full-stack jobs'
+pass 'TC-CI-012 dependency image cache checks'
+assert_text .gitlab-ci.yml '依赖镜像已存在，跳过拉取' 'TC-CI-012 cache reuse log'
+assert_no_text .gitlab-ci.yml 'docker compose .* pull mysql nacos etcd minio milvus' \
+    'TC-CI-012 no unconditional compose pull'
 
 printf '%s\n' '* Task complete: GitLab CI contract'
