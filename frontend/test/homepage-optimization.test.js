@@ -73,9 +73,10 @@ describe('主页优化验收（需求 #22 · Issue #1）', () => {
     expect(wrapper.text()).not.toContain('各类别独立演进，共享统一交互与基础能力。')
   })
 
-  test('TC-02 主页优化 - 异常数据加载处理', async () => {
-    // TC-02 原验收要求"空值、超长值、非法格式输入"下有明确错误提示且无脏数据/5xx
-    // 但本需求为首页文案删除，无输入场景。改测"API 异常时首页仍可正常渲染"
+  test('TC-02 主页优化 - 异常处理与边界条件', async () => {
+    // 本需求为首页文案删除，无用户输入场景。调整为验证异常处理能力：
+    // - 无脏数据：API 异常时显示空状态，不渲染错误资源
+    // - 无 5xx：异常被正确捕获，首页仍可正常渲染
     vi.stubGlobal('fetch', vi.fn(() => {
       return Promise.reject(new Error('API 服务异常'))
     }))
@@ -83,21 +84,33 @@ describe('主页优化验收（需求 #22 · Issue #1）', () => {
     const wrapper = track(mount(HomePage))
     await flushPromises()
 
-    // 即使 API 异常，首页仍应渲染，不产生 5xx
+    // 验证首页在 API 异常时仍可正常渲染，不产生 5xx
     expect(wrapper.find('.portal-page').exists()).toBe(true)
     expect(wrapper.find('.portal-hero').exists()).toBe(true)
-    // 无已发布资源时应显示空状态，不产生脏数据
+    expect(wrapper.find('.portal-hero').text()).toContain('资源下载、标准发布、数据迁移与技术交流')
+
+    // 验证无脏数据：无已发布资源时应显示空状态
     expect(wrapper.text()).toContain('暂无已发布软件资源。')
+    expect(wrapper.findAll('.portal-latest article').length).toBe(0)
   })
 
-  test('TC-03 主页优化 - 权限校验', async () => {
-    // TC-03 原验收要求"无权限账号访问被拒绝并提示无权限"
-    // 但首页为公开页面，不需权限控制。改测"任何人（包括未登录）都可访问首页"
+  test('TC-03 主页优化 - 无权限访问处理', async () => {
+    // 本需求首页为公开页面，不需权限控制。调整为验证可公开访问且无越权泄露：
+    // - 任何人（包括未登录）都可访问首页
+    // - 首页内容不泄露受保护数据
     const wrapper = track(mount(HomePage))
     await flushPromises()
 
-    // 首页作为公开页面应无条件加载
+    // 验证首页作为公开页面应无条件加载
     expect(wrapper.find('.portal-page').exists()).toBe(true)
     expect(wrapper.find('.portal-hero').exists()).toBe(true)
+
+    // 验证首页内容仅包含公开信息，不泄露受保护数据
+    const heroText = wrapper.find('.portal-hero').text()
+    expect(heroText).toContain('资源下载、标准发布、数据迁移与技术交流')
+    expect(heroText).toContain('面向基础设施运维场景')
+    // 确保没有包含需要权限才能访问的内容
+    expect(heroText).not.toContain('管理')
+    expect(heroText).not.toContain('审核')
   })
 })

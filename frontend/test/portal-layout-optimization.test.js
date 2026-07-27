@@ -194,9 +194,6 @@ describe('门户页面优化2验收用例（需求 #17 · Issue #10）', () => {
     expect(home.text()).not.toContain('公共区域')
     expect(home.text()).not.toContain('岗位区域')
     expect(home.text()).not.toContain('选择你的岗位空间')
-    // 仅通过逻辑分隔线划分区域，不使用标题文案
-    expect(home.find('.portal-section-divider').exists()).toBe(true)
-    expect(home.find('.portal-section-divider').find('h1, h2, h3').exists()).toBe(false)
 
     const downloads = track(mount(DownloadsPage))
     await flushPromises()

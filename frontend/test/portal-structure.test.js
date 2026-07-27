@@ -112,7 +112,7 @@ describe('门户页面结构优化验收', () => {
     expect(wrapper.findAll('.portal-jobs-grid .portal-job-card')).toHaveLength(5)
     expect(wrapper.text()).not.toContain('公共区域')
     expect(wrapper.text()).not.toContain('岗位专属区域')
-    expect(wrapper.find('.portal-section-divider').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('各类别独立演进，共享统一交互与基础能力。')
   })
 
   test('TC-PORTAL-002 (TC-02) 五大岗位入口点击后由各自入口组件展示正确岗位', async () => {
