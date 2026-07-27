@@ -57,7 +57,7 @@ sh deploy/generate-test-env.sh
 |------|------|------------------|
 | `deploy/compose.env` | Compose 项目名、镜像版本、端口、数据目录、MySQL/Nacos/MinIO 基础组件凭据 | 否 |
 | `deploy/services.env` | Gateway 签名、管理员初始密码、AI、Wiki、Zabbix 等运行时密钥 | 是 |
-| `deploy/nacos-config/*.properties` | 9 个 Java 服务的业务配置模板 | 由 Nacos Config 加载 |
+| `deploy/nacos-config/*.properties` | 9 个 Java 服务的业务配置模板，构建时复制进 `nacos-init` 镜像 | 由 Nacos Config 加载 |
 
 必须补齐两个环境文件中的空密钥。随后在项目根目录启动：
 

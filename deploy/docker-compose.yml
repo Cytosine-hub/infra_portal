@@ -120,8 +120,6 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
       NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-DEFAULT_GROUP}
       NACOS_CONFIG_DIR: /config
-    volumes:
-      - ./nacos-config:/config:ro
     depends_on:
       nacos:
         condition: service_healthy

@@ -66,7 +66,7 @@ sh deploy/generate-test-env.sh
 
 - `deploy/compose.env`：镜像版本、端口、数据目录和基础组件凭据，仅用于 Compose 插值与基础设施初始化。
 - `deploy/services.env`：只注入 Java 业务容器的运行时密钥。
-- `deploy/nacos-config/*.properties`：业务服务配置模板，由 `nacos-init` 发布到 Nacos；模板中的密钥通过业务容器环境变量解析。
+- `deploy/nacos-config/*.properties`：业务服务配置模板，构建时复制进 `nacos-init` 镜像并发布到 Nacos；模板中的密钥通过业务容器环境变量解析。
 
 填写两个环境文件中的空值后启动：
 

@@ -22,11 +22,20 @@ assert_text() {
     pass "$3"
 }
 
+assert_no_text() {
+    if grep -Eq "$2" "$ROOT_DIR/$1"; then
+        fail "$3 unexpected pattern $2"
+    fi
+    pass "$3"
+}
+
 printf '%s\n' '+ Task start: Docker Compose contract'
 assert_file deploy/compose.env.example 'TC-DOCKER-001'
 assert_file deploy/Dockerfile.frontend 'TC-DOCKER-002'
 assert_file deploy/nginx.conf 'TC-DOCKER-003'
 assert_file deploy/nacos-init.sh 'TC-DOCKER-004'
+assert_text deploy/Dockerfile.nacos-init '^COPY deploy/nacos-config /config$' 'TC-DOCKER-029'
+assert_no_text deploy/docker-compose.yml 'nacos-config:/config' 'TC-DOCKER-030'
 assert_text deploy/docker-compose.yml '^  frontend:' 'TC-DOCKER-005'
 assert_text deploy/docker-compose.yml '^  nacos-init:' 'TC-DOCKER-006'
 assert_text deploy/docker-compose.yml 'condition: service_completed_successfully' 'TC-DOCKER-007'
