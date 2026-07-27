@@ -61,40 +61,32 @@ describe('主页优化验收（需求 #22 · Issue #1）', () => {
     const wrapper = track(mount(HomePage))
     await flushPromises()
 
-    // 检查首页基本结构存在
     expect(wrapper.find('.portal-page').exists()).toBe(true)
     expect(wrapper.find('.portal-hero').exists()).toBe(true)
 
-    // 确保有公共功能卡片和岗位卡片
     const publicCards = wrapper.findAll('.portal-public-grid .portal-card')
     const jobCards = wrapper.findAll('.portal-jobs-grid .portal-card')
     expect(publicCards.length).toBeGreaterThan(0)
     expect(jobCards.length).toBeGreaterThan(0)
 
-    // 关键验证：确保"各类别独立演进，共享统一交互与基础能力。"这行字已删除
     expect(wrapper.text()).not.toContain('各类别独立演进，共享统一交互与基础能力。')
   })
 
-  test('TC-02 主页优化 - 内容确认', async () => {
+  test('TC-02 主页优化 - 分隔符文本已移除', async () => {
     const wrapper = track(mount(HomePage))
     await flushPromises()
 
-    // 页面仍然正常渲染
-    expect(wrapper.find('.portal-page').exists()).toBe(true)
-
-    // 分隔符区域应该清空（不包含已删除的文本）
+    const divider = wrapper.find('.portal-section-divider')
+    expect(divider.exists()).toBe(true)
+    expect(divider.text()).toBe('')
     expect(wrapper.text()).not.toContain('各类别独立演进，共享统一交互与基础能力。')
   })
 
-  test('TC-03 主页优化 - 无权限用户访问', async () => {
+  test('TC-03 主页优化 - 无权限用户可访问首页', async () => {
     const wrapper = track(mount(HomePage))
     await flushPromises()
 
-    // 首页不需要权限校验，所有用户都可以看到
     expect(wrapper.find('.portal-page').exists()).toBe(true)
-
-    // 页面完整加载，关键内容存在
     expect(wrapper.find('.portal-hero').exists()).toBe(true)
-    expect(wrapper.findAll('.portal-card').length).toBeGreaterThan(0)
   })
 })
