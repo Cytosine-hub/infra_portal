@@ -1,3 +1,5 @@
+SET NAMES utf8mb4;
+
 DROP TABLE IF EXISTS `admin_accounts`;
 CREATE TABLE `admin_accounts` (
   `id` bigint NOT NULL AUTO_INCREMENT,
