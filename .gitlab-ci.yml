@@ -349,6 +349,11 @@ integration:e2e:
       else
         printf '\nIMAGE_TAG=%s\n' "$CI_COMMIT_SHA" >> "$DEPLOY_COMPOSE_ENV"
       fi
+      if grep -q '^BUSINESS_ENV_FILE=' "$DEPLOY_COMPOSE_ENV"; then
+        sed -i 's|^BUSINESS_ENV_FILE=.*|BUSINESS_ENV_FILE=./services.env|' "$DEPLOY_COMPOSE_ENV"
+      else
+        printf '\nBUSINESS_ENV_FILE=./services.env\n' >> "$DEPLOY_COMPOSE_ENV"
+      fi
     - chmod 600 "$DEPLOY_COMPOSE_ENV" "$DEPLOY_SERVICES_ENV"
     - chmod 644 "$DEPLOY_COMPOSE_FILE" "$DEPLOY_STATE_DIR/../db/init.sql" "$DEPLOY_STATE_DIR/../db/seed.sql"
     - export BUSINESS_ENV_FILE=./services.env

@@ -75,7 +75,7 @@ GitLab 流水线中的 `verify:deployment` 只使用临时测试配置执行静�
 | `DEPLOY_SERVICES_ENV_FILE` | File | 基于 `deploy/services.env.example` 的完整业务密钥配置 |
 | `DEPLOY_STATE_DIR` | Variable，可选 | Runner 宿主机上的持久化部署目录，默认 `/app/infra-portal/deploy` |
 
-部署 job 读取到的 File 变量值是 GitLab 临时文件路径，因此会将其内容复制到 Runner 宿主机的 `$DEPLOY_STATE_DIR/compose.env` 和 `$DEPLOY_STATE_DIR/services.env`。同时持久化 `docker-compose.yml`，并将 `db/init.sql` 与 `db/seed.sql` 保存到相邻的 `/app/infra-portal/db`。`compose.env` 中的 `IMAGE_TAG` 会同步为实际部署的提交 SHA，保证 Job 结束后仍可手动执行 Compose 命令。两个密钥文件权限为 `0600`。
+部署 job 读取到的 File 变量值是 GitLab 临时文件路径，因此会将其内容复制到 Runner 宿主机的 `$DEPLOY_STATE_DIR/compose.env` 和 `$DEPLOY_STATE_DIR/services.env`。同时持久化 `docker-compose.yml`，并将 `db/init.sql` 与 `db/seed.sql` 保存到相邻的 `/app/infra-portal/db`。`compose.env` 中的 `IMAGE_TAG` 会同步为实际部署的提交 SHA，`BUSINESS_ENV_FILE` 会固定为 `./services.env`，保证上传测试配置后仍能在 Job 结束时手动执行 Compose 命令。两个密钥文件权限为 `0600`。
 
 Runner 必须将宿主机 `/app` 挂载到 Job 容器的 `/app`。默认部署完成后，在宿主机执行：
 

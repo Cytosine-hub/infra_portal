@@ -88,6 +88,8 @@ assert_text .gitlab-ci.yml 'cp deploy/docker-compose\.yml "\$DEPLOY_COMPOSE_FILE
     'TC-CI-011 persisted compose file'
 assert_text .gitlab-ci.yml 'cp db/init\.sql "\$DEPLOY_STATE_DIR/\.\./db/init\.sql"' \
     'TC-CI-011 persisted database init script'
+assert_text .gitlab-ci.yml 'sed -i .*BUSINESS_ENV_FILE=\./services\.env.*DEPLOY_COMPOSE_ENV' \
+    'TC-CI-011 persisted services env path'
 assert_text .gitlab-ci.yml 'docker compose --env-file "\$DEPLOY_COMPOSE_ENV" --file "\$DEPLOY_COMPOSE_FILE"' \
     'TC-CI-011 deployment uses persisted compose file'
 
