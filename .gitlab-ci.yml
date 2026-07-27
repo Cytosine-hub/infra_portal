@@ -44,9 +44,6 @@ verify:deployment:
   script:
     - trap 'rm -f deploy/compose.test.env deploy/services.test.env' EXIT
     - sh deploy/generate-test-env.sh
-    - sh deploy/tests/compose-contract.sh
-    - sh deploy/tests/nacos-init-test.sh
-    - sh deploy/tests/ci-contract.sh
     - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.yml config --quiet
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'

@@ -78,7 +78,7 @@ sh deploy/smoke-test.sh
 
 `nacos-init` 只创建缺失的 namespace 和 9 个 Data ID，不覆盖 Nacos 中已有配置。MySQL 只在全新数据目录首次执行 `db/init.sql` 和 `db/seed.sql`，已有数据目录不会重放初始化脚本。前端入口为 `http://localhost:5173`。
 
-GitLab 的 `verify:deployment` 会自动生成临时测试配置并执行 Compose、Nacos 初始化器和 CI 契约检查，不启动运行栈。实际部署必须配置 `DEPLOY_COMPOSE_ENV_FILE` 与 `DEPLOY_SERVICES_ENV_FILE` 两个 File 类型 CI/CD Variable；变量值是 GitLab 创建的临时文件路径，部署 job 会将其复制为 Compose 使用的环境文件。
+GitLab 的 `verify:deployment` 会自动生成临时测试配置并执行 Compose 配置解析，不启动运行栈。实际部署必须配置 `DEPLOY_COMPOSE_ENV_FILE` 与 `DEPLOY_SERVICES_ENV_FILE` 两个 File 类型 CI/CD Variable；变量值是 GitLab 创建的临时文件路径，部署 job 会将其复制为 Compose 使用的环境文件。
 
 停止服务但保留数据：
 
