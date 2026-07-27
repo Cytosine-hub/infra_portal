@@ -43,6 +43,14 @@ cp deploy/compose.env.example deploy/compose.env
 cp deploy/services.env.example deploy/services.env
 ```
 
+测试或 CI 静态验证使用模板生成器，不需要手工填写测试密码：
+
+```bash
+sh deploy/generate-test-env.sh
+```
+
+生成器会创建 `deploy/compose.test.env` 和 `deploy/services.test.env`，随机生成 MySQL、MinIO、Nacos 鉴权及业务服务密钥，并使用独立的 Compose 项目名、宿主端口和 `/app/infra-portal-test` 数据目录。Nacos 登录密码保留镜像默认值 `nacos`，因为当前镜像不会通过 Compose 环境变量修改默认账号；Nacos 鉴权 Token 和身份键值仍为随机值。生成文件权限为 `0600` 且不会被 Git 跟踪，脚本拒绝覆盖已有文件，避免测试数据卷与新密码不一致。
+
 配置职责必须保持分离：
 
 | 文件 | 职责 | 是否注入业务服务 |
@@ -58,6 +66,17 @@ docker compose --env-file deploy/compose.env \
   --file deploy/docker-compose.yml up --detach --build
 sh deploy/smoke-test.sh
 ```
+
+GitLab 流水线中的 `verify:deployment` 只使用临时测试配置执行静态校验，不启动或更新数据库、Nacos 和业务容器。真实部署需要在 GitLab CI/CD Variables 中创建以下变量：
+
+| 变量 | 类型 | 内容 |
+|------|------|------|
+| `DEPLOY_COMPOSE_ENV_FILE` | File | 基于 `deploy/compose.env.example` 的完整部署配置 |
+| `DEPLOY_SERVICES_ENV_FILE` | File | 基于 `deploy/services.env.example` 的完整业务密钥配置 |
+
+部署 job 读取到的变量值是 GitLab 临时文件路径，因此会先复制为 `deploy/compose.env` 和 `deploy/services.env`。受保护变量只会注入受保护分支或 Tag；在普通 feature 分支手动部署前必须确认变量保护范围和 Environment scope。
+
+测试环境也可直接将生成的两个 `.test.env` 文件内容分别配置为上述 File 变量。部署入口会统一把业务密钥文件路径覆盖为 `./services.env`，不依赖上传前的本地文件名。
 
 启动顺序由健康检查和 `depends_on` 控制：MySQL/Nacos/Milvus 先就绪，`nacos-init` 再创建缺失的 namespace 和 9 个 Data ID，最后启动 9 个 Java 服务与前端。`nacos-init` 遇到已存在的 Data ID 会跳过，人工在 Nacos 中调整的业务配置不会被覆盖。
 

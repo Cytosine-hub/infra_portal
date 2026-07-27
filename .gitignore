@@ -20,6 +20,7 @@ target/
 /release/
 /deploy/milvus-offline/dist/
 /deploy/compose.env
+/deploy/compose.test.env
 /deploy/data/
 /tools/
 /mysql/
@@ -41,3 +42,4 @@ backend/app/data/
 backend/app/logs/
 backend/app/storage/
 deploy/services.env
+/deploy/services.test.env

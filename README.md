@@ -56,6 +56,14 @@ cp deploy/compose.env.example deploy/compose.env
 cp deploy/services.env.example deploy/services.env
 ```
 
+测试环境可从同一组模板生成隔离配置。脚本会随机生成数据库密码、基础组件鉴权值和业务密钥，并使用独立项目名、端口和 `/app/infra-portal-test` 数据目录：
+
+```bash
+sh deploy/generate-test-env.sh
+```
+
+生成的 `deploy/compose.test.env` 和 `deploy/services.test.env` 权限为 `0600`，已被 Git 忽略。为避免意外轮换已有测试环境密码，脚本不会覆盖现有文件。
+
 - `deploy/compose.env`：镜像版本、端口、数据目录和基础组件凭据，仅用于 Compose 插值与基础设施初始化。
 - `deploy/services.env`：只注入 Java 业务容器的运行时密钥。
 - `deploy/nacos-config/*.properties`：业务服务配置模板，由 `nacos-init` 发布到 Nacos；模板中的密钥通过业务容器环境变量解析。
@@ -69,6 +77,8 @@ sh deploy/smoke-test.sh
 ```
 
 `nacos-init` 只创建缺失的 namespace 和 9 个 Data ID，不覆盖 Nacos 中已有配置。MySQL 只在全新数据目录首次执行 `db/init.sql` 和 `db/seed.sql`，已有数据目录不会重放初始化脚本。前端入口为 `http://localhost:5173`。
+
+GitLab 的 `verify:deployment` 会自动生成临时测试配置并执行 Compose、Nacos 初始化器和 CI 契约检查，不启动运行栈。实际部署必须配置 `DEPLOY_COMPOSE_ENV_FILE` 与 `DEPLOY_SERVICES_ENV_FILE` 两个 File 类型 CI/CD Variable；变量值是 GitLab 创建的临时文件路径，部署 job 会将其复制为 Compose 使用的环境文件。
 
 停止服务但保留数据：
 
