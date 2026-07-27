@@ -82,5 +82,13 @@ assert_text .gitlab-ci.yml 'up --detach --wait --no-build' 'TC-CI-008 deployment
 assert_text .gitlab-ci.yml '^deploy:frontend:' 'TC-CI-009 frontend deployment job'
 assert_text .gitlab-ci.yml 'Runner 缺少服务镜像，开始构建' 'TC-CI-010 service image fallback'
 assert_text .gitlab-ci.yml 'Runner 缺少前端镜像，开始构建' 'TC-CI-010 frontend image fallback'
+assert_text .gitlab-ci.yml '^  DEPLOY_STATE_DIR: "/app/infra-portal/deploy"$' \
+    'TC-CI-011 stable deployment directory'
+assert_text .gitlab-ci.yml 'cp deploy/docker-compose\.yml "\$DEPLOY_COMPOSE_FILE"' \
+    'TC-CI-011 persisted compose file'
+assert_text .gitlab-ci.yml 'cp db/init\.sql "\$DEPLOY_STATE_DIR/\.\./db/init\.sql"' \
+    'TC-CI-011 persisted database init script'
+assert_text .gitlab-ci.yml 'docker compose --env-file "\$DEPLOY_COMPOSE_ENV" --file "\$DEPLOY_COMPOSE_FILE"' \
+    'TC-CI-011 deployment uses persisted compose file'
 
 printf '%s\n' '* Task complete: GitLab CI contract'

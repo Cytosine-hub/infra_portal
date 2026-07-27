@@ -73,8 +73,21 @@ GitLab 流水线中的 `verify:deployment` 只使用临时测试配置执行静�
 |------|------|------|
 | `DEPLOY_COMPOSE_ENV_FILE` | File | 基于 `deploy/compose.env.example` 的完整部署配置 |
 | `DEPLOY_SERVICES_ENV_FILE` | File | 基于 `deploy/services.env.example` 的完整业务密钥配置 |
+| `DEPLOY_STATE_DIR` | Variable，可选 | Runner 宿主机上的持久化部署目录，默认 `/app/infra-portal/deploy` |
 
-部署 job 读取到的变量值是 GitLab 临时文件路径，因此会先复制为 `deploy/compose.env` 和 `deploy/services.env`。受保护变量只会注入受保护分支或 Tag；在普通 feature 分支手动部署前必须确认变量保护范围和 Environment scope。
+部署 job 读取到的 File 变量值是 GitLab 临时文件路径，因此会将其内容复制到 Runner 宿主机的 `$DEPLOY_STATE_DIR/compose.env` 和 `$DEPLOY_STATE_DIR/services.env`。同时持久化 `docker-compose.yml`，并将 `db/init.sql` 与 `db/seed.sql` 保存到相邻的 `/app/infra-portal/db`。`compose.env` 中的 `IMAGE_TAG` 会同步为实际部署的提交 SHA，保证 Job 结束后仍可手动执行 Compose 命令。两个密钥文件权限为 `0600`。
+
+Runner 必须将宿主机 `/app` 挂载到 Job 容器的 `/app`。默认部署完成后，在宿主机执行：
+
+```bash
+cd /app/infra-portal/deploy
+docker compose --env-file compose.env --file docker-compose.yml ps
+docker compose --env-file compose.env --file docker-compose.yml stop
+docker compose --env-file compose.env --file docker-compose.yml start
+docker compose --env-file compose.env --file docker-compose.yml down
+```
+
+此时 `docker compose ls` 的配置路径应为 `/app/infra-portal/deploy/docker-compose.yml`，不再引用会被 Runner 清理的 `/builds/...`。受保护变量只会注入受保护分支或 Tag；在普通 feature 分支手动部署前必须确认变量保护范围和 Environment scope。
 
 测试环境也可直接将生成的两个 `.test.env` 文件内容分别配置为上述 File 变量。部署入口会统一把业务密钥文件路径覆盖为 `./services.env`，不依赖上传前的本地文件名。
 
@@ -96,6 +109,8 @@ docker compose --env-file deploy/compose.env \
 ```
 
 `down` 不删除宿主机 `${DEPLOY_DATA_DIR}` 下的数据。需要重新初始化时应先备份并明确处理对应数据目录，不要直接覆盖已有 Nacos/MySQL 数据。
+
+模拟首次初始化时，仅清理 `/app/infra-portal/mysql`、`nacos`、`milvus`、`storage` 和 `ai` 等运行数据目录；必须保留 `/app/infra-portal/deploy` 和 `/app/infra-portal/db`，否则会丢失手动管理入口与 MySQL 初始化脚本。
 
 ## 3. 裸机启动数据库
 

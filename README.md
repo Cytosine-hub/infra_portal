@@ -80,6 +80,18 @@ sh deploy/smoke-test.sh
 
 GitLab 的 `verify:deployment` 会自动生成临时测试配置并执行 Compose 配置解析，不启动运行栈。实际部署必须配置 `DEPLOY_COMPOSE_ENV_FILE` 与 `DEPLOY_SERVICES_ENV_FILE` 两个 File 类型 CI/CD Variable；变量值是 GitLab 创建的临时文件路径，部署 job 会将其复制为 Compose 使用的环境文件。
 
+部署 job 会将运行清单持久化到 Runner 宿主机 `/app/infra-portal/deploy`，并将 MySQL 初始化脚本保存到 `/app/infra-portal/db`。Job 结束后可在宿主机手动管理：
+
+```bash
+cd /app/infra-portal/deploy
+docker compose --env-file compose.env --file docker-compose.yml ps
+docker compose --env-file compose.env --file docker-compose.yml stop
+docker compose --env-file compose.env --file docker-compose.yml start
+docker compose --env-file compose.env --file docker-compose.yml down
+```
+
+`compose.env` 和 `services.env` 包含部署密钥，权限固定为 `0600`。模拟首次初始化时只清理 `/app/infra-portal/mysql`、`nacos`、`milvus`、`storage` 和 `ai` 等数据目录，保留 `deploy` 与 `db` 目录。
+
 停止服务但保留数据：
 
 ```bash
