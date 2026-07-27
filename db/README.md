@@ -17,8 +17,8 @@
 bash db/restore.sh
 
 # 或手动执行
-mysql -u root -p middleware_resource_manager < db/init.sql
-mysql -u root -p middleware_resource_manager < db/seed.sql
+mysql --default-character-set=utf8mb4 -u root -p middleware_resource_manager < db/init.sql
+mysql --default-character-set=utf8mb4 -u root -p middleware_resource_manager < db/seed.sql
 ```
 
 ## 仅恢复种子数据
@@ -26,7 +26,7 @@ mysql -u root -p middleware_resource_manager < db/seed.sql
 如果表结构未变，只需恢复种子数据：
 
 ```bash
-mysql -u root -p middleware_resource_manager < db/seed.sql
+mysql --default-character-set=utf8mb4 -u root -p middleware_resource_manager < db/seed.sql
 ```
 
 ## 默认账号
