@@ -366,13 +366,15 @@ integration:e2e:
     - chmod 644 "$DEPLOY_COMPOSE_FILE" "$DEPLOY_STATE_DIR/../db/init.sql" "$DEPLOY_STATE_DIR/../db/seed.sql"
     - export BUSINESS_ENV_FILE=./services.env
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" config --quiet
+  # 默认（依赖组件、全栈）：始终手动，且非阻断——即使不点也不拖住流水线徽章。
+  # 单服务/前端 deploy 各自覆盖为“按路径变更自动部署”，见下。
   rules:
     - if: '$CI_PIPELINE_SOURCE == "web"'
       when: manual
-      allow_failure: false
+      allow_failure: true
     - if: '$CI_COMMIT_REF_NAME == "master"'
       when: manual
-      allow_failure: false
+      allow_failure: true
 
 .deploy-tpl:
   extends: .deploy-common
@@ -409,15 +411,8 @@ deploy:dependencies:
 # 不依赖未选择的手动作业，从而可直接在 GitLab Web 流水线中执行。
 deploy:full-stack:
   extends: .deploy-common
-  # 覆盖父级手动规则：合并到 master 后 verify 通过即自动部署全栈（CD）。
-  # 其余单服务/依赖部署仍走父级 .deploy-common 的手动规则，留作精准运维。
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: false
-    - if: '$CI_COMMIT_REF_NAME == "master"'
-      when: on_success
-      allow_failure: false
+  # 全量重部署：始终手动（继承 .deploy-common 的非阻断手动规则），用于一次性重建整栈。
+  # 日常合并走下方单服务自动部署，不再每次全栈重建。
   environment:
     name: staging/full-stack
   script:
@@ -444,50 +439,195 @@ deploy:full-stack:
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/api/public/releases
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps --all
 
+# ----------------------------------------------------------------------------
+# 单服务自动部署（增量 CD）：master 上仅当该服务自身/能力模块/共享库变更时，
+# verify:<svc> 通过后自动部署该服务；未变服务不进流水线，不部署也不阻断。
+# 每个 changes 与对应 verify:<svc> 保持一致，但去掉 .gitlab-ci.yml——
+# 改 CI 文件本身不应触发未变服务的重部署。改共享库仍扇出到全部服务。
+# Web 手动流水线里可逐个手动部署（非阻断）。
+# ----------------------------------------------------------------------------
 deploy:api-gateway:
   extends: .deploy-tpl
   variables: { SVC: api-gateway }
   needs: [{ job: "verify:api-gateway", optional: true }]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      changes:
+        - backend/api-gateway/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+      when: on_success
+      allow_failure: false
 
 deploy:core-service:
   extends: .deploy-tpl
   variables: { SVC: core-service }
   needs: [{ job: "verify:core-service", optional: true }]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      changes:
+        - backend/core-service/**/*
+        - backend/identity/**/*
+        - backend/catalog/**/*
+        - backend/standards/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+      when: on_success
+      allow_failure: false
 
 deploy:ai-service:
   extends: .deploy-tpl
   variables: { SVC: ai-service }
   needs: [{ job: "verify:ai-service", optional: true }]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      changes:
+        - backend/ai-service/**/*
+        - backend/knowledge/**/*
+        - backend/wiki/**/*
+        - backend/ops-agent/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+      when: on_success
+      allow_failure: false
 
 deploy:community-service:
   extends: .deploy-tpl
   variables: { SVC: community-service }
   needs: [{ job: "verify:community-service", optional: true }]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      changes:
+        - backend/community-service/**/*
+        - backend/community/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+      when: on_success
+      allow_failure: false
 
 deploy:middleware-service:
   extends: .deploy-tpl
   variables: { SVC: middleware-service }
   needs: [{ job: "verify:middleware-service", optional: true }]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      changes:
+        - backend/middleware-service/**/*
+        - backend/job-middleware/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+      when: on_success
+      allow_failure: false
 
 deploy:database-service:
   extends: .deploy-tpl
   variables: { SVC: database-service }
   needs: [{ job: "verify:database-service", optional: true }]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      changes:
+        - backend/database-service/**/*
+        - backend/job-database/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+      when: on_success
+      allow_failure: false
 
 deploy:host-service:
   extends: .deploy-tpl
   variables: { SVC: host-service }
   needs: [{ job: "verify:host-service", optional: true }]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      changes:
+        - backend/host-service/**/*
+        - backend/job-host/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+      when: on_success
+      allow_failure: false
 
 deploy:network-service:
   extends: .deploy-tpl
   variables: { SVC: network-service }
   needs: [{ job: "verify:network-service", optional: true }]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      changes:
+        - backend/network-service/**/*
+        - backend/job-network/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+      when: on_success
+      allow_failure: false
 
 deploy:security-service:
   extends: .deploy-tpl
   variables: { SVC: security-service }
   needs: [{ job: "verify:security-service", optional: true }]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      changes:
+        - backend/security-service/**/*
+        - backend/job-security/**/*
+        - backend/pom.xml
+        - backend/modular-monolith-parent/pom.xml
+        - backend/common-core/**/*
+        - backend/common-security/**/*
+        - backend/common-web/**/*
+      when: on_success
+      allow_failure: false
 
 # 前端独立更新不拉起依赖，避免要求同一提交同时存在 Gateway 镜像。
 deploy:frontend:
@@ -495,6 +635,18 @@ deploy:frontend:
   environment:
     name: staging/frontend
   needs: [{ job: "verify:frontend", optional: true }]
+  # 前端有变更时（master）自动部署；与 verify:frontend 触发路径一致（去掉 .gitlab-ci.yml）。
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      changes:
+        - frontend/**/*
+        - deploy/Dockerfile.frontend
+        - deploy/nginx.conf
+      when: on_success
+      allow_failure: false
   script:
     - export IMAGE_TAG="$CI_COMMIT_SHA"
     - |
