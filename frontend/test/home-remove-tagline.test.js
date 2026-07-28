@@ -2,17 +2,17 @@
 // 需求 #23（Issue #2）主页优化（拆解）— 去掉首页“各类别独立演进，共享统一交互与基础能力。”一行文案
 // 验收用例 TC-01 ~ TC-06 自动化测试
 
-import { readFile } from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
 import HomePage from '../src/pages/HomePage.vue'
+// 以 Vite raw import 获取组件源码文本，避免在 jsdom/Vite 环境下加载 node: 内置模块导致测试无法运行
+import homePageSource from '../src/pages/HomePage.vue?raw'
 import { jobModules } from '../src/modules/index.js'
 
 const TAGLINE = '各类别独立演进，共享统一交互与基础能力。'
 const TAGLINE_KEYWORD = '各类别独立演进'
 
-const readSource = (path) => readFile(new URL(path, import.meta.url), 'utf8')
 const mountedWrappers = []
 const storage = new Map()
 const localStorageMock = {
@@ -89,19 +89,19 @@ describe('主页优化（拆解）验收用例（需求 #23 · Issue #2）', () 
     const wrapper = track(mount(HomePage))
     await flushPromises()
 
-    // 分隔线仅作为逻辑分隔存在，且不再保留承载原文案的段落占位
-    const divider = wrapper.find('.portal-section-divider')
-    expect(divider.exists()).toBe(true)
-    expect(divider.findAll('p')).toHaveLength(0)
-    expect(divider.text().trim()).toBe('')
-    // 分隔线之后紧接岗位入口区，模块衔接自然
-    expect(wrapper.find('.portal-jobs-grid').exists()).toBe(true)
+    // 原承载文案的空分隔节点已彻底移除，不保留空占位/空分隔线
+    expect(wrapper.find('.portal-section-divider').exists()).toBe(false)
+    // 公共分类入口区后直接紧接岗位入口区，靠栅格自身间距自然衔接
+    const publicGrid = wrapper.find('.portal-public-grid')
+    const jobsGrid = wrapper.find('.portal-jobs-grid')
+    expect(publicGrid.exists()).toBe(true)
+    expect(jobsGrid.exists()).toBe(true)
+    expect(publicGrid.element.nextElementSibling).toBe(jobsGrid.element)
   })
 
   test('TC-04 不同屏幕尺寸下均不展示指定文案', async () => {
     // 文案在模板中被彻底移除，不依赖任何视口/媒体查询条件渲染
-    const source = await readSource('../src/pages/HomePage.vue')
-    expect(source).not.toContain(TAGLINE_KEYWORD)
+    expect(homePageSource).not.toContain(TAGLINE_KEYWORD)
 
     const wrapper = track(mount(HomePage))
     await flushPromises()
@@ -124,9 +124,8 @@ describe('主页优化（拆解）验收用例（需求 #23 · Issue #2）', () 
   })
 
   test('TC-06 页面源码和可访问文本中不包含指定文案（未通过隐藏样式保留）', async () => {
-    const source = await readSource('../src/pages/HomePage.vue')
-    expect(source).not.toContain(TAGLINE)
-    expect(source).not.toContain(TAGLINE_KEYWORD)
+    expect(homePageSource).not.toContain(TAGLINE)
+    expect(homePageSource).not.toContain(TAGLINE_KEYWORD)
 
     const wrapper = track(mount(HomePage))
     await flushPromises()
