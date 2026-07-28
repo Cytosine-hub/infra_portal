@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 // 需求 #17（Issue #10）页面优化2 — 验收用例 TC-01 ~ TC-07 自动化测试
 
-import { readFile } from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
@@ -10,8 +9,15 @@ import DownloadsPage from '../src/pages/DownloadsPage.vue'
 import StandardsPage from '../src/pages/StandardsPage.vue'
 import JobNavigation from '../src/shared/jobs/JobNavigation.vue'
 import { jobModules, getJobModule } from '../src/modules/index.js'
+// 以 Vite ?raw 导入源码文本做静态检查，避免在 jsdom/Vite 环境下加载 node: 内置模块导致测试无法运行
+import jobNavigationSource from '../src/shared/jobs/JobNavigation.vue?raw'
+import appSource from '../src/App.vue?raw'
 
-const readSource = (path) => readFile(new URL(path, import.meta.url), 'utf8')
+const sourceMap = {
+  '../src/shared/jobs/JobNavigation.vue': jobNavigationSource,
+  '../src/App.vue': appSource
+}
+const readSource = (path) => sourceMap[path]
 const mountedWrappers = []
 const storage = new Map()
 const localStorageMock = {
@@ -194,9 +200,9 @@ describe('门户页面优化2验收用例（需求 #17 · Issue #10）', () => {
     expect(home.text()).not.toContain('公共区域')
     expect(home.text()).not.toContain('岗位区域')
     expect(home.text()).not.toContain('选择你的岗位空间')
-    // 仅通过逻辑分隔线划分区域，不使用标题文案
-    expect(home.find('.portal-section-divider').exists()).toBe(true)
-    expect(home.find('.portal-section-divider').find('h1, h2, h3').exists()).toBe(false)
+    // 需求 #23：原承载文案的分隔节点已移除，仅靠栅格间距自然划分区域，既无分区标题也无占位分隔节点
+    expect(home.find('.portal-section-divider').exists()).toBe(false)
+    expect(home.find('.portal-public-grid').element.nextElementSibling).toBe(home.find('.portal-jobs-grid').element)
 
     const downloads = track(mount(DownloadsPage))
     await flushPromises()
