@@ -1,0 +1,9 @@
+.git
+.m2
+**/target
+deploy/services.env
+deploy/compose.env
+deploy/data
+frontend/node_modules
+frontend/dist
+runner

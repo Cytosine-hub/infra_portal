@@ -6,51 +6,130 @@
 # 构建期服务之间零依赖：只用 `mvn -pl <服务> -am`（also-make，连带构建 common-* 与其能力模块）。
 # 服务间真实联通（网关↔Nacos↔服务、认证越权）属【集成】层，单独一条流水线在预发环境跑。
 #
-# 需要：一个 docker executor 的 GitLab Runner（把 default.tags 改成你们 runner 的 tag）。
-#       内网若无法直连 Docker Hub，把 image 换成你们镜像仓库里的 maven:3.9-eclipse-temurin-17。
+# 需要：Runner Job 可访问 Runner 主机的 Docker Socket（见 runner/config.md）。
+#       编译、镜像构建和 Docker Compose 部署均在同一台 Runner 主机完成，不推送 JAR 或镜像制品。
 # ============================================================================
 
-# 只在【后端代码 / CI 文件】改动时创建流水线（MR / push / tag）。
+# 只在【前后端、部署配置或 CI 文件】改动时创建流水线（MR / push / tag），
+# 或由 GitLab Web 页面手动创建完整流水线。
 # 纯文档改动（agent.md、docs、README 等）没有可跑的 job → 不创建流水线，
 # 避免 GitLab 把"空流水线"判为 failed（doc-only 合并不再爆红叉）。
 workflow:
   rules:
     - if: '$CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      changes: ["backend/**/*", ".gitlab-ci.yml"]
+      changes: ["backend/**/*", "frontend/**/*", "deploy/**/*", "db/**/*", ".gitlab-ci.yml"]
     - if: '$CI_PIPELINE_SOURCE == "push"'
-      changes: ["backend/**/*", ".gitlab-ci.yml"]
+      changes: ["backend/**/*", "frontend/**/*", "deploy/**/*", "db/**/*", ".gitlab-ci.yml"]
 
 default:
-  image: maven:3.9-eclipse-temurin-17
-  tags: [docker]                       # ← 改成你们 runner 的 tag
-  cache:                               # 复用 .m2，加速依赖解析
-    key: "mvn-$CI_COMMIT_REF_SLUG"
-    paths: [.m2/repository]
+  image:
+    name: docker:27-cli
+    pull_policy: if-not-present       # 仅本地不存在时拉取镜像
+  tags: [TLZJJ]                          # 项目 Runner 标签
 
 variables:
-  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
-  MAVEN_CLI_OPTS: "--batch-mode --no-transfer-progress -Dstyle.color=never"
+  DOCKER_BUILDKIT: "1"
+  IMAGE_NAMESPACE: "infra-portal"
+  # 部署清单持久化到 Runner 宿主机挂载目录，避免 Job 清理 /builds 后无法手动管理。
+  DEPLOY_STATE_DIR: "/app/infra-portal/deploy"
 
 stages:
   - verify        # 编译 + 单元测试 + 打包（每服务独立）
-  - integration   # 端到端 / 认证越权（需 Nacos + 多服务，骨架，手动）
-  - deploy        # 部署（每服务独立，骨架，手动）
+  - integration   # 端到端 / 认证越权（需 Nacos + 多服务，手动）
+  - deploy        # 部署业务服务、依赖组件或完整运行栈（手动）
 
-# 服务构建模板：mvn -pl <SVC> -am，只构建该服务 + 其依赖（common-* 与能力模块）
+# 部署配置静态验证使用临时随机测试密钥，不读取受保护的部署变量，也不启动或更新服务。
+verify:deployment:
+  stage: verify
+  script:
+    - trap 'rm -f deploy/compose.test.env deploy/services.test.env' EXIT
+    - sh deploy/generate-test-env.sh
+    - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.yml config --quiet
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - changes:
+        - deploy/**/*
+        - db/**/*
+        - .gitignore
+        - .gitlab-ci.yml
+
+# 服务构建模板：Docker 多阶段构建中执行 mvn -pl <SVC> -am clean verify，
+# 然后将可执行 JAR 封装为 Runner 主机镜像。镜像只保留在 Runner 主机的 Docker 守护进程中。
 .svc-verify:
   stage: verify
   script:
-    - cd backend
-    - mvn $MAVEN_CLI_OPTS -pl "$SVC" -am clean verify
-  artifacts:
-    when: always
-    paths:
-      - backend/$SVC/target/*-exec.jar
-    reports:
-      junit:
-        - backend/**/target/surefire-reports/TEST-*.xml
-    expire_in: 1 week
+    - export IMAGE_NAME="$IMAGE_NAMESPACE/$SVC"
+    - docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAME:$CI_COMMIT_SHA" --tag "$IMAGE_NAME:latest" --file deploy/Dockerfile .
+    - echo "== Runner 主机构建镜像：$IMAGE_NAME:$CI_COMMIT_SHA =="
+    - docker image inspect "$IMAGE_NAME:$CI_COMMIT_SHA" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
+
+# 完整业务服务构建入口。单服务构建仍复用下方 verify:<service> job，
+# 可按路径自动触发，也可在 Web 流水线中逐项手动运行。
+verify:all-services:
+  stage: verify
+  script:
+    - |
+      for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
+        export IMAGE_NAME="$IMAGE_NAMESPACE/$SVC"
+        docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAME:$CI_COMMIT_SHA" --tag "$IMAGE_NAME:latest" --file deploy/Dockerfile .
+        docker image inspect "$IMAGE_NAME:$CI_COMMIT_SHA" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
+      done
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      when: manual
+      allow_failure: true
+    - changes:
+        - deploy/**/*
+        - db/**/*
+      when: manual
+      allow_failure: true
+
+# Compose 中的前端生产镜像，使用与本地完整栈相同的多阶段构建定义。
+verify:frontend:
+  stage: verify
+  script:
+    - export IMAGE_NAME="$IMAGE_NAMESPACE/frontend"
+    - docker build --tag "$IMAGE_NAME:$CI_COMMIT_SHA" --tag "$IMAGE_NAME:latest" --file deploy/Dockerfile.frontend .
+    - docker image inspect "$IMAGE_NAME:$CI_COMMIT_SHA" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - changes:
+        - frontend/**/*
+        - deploy/Dockerfile.frontend
+        - deploy/nginx.conf
+        - .gitlab-ci.yml
+
+# 第三方依赖不在仓库内编译；Runner 主机缺少对应 tag 时才拉取。
+prepare:dependencies:
+  stage: verify
+  script:
+    - |
+      for IMAGE in \
+        "mysql:${MYSQL_VERSION:-8.0}" \
+        "nacos/nacos-server:${NACOS_VERSION:-v2.3.2-slim}" \
+        "quay.io/coreos/etcd:${ETCD_VERSION:-v3.5.5}" \
+        "minio/minio:${MINIO_VERSION:-RELEASE.2023-03-20T20-16-18Z}" \
+        "milvusdb/milvus:${MILVUS_VERSION:-v2.3.4}"; do
+        if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+          echo "依赖镜像已存在，跳过拉取：$IMAGE"
+        else
+          docker pull "$IMAGE"
+        fi
+      done
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      when: manual
+      allow_failure: true
 
 # ----------------------------------------------------------------------------
 # 每服务流水线（路径触发）。
@@ -61,6 +140,9 @@ verify:api-gateway:
   extends: .svc-verify
   variables: { SVC: api-gateway }
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
     - changes:
         - backend/api-gateway/**/*
         - backend/pom.xml
@@ -74,6 +156,9 @@ verify:core-service:
   extends: .svc-verify
   variables: { SVC: core-service }
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
     - changes:
         - backend/core-service/**/*
         - backend/identity/**/*
@@ -90,6 +175,9 @@ verify:ai-service:
   extends: .svc-verify
   variables: { SVC: ai-service }
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
     - changes:
         - backend/ai-service/**/*
         - backend/knowledge/**/*
@@ -106,6 +194,9 @@ verify:community-service:
   extends: .svc-verify
   variables: { SVC: community-service }
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
     - changes:
         - backend/community-service/**/*
         - backend/community/**/*
@@ -120,6 +211,9 @@ verify:middleware-service:
   extends: .svc-verify
   variables: { SVC: middleware-service }
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
     - changes:
         - backend/middleware-service/**/*
         - backend/job-middleware/**/*
@@ -134,6 +228,9 @@ verify:database-service:
   extends: .svc-verify
   variables: { SVC: database-service }
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
     - changes:
         - backend/database-service/**/*
         - backend/job-database/**/*
@@ -148,6 +245,9 @@ verify:host-service:
   extends: .svc-verify
   variables: { SVC: host-service }
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
     - changes:
         - backend/host-service/**/*
         - backend/job-host/**/*
@@ -162,6 +262,9 @@ verify:network-service:
   extends: .svc-verify
   variables: { SVC: network-service }
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
     - changes:
         - backend/network-service/**/*
         - backend/job-network/**/*
@@ -176,6 +279,9 @@ verify:security-service:
   extends: .svc-verify
   variables: { SVC: security-service }
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
     - changes:
         - backend/security-service/**/*
         - backend/job-security/**/*
@@ -199,8 +305,6 @@ integration:e2e:
   #     alias: nacos
   #   - name: mysql:8
   #     alias: mysql
-  variables:
-    GATEWAY_SIGNING_SECRET: "ci-integration-signing-secret-at-least-32-bytes"
   script:
     - echo "== 集成验证骨架（按 docs 阶段5 安全清单补全）=="
     - echo "1) 起 Nacos + MySQL + 各服务 fat jar（cloud profile，注入 GATEWAY_SIGNING_SECRET）"
@@ -211,6 +315,9 @@ integration:e2e:
     - echo "6) 过期 token / 退出后同 token -> 期望 401"
     - echo "TODO 用 docker compose 起服务并用 curl 断言以上各条"
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       when: manual
       allow_failure: true
@@ -219,62 +326,176 @@ integration:e2e:
       allow_failure: true
 
 # ----------------------------------------------------------------------------
-# 部署（骨架）：每服务独立部署，互不依赖。改 core 不用重部 ai。
-# 手动触发；把 script 换成你们的部署方式（scp jar + systemd / k8s / 镜像推送）。
-# 注意共享运行时契约（introspect 接口 / GATEWAY_SIGNING_SECRET / Nacos 配置）需协调，别乱改。
+# 部署：使用 Runner 主机 Docker Compose 启动对应服务，镜像只读取 Runner 主机已构建版本。
+# DEPLOY_COMPOSE_ENV_FILE 和 DEPLOY_SERVICES_ENV_FILE 必须在 GitLab CI/CD Variables
+# 中配置为受保护的“文件”变量，分别基于两个 example 文件，禁止提交真实密钥。
 # ----------------------------------------------------------------------------
-.deploy-tpl:
+.deploy-common:
   stage: deploy
+  resource_group: staging-infra-portal
+  interruptible: false
+  before_script:
+    - ': "${DEPLOY_COMPOSE_ENV_FILE:?缺少 DEPLOY_COMPOSE_ENV_FILE（GitLab File 类型变量）}"'
+    - ': "${DEPLOY_SERVICES_ENV_FILE:?缺少 DEPLOY_SERVICES_ENV_FILE（GitLab File 类型变量）}"'
+    - test -f "$DEPLOY_COMPOSE_ENV_FILE"
+    - test -f "$DEPLOY_SERVICES_ENV_FILE"
+    - export BUSINESS_ENV_FILE="$DEPLOY_SERVICES_ENV_FILE"
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV_FILE" --file deploy/docker-compose.yml config --quiet
+    - export DEPLOY_COMPOSE_FILE="$DEPLOY_STATE_DIR/docker-compose.yml"
+    - export DEPLOY_COMPOSE_ENV="$DEPLOY_STATE_DIR/compose.env"
+    - export DEPLOY_SERVICES_ENV="$DEPLOY_STATE_DIR/services.env"
+    - mkdir -p "$DEPLOY_STATE_DIR" "$DEPLOY_STATE_DIR/../db"
+    - chmod 700 "$DEPLOY_STATE_DIR"
+    - cp deploy/docker-compose.yml "$DEPLOY_COMPOSE_FILE"
+    - cp "$DEPLOY_COMPOSE_ENV_FILE" "$DEPLOY_COMPOSE_ENV"
+    - cp "$DEPLOY_SERVICES_ENV_FILE" "$DEPLOY_SERVICES_ENV"
+    - cp db/init.sql "$DEPLOY_STATE_DIR/../db/init.sql"
+    - cp db/seed.sql "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - |
+      if grep -q '^IMAGE_TAG=' "$DEPLOY_COMPOSE_ENV"; then
+        sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$CI_COMMIT_SHA/" "$DEPLOY_COMPOSE_ENV"
+      else
+        printf '\nIMAGE_TAG=%s\n' "$CI_COMMIT_SHA" >> "$DEPLOY_COMPOSE_ENV"
+      fi
+      if grep -q '^BUSINESS_ENV_FILE=' "$DEPLOY_COMPOSE_ENV"; then
+        sed -i 's|^BUSINESS_ENV_FILE=.*|BUSINESS_ENV_FILE=./services.env|' "$DEPLOY_COMPOSE_ENV"
+      else
+        printf '\nBUSINESS_ENV_FILE=./services.env\n' >> "$DEPLOY_COMPOSE_ENV"
+      fi
+    - chmod 600 "$DEPLOY_COMPOSE_ENV" "$DEPLOY_SERVICES_ENV"
+    - chmod 644 "$DEPLOY_COMPOSE_FILE" "$DEPLOY_STATE_DIR/../db/init.sql" "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - export BUSINESS_ENV_FILE=./services.env
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" config --quiet
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: false
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      when: manual
+      allow_failure: false
+
+.deploy-tpl:
+  extends: .deploy-common
   environment:
     name: "staging/$SVC"
   script:
-    - echo "部署 $SVC 到 staging（骨架）"
-    - echo "示例 scp backend/$SVC/target/*-exec.jar deploy@host:/opt/$SVC/ 然后 systemctl restart $SVC"
-  rules:
-    - if: '$CI_COMMIT_REF_NAME == "master"'
-      when: manual
+    - export IMAGE_TAG="$CI_COMMIT_SHA"
+    - docker build --tag "$IMAGE_NAMESPACE/nacos-init:$IMAGE_TAG" --file deploy/Dockerfile.nacos-init .
+    - |
+      if ! docker image inspect "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" >/dev/null 2>&1; then
+        echo "Runner 缺少服务镜像，开始构建：$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG"
+        docker build --build-arg SERVICE="$SVC" \
+          --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" \
+          --tag "$IMAGE_NAMESPACE/$SVC:latest" \
+          --file deploy/Dockerfile .
+      fi
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never "$SVC"
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps "$SVC"
+
+# 单独部署依赖组件。MySQL 首次创建数据卷时会执行 db/init.sql 和 db/seed.sql；
+# 后续部署不会重放初始化脚本。
+deploy:dependencies:
+  extends: .deploy-common
+  environment:
+    name: staging/dependencies
+  script:
+    - export IMAGE_TAG="$CI_COMMIT_SHA"
+    - docker build --tag "$IMAGE_NAMESPACE/nacos-init:$IMAGE_TAG" --file deploy/Dockerfile.nacos-init .
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build mysql nacos etcd minio milvus
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" run --rm --no-deps nacos-init
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps --all mysql nacos nacos-init etcd minio milvus
+
+# 一键构建并部署完整运行栈。该 job 独立完成构建和依赖镜像预拉取，
+# 不依赖未选择的手动作业，从而可直接在 GitLab Web 流水线中执行。
+deploy:full-stack:
+  extends: .deploy-common
+  environment:
+    name: staging/full-stack
+  script:
+    - export IMAGE_TAG="$CI_COMMIT_SHA"
+    - |
+      for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
+        docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:latest" --file deploy/Dockerfile .
+      done
+    - docker build --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/frontend:latest" --file deploy/Dockerfile.frontend .
+    - docker build --tag "$IMAGE_NAMESPACE/nacos-init:$IMAGE_TAG" --file deploy/Dockerfile.nacos-init .
+    - |
+      for IMAGE in $(docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" config --images); do
+        case "$IMAGE" in
+          "$IMAGE_NAMESPACE"/*) continue ;;
+        esac
+        if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+          echo "依赖镜像已存在，跳过拉取：$IMAGE"
+        else
+          docker pull "$IMAGE"
+        fi
+      done
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/api/public/releases
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps --all
 
 deploy:api-gateway:
   extends: .deploy-tpl
   variables: { SVC: api-gateway }
-  needs: ["verify:api-gateway"]
+  needs: [{ job: "verify:api-gateway", optional: true }]
 
 deploy:core-service:
   extends: .deploy-tpl
   variables: { SVC: core-service }
-  needs: ["verify:core-service"]
+  needs: [{ job: "verify:core-service", optional: true }]
 
 deploy:ai-service:
   extends: .deploy-tpl
   variables: { SVC: ai-service }
-  needs: ["verify:ai-service"]
+  needs: [{ job: "verify:ai-service", optional: true }]
 
 deploy:community-service:
   extends: .deploy-tpl
   variables: { SVC: community-service }
-  needs: ["verify:community-service"]
+  needs: [{ job: "verify:community-service", optional: true }]
 
 deploy:middleware-service:
   extends: .deploy-tpl
   variables: { SVC: middleware-service }
-  needs: ["verify:middleware-service"]
+  needs: [{ job: "verify:middleware-service", optional: true }]
 
 deploy:database-service:
   extends: .deploy-tpl
   variables: { SVC: database-service }
-  needs: ["verify:database-service"]
+  needs: [{ job: "verify:database-service", optional: true }]
 
 deploy:host-service:
   extends: .deploy-tpl
   variables: { SVC: host-service }
-  needs: ["verify:host-service"]
+  needs: [{ job: "verify:host-service", optional: true }]
 
 deploy:network-service:
   extends: .deploy-tpl
   variables: { SVC: network-service }
-  needs: ["verify:network-service"]
+  needs: [{ job: "verify:network-service", optional: true }]
 
 deploy:security-service:
   extends: .deploy-tpl
   variables: { SVC: security-service }
-  needs: ["verify:security-service"]
+  needs: [{ job: "verify:security-service", optional: true }]
+
+# 前端独立更新不拉起依赖，避免要求同一提交同时存在 Gateway 镜像。
+deploy:frontend:
+  extends: .deploy-common
+  environment:
+    name: staging/frontend
+  needs: [{ job: "verify:frontend", optional: true }]
+  script:
+    - export IMAGE_TAG="$CI_COMMIT_SHA"
+    - |
+      if ! docker image inspect "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" >/dev/null 2>&1; then
+        echo "Runner 缺少前端镜像，开始构建：$IMAGE_NAMESPACE/frontend:$IMAGE_TAG"
+        docker build \
+          --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" \
+          --tag "$IMAGE_NAMESPACE/frontend:latest" \
+          --file deploy/Dockerfile.frontend .
+      fi
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-deps --no-build --pull never frontend
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps frontend

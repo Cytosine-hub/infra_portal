@@ -47,7 +47,59 @@
 
 ## 快速启动
 
-### 后端
+### Docker Compose（完整运行栈）
+
+Compose 会启动前端、Gateway、8 个业务服务、MySQL、Nacos、Milvus、etcd 和 MinIO。首次启动先创建两类环境文件：
+
+```bash
+cp deploy/compose.env.example deploy/compose.env
+cp deploy/services.env.example deploy/services.env
+```
+
+测试环境可从同一组模板生成隔离配置。脚本会随机生成数据库密码、基础组件鉴权值和业务密钥，并使用独立项目名、端口和 `/app/infra-portal-test` 数据目录：
+
+```bash
+sh deploy/generate-test-env.sh
+```
+
+生成的 `deploy/compose.test.env` 和 `deploy/services.test.env` 权限为 `0600`，已被 Git 忽略。为避免意外轮换已有测试环境密码，脚本不会覆盖现有文件。
+
+- `deploy/compose.env`：镜像版本、端口、数据目录和基础组件凭据，仅用于 Compose 插值与基础设施初始化。
+- `deploy/services.env`：只注入 Java 业务容器的运行时密钥。
+- `deploy/nacos-config/*.properties`：业务服务配置模板，构建时复制进 `nacos-init` 镜像并发布到 Nacos；模板中的密钥通过业务容器环境变量解析。
+
+填写两个环境文件中的空值后启动：
+
+```bash
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.yml up --detach --build
+sh deploy/smoke-test.sh
+```
+
+`nacos-init` 只创建缺失的 namespace 和 9 个 Data ID，不覆盖 Nacos 中已有配置。MySQL 只在全新数据目录首次执行 `db/init.sql` 和 `db/seed.sql`，已有数据目录不会重放初始化脚本。前端入口为 `http://localhost:5173`。
+
+GitLab 的 `verify:deployment` 会自动生成临时测试配置并执行 Compose 配置解析，不启动运行栈。实际部署必须配置 `DEPLOY_COMPOSE_ENV_FILE` 与 `DEPLOY_SERVICES_ENV_FILE` 两个 File 类型 CI/CD Variable；变量值是 GitLab 创建的临时文件路径，部署 job 会将其复制为 Compose 使用的环境文件。
+
+部署 job 会将运行清单持久化到 Runner 宿主机 `/app/infra-portal/deploy`，并将 MySQL 初始化脚本保存到 `/app/infra-portal/db`。Job 结束后可在宿主机手动管理：
+
+```bash
+cd /app/infra-portal/deploy
+docker compose --env-file compose.env --file docker-compose.yml ps
+docker compose --env-file compose.env --file docker-compose.yml stop
+docker compose --env-file compose.env --file docker-compose.yml start
+docker compose --env-file compose.env --file docker-compose.yml down
+```
+
+`compose.env` 和 `services.env` 包含部署密钥，权限固定为 `0600`。模拟首次初始化时只清理 `/app/infra-portal/mysql`、`nacos`、`milvus`、`storage` 和 `ai` 等数据目录，保留 `deploy` 与 `db` 目录。
+
+停止服务但保留数据：
+
+```bash
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.yml down
+```
+
+### 裸机后端
 
 ```bash
 cd backend
@@ -55,7 +107,7 @@ mvn clean package -DskipTests
 mvn spring-boot:run
 ```
 
-### 前端
+### 裸机前端
 
 ```bash
 cd frontend
@@ -63,12 +115,14 @@ npm install
 npm run dev
 ```
 
-### 依赖服务
+### 裸机依赖服务
 
 - MySQL 8.0：`127.0.0.1:3306`
 - Milvus（向量数据库）：`localhost:19530`
 
-## 环境变量
+## 裸机业务环境变量
+
+裸机默认 profile 继续直接读取以下环境变量；Compose 的 `cloud` profile 则优先从 Nacos 的 9 个 Data ID 加载非敏感业务配置，敏感值仍由 `deploy/services.env` 注入。
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
@@ -124,7 +178,7 @@ CREATE DATABASE IF NOT EXISTS middleware_resource_manager
 mysql -u root middleware_resource_manager < db/init.sql
 
 # 导入种子数据（可选）
-mysql -u root middleware_resource_manager < db/seed_data.sql
+mysql -u root middleware_resource_manager < db/seed.sql
 ```
 
 ## 项目结构

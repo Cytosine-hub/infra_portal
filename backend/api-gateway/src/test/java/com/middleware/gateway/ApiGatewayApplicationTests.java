@@ -78,6 +78,13 @@ class ApiGatewayApplicationTests {
                 .isEqualTo("http://127.0.0.1:8084");
         assertThat(environment.getProperty("app.security.introspection-load-balanced", Boolean.class))
                 .isFalse();
+        assertThat(environment.getProperty("app.rate-limit.enabled", Boolean.class)).isTrue();
+        assertThat(environment.getProperty("app.rate-limit.window-seconds", Integer.class)).isEqualTo(60);
+        assertThat(environment.getProperty("app.rate-limit.max-client-keys", Integer.class)).isEqualTo(10_000);
+        assertThat(environment.getProperty("app.rate-limit.download-per-window", Integer.class)).isEqualTo(6);
+        assertThat(environment.getProperty("app.rate-limit.document-per-window", Integer.class)).isEqualTo(60);
+        assertThat(environment.getProperty("app.rate-limit.document-file-per-window", Integer.class)).isEqualTo(18);
+        assertThat(environment.getProperty("app.rate-limit.forum-post-per-window", Integer.class)).isEqualTo(120);
     }
 
     private RouteDefinition findRoute(String routeId) {

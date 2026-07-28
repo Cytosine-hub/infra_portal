@@ -18,7 +18,7 @@
 
 - JDK 17（必须，Spring Boot 3.x 不兼容 JDK 8）
 - Maven 3.8.x
-- Node.js 18+，当前环境已验证 Node.js 22 可用
+- Node.js 20.19.x（`package.json` 限定为 `>=20.19 <21`）
 - MySQL 8.x
 
 ### JAVA_HOME 配置
@@ -34,7 +34,87 @@ Windows 下在系统环境变量中设置 `JAVA_HOME` 为 JDK 17 安装路径。
 
 Windows PowerShell 下建议使用 `npm.cmd`，避免 `npm.ps1` 被执行策略拦截。
 
-## 2. 启动数据库
+## 2. Docker Compose 完整栈
+
+Docker Compose 覆盖裸机清单中的前端、Gateway、8 个业务服务，并包含 MySQL、Nacos、Milvus、etcd、MinIO 和一次性 `nacos-init`：
+
+```bash
+cp deploy/compose.env.example deploy/compose.env
+cp deploy/services.env.example deploy/services.env
+```
+
+测试或 CI 静态验证使用模板生成器，不需要手工填写测试密码：
+
+```bash
+sh deploy/generate-test-env.sh
+```
+
+生成器会创建 `deploy/compose.test.env` 和 `deploy/services.test.env`，随机生成 MySQL、MinIO、Nacos 鉴权及业务服务密钥，并使用独立的 Compose 项目名、宿主端口和 `/app/infra-portal-test` 数据目录。Nacos 登录密码保留镜像默认值 `nacos`，因为当前镜像不会通过 Compose 环境变量修改默认账号；Nacos 鉴权 Token 和身份键值仍为随机值。生成文件权限为 `0600` 且不会被 Git 跟踪，脚本拒绝覆盖已有文件，避免测试数据卷与新密码不一致。
+
+配置职责必须保持分离：
+
+| 文件 | 职责 | 是否注入业务服务 |
+|------|------|------------------|
+| `deploy/compose.env` | Compose 项目名、镜像版本、端口、数据目录、MySQL/Nacos/MinIO 基础组件凭据 | 否 |
+| `deploy/services.env` | Gateway 签名、管理员初始密码、AI、Wiki、Zabbix 等运行时密钥 | 是 |
+| `deploy/nacos-config/*.properties` | 9 个 Java 服务的业务配置模板，构建时复制进 `nacos-init` 镜像 | 由 Nacos Config 加载 |
+
+必须补齐两个环境文件中的空密钥。随后在项目根目录启动：
+
+```bash
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.yml up --detach --build
+sh deploy/smoke-test.sh
+```
+
+GitLab 流水线中的 `verify:deployment` 只使用临时测试配置执行静态校验，不启动或更新数据库、Nacos 和业务容器。真实部署需要在 GitLab CI/CD Variables 中创建以下变量：
+
+| 变量 | 类型 | 内容 |
+|------|------|------|
+| `DEPLOY_COMPOSE_ENV_FILE` | File | 基于 `deploy/compose.env.example` 的完整部署配置 |
+| `DEPLOY_SERVICES_ENV_FILE` | File | 基于 `deploy/services.env.example` 的完整业务密钥配置 |
+| `DEPLOY_STATE_DIR` | Variable，可选 | Runner 宿主机上的持久化部署目录，默认 `/app/infra-portal/deploy` |
+
+部署 job 读取到的 File 变量值是 GitLab 临时文件路径，因此会将其内容复制到 Runner 宿主机的 `$DEPLOY_STATE_DIR/compose.env` 和 `$DEPLOY_STATE_DIR/services.env`。同时持久化 `docker-compose.yml`，并将 `db/init.sql` 与 `db/seed.sql` 保存到相邻的 `/app/infra-portal/db`。`compose.env` 中的 `IMAGE_TAG` 会同步为实际部署的提交 SHA，`BUSINESS_ENV_FILE` 会固定为 `./services.env`，保证上传测试配置后仍能在 Job 结束时手动执行 Compose 命令。两个密钥文件权限为 `0600`。
+
+Runner 必须将宿主机 `/app` 挂载到 Job 容器的 `/app`。默认部署完成后，在宿主机执行：
+
+```bash
+cd /app/infra-portal/deploy
+docker compose --env-file compose.env --file docker-compose.yml ps
+docker compose --env-file compose.env --file docker-compose.yml stop
+docker compose --env-file compose.env --file docker-compose.yml start
+docker compose --env-file compose.env --file docker-compose.yml down
+```
+
+此时 `docker compose ls` 的配置路径应为 `/app/infra-portal/deploy/docker-compose.yml`，不再引用会被 Runner 清理的 `/builds/...`。受保护变量只会注入受保护分支或 Tag；在普通 feature 分支手动部署前必须确认变量保护范围和 Environment scope。
+
+Runner 的 Docker Executor 应保持 `pull_policy = "if-not-present"`，并挂载宿主机 `/var/run/docker.sock`。项目通过宿主机 Docker 守护进程保留 BuildKit 构建层，Maven 与 npm 依赖分别使用 Dockerfile 中的 `/root/.m2` 和 `/root/.npm` cache mount；Runner 的 `/cache` 挂载只服务于 GitLab Job cache，不能替代 BuildKit 缓存。依赖镜像仅在对应 tag 不存在时拉取。不要配置无保留策略的定时 `docker builder prune -a`，否则下一次构建会重新下载基础镜像层和依赖。
+
+测试环境也可直接将生成的两个 `.test.env` 文件内容分别配置为上述 File 变量。部署入口会统一把业务密钥文件路径覆盖为 `./services.env`，不依赖上传前的本地文件名。
+
+启动顺序由健康检查和 `depends_on` 控制：MySQL/Nacos/Milvus 先就绪，`nacos-init` 再创建缺失的 namespace 和 9 个 Data ID，最后启动 9 个 Java 服务与前端。`nacos-init` 遇到已存在的 Data ID 会跳过，人工在 Nacos 中调整的业务配置不会被覆盖。
+
+首次创建 `${DEPLOY_DATA_DIR}/mysql` 时会依次执行 `db/init.sql` 和 `db/seed.sql`，沿用现有种子账号。已有 MySQL 数据目录不会再次初始化；`ADMIN_DEFAULT_PASSWORD` 仅在账号表为空时生效。
+
+访问与停止命令：
+
+```text
+前端：http://localhost:5173
+Gateway：http://localhost:8080
+Nacos：http://localhost:8848/nacos/
+```
+
+```bash
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.yml down
+```
+
+`down` 不删除宿主机 `${DEPLOY_DATA_DIR}` 下的数据。需要重新初始化时应先备份并明确处理对应数据目录，不要直接覆盖已有 Nacos/MySQL 数据。
+
+模拟首次初始化时，仅清理 `/app/infra-portal/mysql`、`nacos`、`milvus`、`storage` 和 `ai` 等运行数据目录；必须保留 `/app/infra-portal/deploy` 和 `/app/infra-portal/db`，否则会丢失手动管理入口与 MySQL 初始化脚本。
+
+## 3. 裸机启动数据库
 
 在项目根目录执行：
 
@@ -55,7 +135,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\stop-local-mysql.ps1
 - 用户：`root`
 - 密码：读取 `APP_DB_PASSWORD`，仓库不提供密码默认值
 
-## 3. 启动后端与 Gateway
+## 4. 裸机启动后端与 Gateway
 
 进入 `backend/` 目录执行：
 
@@ -104,7 +184,7 @@ http://localhost:8080/api/wiki/pages
 
 如果返回 JSON，说明后端接口可用。
 
-## 4. 启动前端
+## 5. 裸机启动前端
 
 进入前端目录：
 
@@ -137,7 +217,7 @@ Vite 已配置代理：
 
 `8080` 是 Gateway；8 个业务服务直连端口为 `8082-8089`（`8081` 已停用）。外部业务流量只应进入 Gateway。
 
-## 5. 登录后台
+## 6. 登录后台
 
 打开前端：
 
@@ -171,7 +251,7 @@ http://localhost:5173/#/admin
 
 可在参数标准/标准文档列表的「修订历史」按钮查看。
 
-## 6. 常用页面
+## 7. 常用页面
 
 | 页面 | 地址 | 说明 |
 |------|------|------|
@@ -202,7 +282,7 @@ http://localhost:5173/#/admin
 - 公开参数标准：`http://localhost:8080/api/public/parameter-standards`
 - 论坛帖子：`http://localhost:8080/api/forum/posts`
 
-## 7. 构建前端
+## 8. 构建前端
 
 进入 `frontend` 目录执行：
 
@@ -216,7 +296,7 @@ npm.cmd run build
 frontend/dist
 ```
 
-## 8. 后端测试
+## 9. 后端测试
 
 进入 `backend/` 目录执行：
 
@@ -225,7 +305,7 @@ cd backend
 mvn test
 ```
 
-## 9. 端口占用检查
+## 10. 端口占用检查
 
 检查后端端口：
 
@@ -247,7 +327,7 @@ netstat -ano | Select-String ':8089'
 netstat -ano | Select-String ':5173'
 ```
 
-## 10. 推荐启动顺序
+## 11. 裸机推荐启动顺序
 
 1. 启动 MySQL
 2. 启动 core-service（`:8084`）
