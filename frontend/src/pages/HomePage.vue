@@ -26,9 +26,6 @@
       </article>
     </div>
 
-    <div class="portal-section-divider">
-      <p>各类别独立演进，共享统一交互与基础能力。</p>
-    </div>
     <div class="portal-grid portal-jobs-grid">
       <article v-for="job in jobModules" :key="job.id" class="portal-card portal-job-card" @click="$emit('navigate', `jobs/${job.id}`)">
         <div class="portal-icon tool-icon">{{ job.shortName.slice(0, 1) }}</div>

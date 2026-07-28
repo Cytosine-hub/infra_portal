@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import { readFile } from 'node:fs/promises'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
@@ -14,8 +13,17 @@ import { publicFeatures } from '../src/config/portalFeatures.js'
 import { jobModules } from '../src/modules/index.js'
 import { filterItemsByJob, matchesJob, normalizeJobId } from '../src/shared/jobs/jobFilter.js'
 import { parseHashRoute } from '../src/composables/useRoute.js'
+// 以 Vite ?raw 导入源码文本做静态检查，避免在 jsdom/Vite 环境下加载 node: 内置模块导致测试无法运行
+import forumPostListSource from '../src/components/ForumPostList.vue?raw'
+import appSource from '../src/App.vue?raw'
+import agentSource from '../../agent.md?raw'
 
-const readSource = (path) => readFile(new URL(path, import.meta.url), 'utf8')
+const sourceMap = {
+  '../src/components/ForumPostList.vue': forumPostListSource,
+  '../src/App.vue': appSource,
+  '../../agent.md': agentSource
+}
+const readSource = (path) => sourceMap[path]
 const mountedWrappers = []
 const storage = new Map()
 const localStorageMock = {
@@ -112,7 +120,9 @@ describe('门户页面结构优化验收', () => {
     expect(wrapper.findAll('.portal-jobs-grid .portal-job-card')).toHaveLength(5)
     expect(wrapper.text()).not.toContain('公共区域')
     expect(wrapper.text()).not.toContain('岗位专属区域')
-    expect(wrapper.find('.portal-section-divider').exists()).toBe(true)
+    // 需求 #23：原承载文案的分隔节点已移除，公共入口区后直接紧接岗位入口区，靠栅格间距自然划分
+    expect(wrapper.find('.portal-section-divider').exists()).toBe(false)
+    expect(wrapper.find('.portal-public-grid').element.nextElementSibling).toBe(wrapper.find('.portal-jobs-grid').element)
   })
 
   test('TC-PORTAL-002 (TC-02) 五大岗位入口点击后由各自入口组件展示正确岗位', async () => {
