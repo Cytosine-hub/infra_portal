@@ -409,6 +409,15 @@ deploy:dependencies:
 # 不依赖未选择的手动作业，从而可直接在 GitLab Web 流水线中执行。
 deploy:full-stack:
   extends: .deploy-common
+  # 覆盖父级手动规则：合并到 master 后 verify 通过即自动部署全栈（CD）。
+  # 其余单服务/依赖部署仍走父级 .deploy-common 的手动规则，留作精准运维。
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: false
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      when: on_success
+      allow_failure: false
   environment:
     name: staging/full-stack
   script:
