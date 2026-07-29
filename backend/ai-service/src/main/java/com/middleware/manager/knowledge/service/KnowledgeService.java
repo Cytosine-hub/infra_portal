@@ -231,6 +231,9 @@ public class KnowledgeService implements KnowledgeSearchPort {
             metadata.put("content", chunk.getContent());
             metadata.put("sourceTitle", chunk.getSourceTitle());
             metadata.put("chunkIndex", String.valueOf(chunk.getChunkIndex()));
+            if (chunk.getSectionPath() != null && !chunk.getSectionPath().isEmpty()) {
+                metadata.put("sectionPath", chunk.getSectionPath());
+            }
             if (sourceType != null) metadata.put("sourceType", sourceType);
             if (sourceId != null) metadata.put("sourceId", String.valueOf(sourceId));
             if (category != null) metadata.put("category", category);

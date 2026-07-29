@@ -52,7 +52,6 @@ public class TikaLoader implements DocumentLoader {
     );
     private static final Pattern HEADING_STYLE_LEVEL = Pattern.compile("(?i).*(?:heading|标题)\\s*([1-6]).*");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
-    private static final String PDF_TOC_HEADER = "目录";
     private static final int MAX_HEADING_LEVEL = 6;
 
     private final AutoDetectParser parser;
@@ -298,9 +297,8 @@ public class TikaLoader implements DocumentLoader {
     }
 
     /**
-     * PDF 结构化解析：单次打开文档，遍历一次书签树，同时产出目录块与回填了标题的正文。
-     * <p>目录块保留「标题 .... 页码」格式，wiki 的 DocumentOutlineExtractor 依赖它做章节页码归属；
-     * 正文侧把书签标题就地改写成 Markdown 标题，使下游 TextSplitter 的标题切分策略生效
+     * PDF 结构化解析：单次打开文档，遍历一次书签树，把书签标题回填进正文。
+     * <p>把书签标题就地改写成 Markdown 标题，使下游 TextSplitter 的标题切分策略生效
      * （此前 Tika 输出的是无标题标记的扁平文本流，只能走字符数兜底）。
      */
     private String loadPdfWithStructure(byte[] bytes) {
@@ -314,25 +312,11 @@ public class TikaLoader implements DocumentLoader {
             if (bookmarks.isEmpty()) {
                 return "";
             }
-            String toc = renderToc(bookmarks);
-            String body = renderBodyWithHeadings(document, bookmarks);
-            return toc.isBlank() ? body : toc + "\n\n" + body;
+            return renderBodyWithHeadings(document, bookmarks);
         } catch (Exception e) {
             log.warn("PDF 结构化解析失败，降级为 Tika 扁平文本，检索质量会下降: {}", e.getMessage());
             return "";
         }
-    }
-
-    private String renderToc(List<PdfBookmark> bookmarks) {
-        StringBuilder content = new StringBuilder(PDF_TOC_HEADER).append("\n");
-        for (PdfBookmark bookmark : bookmarks) {
-            content.append("  ".repeat(Math.max(0, bookmark.level() - 1))).append(bookmark.title());
-            if (bookmark.page() > 0) {
-                content.append(" .... ").append(bookmark.page());
-            }
-            content.append("\n");
-        }
-        return content.toString().trim();
     }
 
     private String renderBodyWithHeadings(PDDocument document, List<PdfBookmark> bookmarks) throws Exception {
