@@ -22,6 +22,7 @@ import com.middleware.manager.wiki.repository.WikiLinkMapper;
 import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
 import com.middleware.manager.wiki.service.LintAgent;
+import com.middleware.manager.wiki.service.PageDraftService;
 import com.middleware.manager.wiki.entity.WikiPagePermission;
 import com.middleware.manager.wiki.service.WikiExportService;
 import com.middleware.manager.wiki.service.WikiGraphService;
@@ -51,6 +52,7 @@ public class WikiController {
     private final WikiExportService exportService;
     private final WikiImportService importService;
     private final WikiGraphService graphService;
+    private final PageDraftService pageDraftService;
     private final List<DocumentLoader> documentLoaders;
     private final AdminAccountMapper adminAccountMapper;
     private final WikiAuditLogMapper auditLogMapper;
@@ -70,6 +72,7 @@ public class WikiController {
                           WikiExportService exportService,
                           WikiImportService importService,
                           WikiGraphService graphService,
+                          PageDraftService pageDraftService,
                           List<DocumentLoader> documentLoaders,
                           AdminAccountMapper adminAccountMapper,
                           WikiAuditLogMapper auditLogMapper,
@@ -84,6 +87,7 @@ public class WikiController {
         this.exportService = exportService;
         this.importService = importService;
         this.graphService = graphService;
+        this.pageDraftService = pageDraftService;
         this.documentLoaders = documentLoaders;
         this.adminAccountMapper = adminAccountMapper;
         this.auditLogMapper = auditLogMapper;
@@ -140,6 +144,25 @@ public class WikiController {
             results = filterVisible(authentication, pageMapper.findByTitleContaining(q, limit));
         }
         return results;
+    }
+
+    /**
+     * 从一份源文档为指定主题起草经验页面。产出的是草稿，需人工修改确认后才保存，
+     * LLM 不进入内容层的真相链路。
+     */
+    @PostMapping("/pages/draft")
+    public ResponseEntity<Map<String, String>> draftPage(@RequestBody Map<String, String> body,
+                                                         Authentication authentication) {
+        if (!wikiPermissionService.isAdmin(authentication)
+                && wikiPermissionService.getManagedCategory(authentication) == null) {
+            return ResponseEntity.status(403).build();
+        }
+        String rawSourceId = body.get("sourceId");
+        if (rawSourceId == null || rawSourceId.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        String draft = pageDraftService.draft(Long.valueOf(rawSourceId), body.get("topic"));
+        return ResponseEntity.ok(Map.of("content", draft));
     }
 
     @PutMapping("/pages-batch-category")

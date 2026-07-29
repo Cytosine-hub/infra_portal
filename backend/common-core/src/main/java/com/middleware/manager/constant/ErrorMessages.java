@@ -115,4 +115,8 @@ public final class ErrorMessages {
     public static final String LLM_SERVICE_BUSY = "模型服务繁忙，请稍后再试";
     public static final String LLM_RESPONSE_TIMEOUT = "模型响应超时，请稍后再试";
     public static final String LLM_STREAM_UNAVAILABLE = "流式响应不可用，已切换为普通响应";
+
+    // 知识库源文档与起草
+    public static final String WIKI_SOURCE_NOT_FOUND = "源文档不存在";
+    public static final String WIKI_DRAFT_FAILED = "起草失败，模型未返回有效内容";
 }

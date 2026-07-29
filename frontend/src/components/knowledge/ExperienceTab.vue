@@ -4,6 +4,7 @@
       <BaseInput v-model="keyword" placeholder="按标题筛选…" @keyup.enter="load" />
       <BaseButton variant="ghost" :loading="loading" @click="load">刷新</BaseButton>
       <BaseButton variant="ghost" @click="exportPages">导出</BaseButton>
+      <BaseButton variant="primary" @click="openDraft">从文档起草</BaseButton>
     </Toolbar>
 
     <div class="layout">
@@ -40,6 +41,24 @@
         </div>
       </aside>
     </div>
+
+    <BaseModal v-model="draftOpen" title="从文档起草经验页面" width="640px">
+      <div class="draft-form">
+        <label class="field">
+          <span>源文档</span>
+          <select v-model="draftSourceId">
+            <option value="">请选择…</option>
+            <option v-for="s in sources" :key="s.id" :value="s.id">{{ s.title }}</option>
+          </select>
+        </label>
+        <BaseInput v-model="draftTopic" label="主题" placeholder="例如：主从延迟处理" />
+        <p class="draft-hint">
+          生成的是草稿，需人工核对修改后再保存。模型只依据所选文档内容起草，不会补充文档之外的参数或命令。
+        </p>
+        <BaseButton variant="primary" :loading="drafting" @click="runDraft">生成草稿</BaseButton>
+        <pre v-if="draftContent" class="draft-preview">{{ draftContent }}</pre>
+      </div>
+    </BaseModal>
   </div>
 </template>
 
@@ -48,6 +67,7 @@ import { onMounted, ref } from 'vue'
 import { request } from '../../api.js'
 import BaseButton from '../ui/BaseButton.vue'
 import BaseInput from '../ui/BaseInput.vue'
+import BaseModal from '../ui/BaseModal.vue'
 import DataTable from '../ui/DataTable.vue'
 import StatusBadge from '../ui/StatusBadge.vue'
 import Toolbar from '../ui/Toolbar.vue'
@@ -78,6 +98,12 @@ const selected = ref(null)
 const links = ref([])
 const keyword = ref('')
 const loading = ref(false)
+const sources = ref([])
+const draftOpen = ref(false)
+const draftSourceId = ref('')
+const draftTopic = ref('')
+const draftContent = ref('')
+const drafting = ref(false)
 
 async function load() {
   loading.value = true
@@ -90,6 +116,33 @@ async function load() {
     props.notify(error.message, 'error')
   } finally {
     loading.value = false
+  }
+}
+
+async function openDraft() {
+  draftContent.value = ''
+  draftOpen.value = true
+  if (!sources.value.length) {
+    sources.value = await request('/api/knowledge/sources').catch(() => [])
+  }
+}
+
+async function runDraft() {
+  if (!draftSourceId.value) {
+    props.notify('请先选择源文档', 'error')
+    return
+  }
+  drafting.value = true
+  try {
+    const result = await request('/api/knowledge/pages/draft', {
+      method: 'POST',
+      body: { sourceId: String(draftSourceId.value), topic: draftTopic.value }
+    })
+    draftContent.value = result.content
+  } catch (error) {
+    props.notify(error.message, 'error')
+  } finally {
+    drafting.value = false
   }
 }
 
@@ -178,6 +231,39 @@ onMounted(load)
   margin: var(--space-4, 16px) 0 var(--space-2, 8px);
   font-size: 0.875rem;
   color: var(--color-text);
+}
+
+.draft-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.draft-hint {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+.draft-preview {
+  max-height: 40vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-3, 12px);
+  margin: 0;
 }
 
 .links ul {

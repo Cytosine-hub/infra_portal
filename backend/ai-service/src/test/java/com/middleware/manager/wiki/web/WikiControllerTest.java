@@ -27,6 +27,7 @@ class WikiControllerTest {
     @Mock private WikiExportService exportService;
     @Mock private WikiImportService importService;
     @Mock private WikiGraphService graphService;
+    @Mock private PageDraftService pageDraftService;
     @Mock private AdminAccountMapper adminAccountMapper;
     @Mock private WikiAuditLogMapper auditLogMapper;
     @Mock private LintAgent lintAgent;
@@ -43,7 +44,7 @@ class WikiControllerTest {
         MockitoAnnotations.openMocks(this);
         controller = new WikiController(
                 pageMapper, linkMapper, sourceMapper,
-                exportService, importService, graphService,
+                exportService, importService, graphService, pageDraftService,
                 Collections.emptyList(), adminAccountMapper, auditLogMapper,
                 lintAgent, lintResultMapper, wikiPermissionService, pagePermissionMapper,
                 vectorStore);

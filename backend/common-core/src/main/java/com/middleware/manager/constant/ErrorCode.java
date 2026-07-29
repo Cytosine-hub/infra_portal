@@ -69,4 +69,8 @@ public final class ErrorCode {
     // 发布资源相关
     public static final String RELEASE_NOT_FOUND = "RELEASE_NOT_FOUND";
     public static final String RELEASE_PUBLISHED = "RELEASE_PUBLISHED";
+
+    // 知识库源文档与起草
+    public static final String WIKI_SOURCE_NOT_FOUND = "WIKI_SOURCE_NOT_FOUND";
+    public static final String WIKI_DRAFT_FAILED = "WIKI_DRAFT_FAILED";
 }
