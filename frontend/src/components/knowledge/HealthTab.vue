@@ -1,8 +1,10 @@
 <template>
   <div class="health-tab">
     <Toolbar>
-      <BaseButton variant="primary" :loading="running" @click="runLint">运行体检</BaseButton>
-      <span class="hint">检查孤儿页、断链、过期内容与矛盾条目</span>
+      <template #filters>
+        <BaseButton variant="primary" :loading="running" @click="runLint">运行体检</BaseButton>
+        <span class="hint">检查孤儿页、断链、过期内容与矛盾条目</span>
+      </template>
     </Toolbar>
 
     <div v-if="stats" class="stat-row">
@@ -115,28 +117,28 @@ onMounted(load)
 .health-tab {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4, 16px);
+  gap: var(--space-md);
 }
 
 .hint {
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: 0.8125rem;
 }
 
 .stat-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: var(--space-3, 12px);
+  gap: var(--space-sm);
 }
 
 .stat {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: var(--space-4, 16px);
+  padding: var(--space-md);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 8px);
-  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
 }
 
 .stat-value {
@@ -148,6 +150,6 @@ onMounted(load)
 
 .stat-label {
   font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
 }
 </style>

@@ -47,7 +47,7 @@ Default behavior is change-aware:
    - Run from `frontend`: `nohup npx vite --host 0.0.0.0 > /tmp/frontend.log 2>&1 &`.
    - Wait and check for `ready` or `Local`.
 6. Verify.
-   - Backend: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/wiki/pages`
+   - Backend: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/knowledge/pages`
    - Frontend: `curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/`
    - Milvus: `docker ps --filter "name=milvus" --format "{{.Names}}: {{.Status}}"`
 

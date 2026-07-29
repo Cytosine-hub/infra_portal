@@ -1,8 +1,10 @@
 <template>
   <div class="graph-tab">
     <Toolbar>
-      <BaseButton variant="ghost" :loading="loading" @click="load">刷新图谱</BaseButton>
-      <span class="hint">{{ nodeCount }} 个节点 · {{ linkCount }} 条关系（已过滤低权重边）</span>
+      <template #filters>
+        <BaseButton variant="ghost" :loading="loading" @click="load">刷新图谱</BaseButton>
+        <span class="hint">{{ nodeCount }} 个节点 · {{ linkCount }} 条关系（已过滤低权重边）</span>
+      </template>
     </Toolbar>
 
     <LoadingSpinner v-if="loading" text="构建图谱中…" />
@@ -57,7 +59,7 @@ function render(data) {
   graph
     .graphData(data)
     .nodeId('id')
-    .nodeLabel(n => `${n.title || n.id}${n.category ? ` · ${n.category}` : ''}`)
+    .nodeLabel(n => `${n.name || n.pageId}${n.category ? ` · ${n.category}` : ''}`)
     .nodeColor(colorOf)
     .nodeRelSize(5)
     .linkWidth(l => Math.min(4, (l.weight || 1) / 2))
@@ -96,12 +98,12 @@ onBeforeUnmount(() => {
 .graph-tab {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4, 16px);
+  gap: var(--space-md);
   height: 100%;
 }
 
 .hint {
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: 0.8125rem;
 }
 
@@ -109,8 +111,8 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 480px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 8px);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--color-surface);
+  background: var(--color-bg);
 }
 </style>

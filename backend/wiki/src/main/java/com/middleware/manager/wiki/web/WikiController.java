@@ -181,6 +181,41 @@ public class WikiController {
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * 新建经验页面。编译流水线下线后页面只能由人书写，故补上创建入口。
+     * 一律先落为草稿，发布需另走 updatePage 并通过审核权限校验。
+     */
+    @PostMapping("/pages")
+    public ResponseEntity<WikiPage> createPage(@RequestBody WikiPage page,
+                                               Authentication authentication, HttpServletRequest request) {
+        if (!wikiPermissionService.isAdmin(authentication)
+                && wikiPermissionService.getManagedCategory(authentication) == null) {
+            return ResponseEntity.status(403).build();
+        }
+        if (page.getTitle() == null || page.getTitle().isBlank()
+                || page.getContent() == null || page.getContent().isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        page.setId(null);
+        page.setStatus("DRAFT");
+        page.setPageType(page.getPageType() == null ? "EXPERIENCE" : page.getPageType());
+        page.setCompiledBy(authentication != null ? authentication.getName() : "system");
+        page.setCreatedAt(LocalDateTime.now());
+        page.setUpdatedAt(LocalDateTime.now());
+        pageMapper.insert(page);
+
+        Long actorId = resolveActorId(authentication);
+        try {
+            auditLogMapper.insert("PAGE_CREATE", "PAGE", page.getId(), actorId,
+                    authentication != null ? authentication.getName() : "system",
+                    request.getRemoteAddr(), null);
+        } catch (Exception e) {
+            log.warn("Audit log write failed: {}", e.getMessage());
+        }
+        return ResponseEntity.ok(page);
+    }
+
     @PutMapping("/pages/{id}")
     public ResponseEntity<WikiPage> updatePage(@PathVariable Long id, @RequestBody WikiPage page,
                                                 Authentication authentication, HttpServletRequest request) {
@@ -189,6 +224,12 @@ public class WikiController {
 
         String oldStatus = existing.getStatus();
         String newStatus = page.getStatus();
+
+        // 发布（-> ACTIVE）属审核动作，必须有审核权限
+        boolean publishing = "ACTIVE".equals(newStatus) && !"ACTIVE".equals(oldStatus);
+        if (publishing && !wikiPermissionService.isAdmin(authentication)) {
+            return ResponseEntity.status(403).build();
+        }
 
         if (page.getTitle() != null) existing.setTitle(page.getTitle());
         if (page.getContent() != null) existing.setContent(page.getContent());

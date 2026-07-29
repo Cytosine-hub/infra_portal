@@ -111,6 +111,7 @@ public class KnowledgeService implements KnowledgeSearchPort {
                     sr.setSourceId(parseLong(meta != null ? meta.get("sourceId") : null));
                     sr.setCategory(meta != null ? meta.get("category") : null);
                     sr.setSoftware(meta != null ? meta.get("software") : null);
+                    sr.setSectionPath(meta != null ? meta.get("sectionPath") : null);
                     sr.setScore(vr.getScore());
                     sr.setSource("vector");
                     results.add(sr);

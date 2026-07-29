@@ -1,10 +1,12 @@
 <template>
   <div class="documents-tab">
     <Toolbar>
-      <input ref="fileInput" type="file" multiple hidden @change="onFilesPicked" />
-      <BaseButton variant="primary" :loading="uploading" @click="fileInput?.click()">上传文档</BaseButton>
-      <span class="hint">支持 PDF / Word(.doc/.docx) / Excel(.xls/.xlsx) / Markdown</span>
-      <BaseButton variant="ghost" :loading="loading" @click="load">刷新</BaseButton>
+      <template #filters>
+        <input ref="fileInput" type="file" multiple hidden @change="onFilesPicked" />
+        <BaseButton variant="primary" :loading="uploading" @click="fileInput?.click()">上传文档</BaseButton>
+        <span class="hint">支持 PDF / Word(.doc/.docx) / Excel(.xls/.xlsx) / Markdown</span>
+        <BaseButton variant="ghost" :loading="loading" @click="load">刷新</BaseButton>
+      </template>
     </Toolbar>
 
     <p v-if="uploading" class="progress">正在导入 {{ uploadDone }}/{{ uploadTotal }}…</p>
@@ -22,6 +24,7 @@
     </DataTable>
 
     <BaseModal v-model="previewOpen" :title="previewing?.title || ''" width="720px">
+      <p class="preview-meta">共 {{ previewTotal }} 个切片</p>
       <pre class="preview">{{ previewContent }}</pre>
     </BaseModal>
   </div>
@@ -58,6 +61,7 @@ const previewing = ref(null)
 const previewOpen = ref(false)
 const previewContent = ref('')
 const fileInput = ref(null)
+const previewTotal = ref(0)
 
 const sources = computed(() => rawSources.value.map(s => ({
   ...s,
@@ -110,7 +114,11 @@ async function preview(row) {
   try {
     const params = new URLSearchParams({ title: row.title, sourceType: row.sourceType || '' })
     const result = await request(`/api/knowledge/docs/preview?${params}`)
-    previewContent.value = typeof result === 'string' ? result : (result.content || '')
+    // 后端返回按切片序号排列的片段列表，拼接后展示
+    previewContent.value = (result.chunks || [])
+      .map(c => c.content)
+      .join('\n\n———\n\n')
+    previewTotal.value = result.totalChunks || 0
     previewing.value = row
     previewOpen.value = true
   } catch (error) {
@@ -138,7 +146,7 @@ onMounted(load)
 .documents-tab {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4, 16px);
+  gap: var(--space-md);
 }
 
 .upload {
@@ -148,12 +156,18 @@ onMounted(load)
 
 .hint,
 .progress {
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: 0.8125rem;
 }
 
 .progress {
   margin: 0;
+}
+
+.preview-meta {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  margin: 0 0 var(--space-xs);
 }
 
 .preview {

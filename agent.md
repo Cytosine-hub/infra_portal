@@ -215,7 +215,7 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 
 认证：九个后端进程启动前必须设置同一个至少 32 UTF-8 字节的 `GATEWAY_SIGNING_SECRET`，配置无生产默认值。外部请求只进 Gateway；Token 校验、滑动续期、角色和岗位权威归 core-service 的 identity，各业务服务的受保护端点只接受 Gateway 签名的身份头（`GatewayHeaderAuthenticationFilter` 验 `X-Gateway-Sign`）。协议和联通验证见 `docs/microservices-stage5-gateway-authentication.md`。
 
-Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，9 个服务名与 Maven 服务目录一致。Gateway 将 `/api/forum/**` 路由到 community-service，将 `/api/knowledge/**`、`/api/agent/**`、`/api/wiki/**`、`/api/ops-agent/**` 路由到 ai-service，将 identity/catalog/standards 的原路径和 `/files/**` 路由到 core-service，将 `/api/middleware-commands/**` 路由到 middleware-service；其余 4 个岗位服务仅注册 Nacos，新增业务端点时再增加精确网关路由，禁止恢复 `/api/**` 泛路由。Gateway 对 introspect 的调用在 `cloud` profile 下通过负载均衡的 `http://core-service` 完成。端口和路由见 `docs/microservices-stage6-job-services.md`。
+Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，9 个服务名与 Maven 服务目录一致。Gateway 将 `/api/forum/**` 路由到 community-service，将 `/api/knowledge/**`、`/api/agent/**`、`/api/knowledge/**`、`/api/ops-agent/**` 路由到 ai-service，将 identity/catalog/standards 的原路径和 `/files/**` 路由到 core-service，将 `/api/middleware-commands/**` 路由到 middleware-service；其余 4 个岗位服务仅注册 Nacos，新增业务端点时再增加精确网关路由，禁止恢复 `/api/**` 泛路由。Gateway 对 introspect 的调用在 `cloud` profile 下通过负载均衡的 `http://core-service` 完成。端口和路由见 `docs/microservices-stage6-job-services.md`。
 
 ## 8. 测试（严格 TDD）
 

@@ -47,7 +47,7 @@ const currentTab = ref('search')
 .knowledge-base {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4, 16px);
+  gap: var(--space-md);
 }
 
 .tab-body {

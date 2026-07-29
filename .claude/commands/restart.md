@@ -88,7 +88,7 @@ grep "ready\|Local" /tmp/frontend.log
 ### 第五步：验证服务
 
 ```bash
-curl -s -o /dev/null -w "后端: %{http_code}\n" http://localhost:8080/api/wiki/pages
+curl -s -o /dev/null -w "后端: %{http_code}\n" http://localhost:8080/api/knowledge/pages
 curl -s -o /dev/null -w "前端: %{http_code}\n" http://localhost:5173/
 docker ps | grep milvus | awk '{print "Milvus:", $1, $7}'
 ```

@@ -3,7 +3,7 @@ import { getJobModule } from '../modules/index.js'
 
 const routeNames = {
   HOME: 'home', PUBLIC: 'public', STANDARDS: 'standards', FORUM: 'forum', FORUM_DETAIL: 'forumDetail',
-  FORUM_EDITOR: 'forumEditor', FORUM_MINE: 'forumMine', KNOWLEDGE: 'knowledge', WIKI: 'wiki',
+  FORUM_EDITOR: 'forumEditor', FORUM_MINE: 'forumMine', KNOWLEDGE: 'knowledge',
   DIAGNOSTICS: 'diagnostics', JOB_MODULE: 'jobModule', ADMIN: 'admin', DOCUMENT_EDITOR: 'documentEditor',
   WORD_PREVIEW: 'wordPreview', DATA_MIGRATION: 'dataMigration'
 }
@@ -25,7 +25,8 @@ export function parseHashRoute(hashValue = '') {
   if (forumPostMatch) return { name: 'forumDetail', postId: forumPostMatch[1] }
   if (hash === '/forum' || hash.startsWith('/forum')) return { name: 'forum', postId: null }
   if (hash.startsWith('/knowledge')) return { name: 'knowledge' }
-  if (hash.startsWith('/wiki')) return { name: 'wiki' }
+  // Wiki 已并入知识库，旧地址重定向避免书签落空
+  if (hash.startsWith('/wiki')) return { name: 'knowledge' }
   if (hash.startsWith('/diagnostics')) return { name: 'diagnostics' }
   if (hash.startsWith('/data-migration')) {
     return { name: 'jobModule', jobId: 'database', feature: 'data-migration', legacy: true }

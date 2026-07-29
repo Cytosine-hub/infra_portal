@@ -18,10 +18,10 @@ public class PublicConfigController {
 
     @GetMapping("/config")
     public Map<String, Object> config() {
+        // wiki 已并入知识库，不再有独立开关
         return Map.of(
                 "knowledgeEnabled", settingService.getBoolean("knowledge-enabled", true),
-                "diagnosticsEnabled", settingService.getBoolean("diagnostics-enabled", true),
-                "wikiEnabled", settingService.getBoolean("wiki-enabled", true)
+                "diagnosticsEnabled", settingService.getBoolean("diagnostics-enabled", true)
         );
     }
 }

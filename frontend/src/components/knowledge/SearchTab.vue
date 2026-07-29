@@ -1,14 +1,16 @@
 <template>
   <div class="search-tab">
     <Toolbar>
-      <BaseInput
-        v-model="query"
-        placeholder="搜索参数名、错误码、命令或直接描述问题…"
-        @keyup.enter="runSearch"
-      />
-      <BaseInput v-model="category" placeholder="分类（可选）" />
-      <BaseInput v-model="software" placeholder="软件（可选）" />
-      <BaseButton variant="primary" :loading="loading" @click="runSearch">检索</BaseButton>
+      <template #filters>
+        <BaseInput
+          v-model="query"
+          placeholder="搜索参数名、错误码、命令或直接描述问题…"
+          @keyup.enter="runSearch"
+        />
+        <BaseInput v-model="category" placeholder="分类（可选）" />
+        <BaseInput v-model="software" placeholder="软件（可选）" />
+        <BaseButton variant="primary" :loading="loading" @click="runSearch">检索</BaseButton>
+      </template>
     </Toolbar>
 
     <LoadingSpinner v-if="loading" text="检索中…" />
@@ -109,11 +111,11 @@ async function runSearch() {
 .search-tab {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4, 16px);
+  gap: var(--space-md);
 }
 
 .summary {
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: 0.875rem;
   margin: 0;
 }
@@ -121,20 +123,20 @@ async function runSearch() {
 .results {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3, 12px);
+  gap: var(--space-sm);
 }
 
 .result {
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 8px);
-  padding: var(--space-4, 16px);
-  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background: var(--color-bg);
 }
 
 .result header {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-xs);
   flex-wrap: wrap;
 }
 
@@ -146,26 +148,26 @@ async function runSearch() {
 .score {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: 0.8125rem;
 }
 
 .breadcrumb {
   color: var(--color-primary);
   font-size: 0.8125rem;
-  margin: var(--space-2, 8px) 0 0;
+  margin: var(--space-xs) 0 0;
 }
 
 .snippet {
   color: var(--color-text);
-  margin: var(--space-2, 8px) 0 0;
+  margin: var(--space-xs) 0 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .meta {
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: 0.8125rem;
-  margin: var(--space-2, 8px) 0 0;
+  margin: var(--space-xs) 0 0;
 }
 </style>
