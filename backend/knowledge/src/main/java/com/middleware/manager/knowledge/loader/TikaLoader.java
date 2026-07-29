@@ -51,6 +51,9 @@ public class TikaLoader implements DocumentLoader {
             Arrays.asList(".pdf", ".doc", ".docx", ".xls", ".xlsx")
     );
     private static final Pattern HEADING_STYLE_LEVEL = Pattern.compile("(?i).*(?:heading|标题)\\s*([1-6]).*");
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+    private static final String PDF_TOC_HEADER = "目录";
+    private static final int MAX_HEADING_LEVEL = 6;
 
     private final AutoDetectParser parser;
 
@@ -85,13 +88,10 @@ public class TikaLoader implements DocumentLoader {
             }
         }
         if (lower.endsWith(".pdf")) {
-            String outline = extractPdfOutline(bytes);
-            // 书签标题回填进正文，让下游 TextSplitter 的标题切分策略对 PDF 生效
-            String body = loadPdfWithBackfilledHeadings(bytes);
-            if (body.isBlank()) {
-                body = loadWithTika(bytes);
+            String structured = loadPdfWithStructure(bytes);
+            if (!structured.isBlank()) {
+                return structured;
             }
-            return outline.isBlank() ? body : outline + "\n\n" + body;
         }
         return loadWithTika(bytes);
     }
@@ -115,7 +115,7 @@ public class TikaLoader implements DocumentLoader {
             }
             return content.toString().trim();
         } catch (Exception e) {
-            log.debug("DOCX structured parse failed, falling back to Tika: {}", e.getMessage());
+            log.warn("DOCX 结构化解析失败，降级为 Tika 扁平文本，检索质量会下降: {}", e.getMessage());
             return "";
         }
     }
@@ -128,14 +128,31 @@ public class TikaLoader implements DocumentLoader {
         }
         int headingLevel = headingLevel(paragraph, document);
         if (headingLevel > 0) {
-            content.append("\n")
-                    .append("#".repeat(headingLevel))
-                    .append(" ")
-                    .append(text.trim())
-                    .append("\n\n");
+            content.append("\n").append(markdownHeading(headingLevel, text.trim())).append("\n\n");
         } else {
             content.append(text.trim()).append("\n\n");
         }
+    }
+
+    private String markdownHeading(int level, String text) {
+        return "#".repeat(Math.min(MAX_HEADING_LEVEL, Math.max(1, level))) + " " + text;
+    }
+
+    /** 渲染一行 Markdown 表格；不足 columns 的位置补空，保证各行列数一致。 */
+    private void appendMarkdownRow(StringBuilder content, List<String> cells, int columns) {
+        content.append("|");
+        for (int c = 0; c < columns; c++) {
+            content.append(" ").append(c < cells.size() ? cells.get(c) : "").append(" |");
+        }
+        content.append("\n");
+    }
+
+    private void appendMarkdownSeparator(StringBuilder content, int columns) {
+        content.append("|").append(" --- |".repeat(columns)).append("\n");
+    }
+
+    private String normalizeCell(String text) {
+        return text == null ? "" : WHITESPACE.matcher(text).replaceAll(" ").trim();
     }
 
     private int headingLevel(XWPFParagraph paragraph, XWPFDocument document) {
@@ -165,18 +182,14 @@ public class TikaLoader implements DocumentLoader {
     private void appendTable(StringBuilder content, XWPFTable table) {
         boolean header = true;
         for (XWPFTableRow row : table.getRows()) {
-            content.append("|");
-            int columns = Math.max(1, row.getTableCells().size());
+            List<String> cells = new ArrayList<>();
             for (XWPFTableCell cell : row.getTableCells()) {
-                content.append(" ").append(cell.getText().replaceAll("\\s+", " ").trim()).append(" |");
+                cells.add(normalizeCell(cell.getText()));
             }
-            content.append("\n");
+            int columns = Math.max(1, cells.size());
+            appendMarkdownRow(content, cells, columns);
             if (header) {
-                content.append("|");
-                for (int i = 0; i < columns; i++) {
-                    content.append(" --- |");
-                }
-                content.append("\n");
+                appendMarkdownSeparator(content, columns);
                 header = false;
             }
         }
@@ -200,14 +213,14 @@ public class TikaLoader implements DocumentLoader {
                 }
                 int headingLevel = docHeadingLevel(styleSheet, paragraph.getStyleIndex());
                 if (headingLevel > 0) {
-                    content.append("\n").append("#".repeat(headingLevel)).append(" ").append(text).append("\n\n");
+                    content.append("\n").append(markdownHeading(headingLevel, text)).append("\n\n");
                 } else {
                     content.append(text).append("\n\n");
                 }
             }
             return content.toString().trim();
         } catch (Exception e) {
-            log.debug("DOC structured parse failed, falling back to Tika: {}", e.getMessage());
+            log.warn("DOC 结构化解析失败，降级为 Tika 扁平文本，检索质量会下降: {}", e.getMessage());
             return "";
         }
     }
@@ -233,7 +246,7 @@ public class TikaLoader implements DocumentLoader {
             }
             return content.toString().trim();
         } catch (Exception e) {
-            log.debug("Workbook structured parse failed, falling back to Tika: {}", e.getMessage());
+            log.warn("Excel 结构化解析失败，降级为 Tika 扁平文本，行列关系会丢失: {}", e.getMessage());
             return "";
         }
     }
@@ -255,14 +268,12 @@ public class TikaLoader implements DocumentLoader {
 
         String sheetName = sheet.getSheetName();
         if (sheetName != null && !sheetName.isBlank()) {
-            content.append("# ").append(sheetName.trim()).append("\n\n");
+            content.append(markdownHeading(1, sheetName.trim())).append("\n\n");
         }
         for (int i = 0; i < rows.size(); i++) {
-            appendRow(content, rows.get(i), columns);
+            appendMarkdownRow(content, rows.get(i), columns);
             if (i == 0) {
-                content.append("|");
-                content.append(" --- |".repeat(columns));
-                content.append("\n");
+                appendMarkdownSeparator(content, columns);
             }
         }
         content.append("\n");
@@ -277,7 +288,7 @@ public class TikaLoader implements DocumentLoader {
         boolean hasContent = false;
         for (int c = 0; c < row.getLastCellNum(); c++) {
             Cell cell = row.getCell(c);
-            String text = cell == null ? "" : formatter.formatCellValue(cell).replaceAll("\\s+", " ").trim();
+            String text = cell == null ? "" : normalizeCell(formatter.formatCellValue(cell));
             if (!text.isEmpty()) {
                 hasContent = true;
             }
@@ -286,19 +297,13 @@ public class TikaLoader implements DocumentLoader {
         return hasContent ? values : List.of();
     }
 
-    private void appendRow(StringBuilder content, List<String> values, int columns) {
-        content.append("|");
-        for (int c = 0; c < columns; c++) {
-            content.append(" ").append(c < values.size() ? values.get(c) : "").append(" |");
-        }
-        content.append("\n");
-    }
-
     /**
-     * 逐页抽取 PDF 正文，并把该页起始的书签标题转写成 Markdown 标题。
-     * Tika 输出的是无标题标记的扁平文本流，直接切片只能走字符数兜底策略。
+     * PDF 结构化解析：单次打开文档，遍历一次书签树，同时产出目录块与回填了标题的正文。
+     * <p>目录块保留「标题 .... 页码」格式，wiki 的 DocumentOutlineExtractor 依赖它做章节页码归属；
+     * 正文侧把书签标题就地改写成 Markdown 标题，使下游 TextSplitter 的标题切分策略生效
+     * （此前 Tika 输出的是无标题标记的扁平文本流，只能走字符数兜底）。
      */
-    private String loadPdfWithBackfilledHeadings(byte[] bytes) {
+    private String loadPdfWithStructure(byte[] bytes) {
         try (PDDocument document = PDDocument.load(bytes)) {
             PDDocumentOutline outline = document.getDocumentCatalog().getDocumentOutline();
             if (outline == null || outline.getFirstChild() == null) {
@@ -309,23 +314,39 @@ public class TikaLoader implements DocumentLoader {
             if (bookmarks.isEmpty()) {
                 return "";
             }
-
-            PDFTextStripper stripper = new PDFTextStripper();
-            StringBuilder content = new StringBuilder();
-            for (int page = 1; page <= document.getNumberOfPages(); page++) {
-                stripper.setStartPage(page);
-                stripper.setEndPage(page);
-                String pageText = stripper.getText(document);
-                content.append(injectHeadings(pageText, bookmarks, page)).append("\n");
-            }
-            return content.toString().trim();
+            String toc = renderToc(bookmarks);
+            String body = renderBodyWithHeadings(document, bookmarks);
+            return toc.isBlank() ? body : toc + "\n\n" + body;
         } catch (Exception e) {
-            log.debug("PDF heading backfill failed, using Tika text only: {}", e.getMessage());
+            log.warn("PDF 结构化解析失败，降级为 Tika 扁平文本，检索质量会下降: {}", e.getMessage());
             return "";
         }
     }
 
-    /** 把落在本页的书签标题就地改写成 Markdown 标题；正文中找不到标题时，退化为在页首插入。 */
+    private String renderToc(List<PdfBookmark> bookmarks) {
+        StringBuilder content = new StringBuilder(PDF_TOC_HEADER).append("\n");
+        for (PdfBookmark bookmark : bookmarks) {
+            content.append("  ".repeat(Math.max(0, bookmark.level() - 1))).append(bookmark.title());
+            if (bookmark.page() > 0) {
+                content.append(" .... ").append(bookmark.page());
+            }
+            content.append("\n");
+        }
+        return content.toString().trim();
+    }
+
+    private String renderBodyWithHeadings(PDDocument document, List<PdfBookmark> bookmarks) throws Exception {
+        PDFTextStripper stripper = new PDFTextStripper();
+        StringBuilder content = new StringBuilder();
+        for (int page = 1; page <= document.getNumberOfPages(); page++) {
+            stripper.setStartPage(page);
+            stripper.setEndPage(page);
+            content.append(injectHeadings(stripper.getText(document), bookmarks, page)).append("\n");
+        }
+        return content.toString().trim();
+    }
+
+    /** 把落在本页的书签标题就地改写成 Markdown 标题；正文中定位不到时，退化为在页首插入。 */
     private String injectHeadings(String pageText, List<PdfBookmark> bookmarks, int page) {
         String result = pageText == null ? "" : pageText;
         StringBuilder prefix = new StringBuilder();
@@ -334,18 +355,50 @@ public class TikaLoader implements DocumentLoader {
             if (bookmark.page() != page) {
                 continue;
             }
-            String heading = "#".repeat(Math.min(6, Math.max(1, bookmark.level()))) + " " + bookmark.title();
-            int index = result.indexOf(bookmark.title(), searchFrom);
-            if (index < 0) {
+            String heading = markdownHeading(bookmark.level(), bookmark.title());
+            int[] span = locateTitle(result, bookmark.title(), searchFrom);
+            if (span == null) {
                 prefix.append(heading).append("\n\n");
                 continue;
             }
             String replacement = "\n\n" + heading + "\n\n";
-            result = result.substring(0, index) + replacement
-                    + result.substring(index + bookmark.title().length());
-            searchFrom = index + replacement.length();
+            result = result.substring(0, span[0]) + replacement + result.substring(span[1]);
+            searchFrom = span[0] + replacement.length();
         }
         return prefix + result;
+    }
+
+    /**
+     * 在正文中定位标题，返回 [起始, 结束) 下标；找不到返回 null。
+     * <p>PDF 文本抽取常在字符间插入空白（中文文档尤其明显，「集群管理」可能抽成「集 群 管 理」），
+     * 精确匹配失败后改用「去掉全部空白再匹配」并把下标映射回原文。
+     */
+    private int[] locateTitle(String text, String title, int fromIndex) {
+        if (text == null || title == null || fromIndex >= text.length()) {
+            return null;
+        }
+        int exact = text.indexOf(title, fromIndex);
+        if (exact >= 0) {
+            return new int[]{exact, exact + title.length()};
+        }
+
+        String compactTitle = WHITESPACE.matcher(title).replaceAll("");
+        if (compactTitle.isEmpty()) {
+            return null;
+        }
+        StringBuilder compactText = new StringBuilder();
+        int[] originalIndex = new int[text.length() - fromIndex + 1];
+        for (int i = fromIndex; i < text.length(); i++) {
+            if (!Character.isWhitespace(text.charAt(i))) {
+                originalIndex[compactText.length()] = i;
+                compactText.append(text.charAt(i));
+            }
+        }
+        int hit = compactText.indexOf(compactTitle);
+        if (hit < 0) {
+            return null;
+        }
+        return new int[]{originalIndex[hit], originalIndex[hit + compactTitle.length() - 1] + 1};
     }
 
     private void collectBookmarks(PDOutlineItem item, PDDocument document, int level, List<PdfBookmark> sink)
@@ -353,9 +406,8 @@ public class TikaLoader implements DocumentLoader {
         PDOutlineItem current = item;
         while (current != null) {
             String title = current.getTitle();
-            int pageNumber = resolvePdfPageNumber(current, document);
-            if (title != null && !title.isBlank() && pageNumber > 0) {
-                sink.add(new PdfBookmark(title.trim(), pageNumber, level));
+            if (title != null && !title.isBlank()) {
+                sink.add(new PdfBookmark(title.trim(), resolvePdfPageNumber(current, document), level));
             }
             if (current.getFirstChild() != null) {
                 collectBookmarks(current.getFirstChild(), document, level + 1, sink);
@@ -365,40 +417,6 @@ public class TikaLoader implements DocumentLoader {
     }
 
     private record PdfBookmark(String title, int page, int level) {
-    }
-
-    private String extractPdfOutline(byte[] bytes) {
-        try (PDDocument document = PDDocument.load(bytes)) {
-            PDDocumentOutline outline = document.getDocumentCatalog().getDocumentOutline();
-            if (outline == null || outline.getFirstChild() == null) {
-                return "";
-            }
-            StringBuilder content = new StringBuilder("目录\n");
-            appendPdfOutlineItems(content, outline.getFirstChild(), document, 1);
-            return content.toString().trim();
-        } catch (Exception e) {
-            log.debug("PDF outline parse failed, using Tika text only: {}", e.getMessage());
-            return "";
-        }
-    }
-
-    private void appendPdfOutlineItems(StringBuilder content, PDOutlineItem item, PDDocument document, int level) throws Exception {
-        PDOutlineItem current = item;
-        while (current != null) {
-            String title = current.getTitle();
-            int pageNumber = resolvePdfPageNumber(current, document);
-            if (title != null && !title.isBlank()) {
-                content.append("  ".repeat(Math.max(0, level - 1))).append(title.trim());
-                if (pageNumber > 0) {
-                    content.append(" .... ").append(pageNumber);
-                }
-                content.append("\n");
-            }
-            if (current.getFirstChild() != null) {
-                appendPdfOutlineItems(content, current.getFirstChild(), document, level + 1);
-            }
-            current = current.getNextSibling();
-        }
     }
 
     private int resolvePdfPageNumber(PDOutlineItem item, PDDocument document) throws Exception {

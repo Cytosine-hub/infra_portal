@@ -163,6 +163,40 @@ class TikaLoaderStructureTest {
         }
 
         @Test
+        @DisplayName("TC-LOADER-012 同页多个书签应分别回填到各自位置，而非堆叠在页首")
+        void multipleBookmarksOnSamePageAreBackfilledInPlace() throws Exception {
+            byte[] bytes = buildPdfWithBookmarks(
+                    "Installation intro text. Configuration detail text.",
+                    new String[]{"Installation", "Configuration"});
+
+            String content = loader.load(new ByteArrayInputStream(bytes), "guide.pdf");
+
+            int installHeading = content.indexOf("# Installation");
+            int introText = content.indexOf("intro text");
+            int configHeading = content.indexOf("# Configuration");
+
+            assertThat(installHeading).isGreaterThanOrEqualTo(0);
+            assertThat(configHeading).isGreaterThanOrEqualTo(0);
+            // 第二个标题必须落在第一段正文之后，说明是就地回填而不是全部堆到页首
+            assertThat(configHeading).isGreaterThan(introText);
+        }
+
+        @Test
+        @DisplayName("TC-LOADER-013 正文标题被逐字拆开时仍应匹配并回填（PDF 抽取常见形态）")
+        void backfillsWhenBodyTitleHasScatteredWhitespace() throws Exception {
+            byte[] bytes = buildPdfWithBookmarks(
+                    "C l u s t e r  M a n a g e m e n t  followed by body.",
+                    new String[]{"Cluster Management"});
+
+            String content = loader.load(new ByteArrayInputStream(bytes), "spaced.pdf");
+
+            assertThat(content).contains("# Cluster Management");
+            assertThat(content).contains("followed by body.");
+            // 归一化匹配成功时原始的散字形态应被改写掉，而不是与标题重复共存
+            assertThat(content).doesNotContain("C l u s t e r");
+        }
+
+        @Test
         @DisplayName("TC-LOADER-008 无书签的 PDF 应正常返回正文而不报错")
         void pdfWithoutBookmarksStillReturnsBody() throws Exception {
             byte[] bytes;
@@ -211,6 +245,10 @@ class TikaLoaderStructureTest {
     }
 
     private static byte[] buildPdfWithBookmark(String bookmarkTitle, String bodyText) throws Exception {
+        return buildPdfWithBookmarks(bodyText, new String[]{bookmarkTitle});
+    }
+
+    private static byte[] buildPdfWithBookmarks(String bodyText, String[] bookmarkTitles) throws Exception {
         try (PDDocument document = new PDDocument();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             PDPage page = new PDPage();
@@ -219,12 +257,14 @@ class TikaLoaderStructureTest {
 
             PDDocumentOutline outline = new PDDocumentOutline();
             document.getDocumentCatalog().setDocumentOutline(outline);
-            PDOutlineItem item = new PDOutlineItem();
-            item.setTitle(bookmarkTitle);
-            PDPageXYZDestination destination = new PDPageXYZDestination();
-            destination.setPage(page);
-            item.setDestination(destination);
-            outline.addLast(item);
+            for (String title : bookmarkTitles) {
+                PDOutlineItem item = new PDOutlineItem();
+                item.setTitle(title);
+                PDPageXYZDestination destination = new PDPageXYZDestination();
+                destination.setPage(page);
+                item.setDestination(destination);
+                outline.addLast(item);
+            }
             outline.openNode();
 
             document.save(output);
