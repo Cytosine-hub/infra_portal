@@ -57,7 +57,7 @@ class AiServiceApplicationTests {
     void aiEndpointsRequireAuthentication() throws Exception {
         assertUnauthorized("/api/knowledge/search");
         assertUnauthorized("/api/agent/sessions");
-        assertUnauthorized("/api/wiki/pages");
+        assertUnauthorized("/api/knowledge/pages");
         assertUnauthorized("/api/ops-agent/sessions");
         assertUnauthorized("/api/ops-agent/export/zabbix");
     }

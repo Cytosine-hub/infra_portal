@@ -11,7 +11,6 @@
           <button v-if="auth.token" :class="{ active: route.name === 'public' }" @click="navigate('downloads')">下载中心</button>
           <button v-if="auth.token" :class="{ active: route.name?.startsWith('forum') }" @click="navigate('forum')">论坛</button>
           <button v-if="auth.token && siteConfig.knowledgeEnabled" :class="{ active: route.name === 'knowledge' }" @click="navigate('knowledge')">知识库</button>
-          <button v-if="auth.token && siteConfig.wikiEnabled" :class="{ active: route.name === 'wiki' }" @click="navigate('wiki')">Wiki</button>
           <button v-if="auth.token && siteConfig.diagnosticsEnabled" :class="{ active: route.name === 'diagnostics' }" @click="navigate('diagnostics')">智能排查</button>
           <button v-if="canAccessAdmin" :class="{ active: route.name === 'admin' || route.name === 'documentEditor' }" @click="navigate('admin')">管理后台</button>
         </nav>
@@ -124,8 +123,7 @@
         />
       </section>
 
-      <KnowledgePanel v-else-if="route.name === 'knowledge' && siteConfig.knowledgeEnabled" :auth="auth" :notify="notify" />
-      <WikiPanel v-else-if="route.name === 'wiki' && siteConfig.wikiEnabled" :auth="auth" :notify="notify" />
+      <KnowledgeBasePage v-else-if="route.name === 'knowledge' && siteConfig.knowledgeEnabled" :auth="auth" :notify="notify" :confirm="confirmAction" />
       <DiagnosticsPanel v-else-if="route.name === 'diagnostics' && siteConfig.diagnosticsEnabled" :auth="auth" :notify="notify" />
 
       <section v-else class="workspace">
@@ -301,8 +299,7 @@ import DocumentPreview from './components/DocumentPreview.vue'
 import AdminModals from './components/AdminModals.vue'
 import { useAdmin } from './composables/useAdmin'
 
-const KnowledgePanel = defineAsyncComponent(() => import('./components/KnowledgePanel.vue'))
-const WikiPanel = defineAsyncComponent(() => import('./components/WikiPanel.vue'))
+const KnowledgeBasePage = defineAsyncComponent(() => import('./components/KnowledgeBasePage.vue'))
 const DiagnosticsPanel = defineAsyncComponent(() => import('./components/DiagnosticsPanel.vue'))
 
 const { auth, login: authLogin, logout: authLogout, restoreAuth,
@@ -339,7 +336,7 @@ const {
 } = admin
 
 const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true })
-const siteConfig = reactive({ knowledgeEnabled: true, diagnosticsEnabled: true, wikiEnabled: true })
+const siteConfig = reactive({ knowledgeEnabled: true, diagnosticsEnabled: true })
 const loginForm = reactive({ username: '', password: '' })
 const selectedPreviewDocument = ref(null)
 const currentJob = computed(() => getJobModule(route.jobId))
@@ -359,8 +356,7 @@ const pageTitle = computed(() => {
   if (route.name === 'jobModule') return `运营集成中心 · ${currentJob.value?.shortName || '空间'}`
   if (route.name === 'documentEditor') return '运营集成中心 · 文档编辑'
   if (route.name && route.name.startsWith('forum')) return '运营集成中心 · infra论坛'
-  if (route.name === 'knowledge') return '运营集成中心 · 知识库管理'
-  if (route.name === 'wiki') return '运营集成中心 · Wiki 知识库'
+  if (route.name === 'knowledge') return '运营集成中心 · 知识库'
   if (route.name === 'diagnostics') return '运营集成中心 · 智能排查'
   return '运营集成中心 · 管理后台'
 })
@@ -374,8 +370,8 @@ function syncRoute() {
   }, next)
   if (next.legacy) window.history.replaceState(null, '', `#/jobs/${next.jobId}/${next.feature}`)
   updateDocumentTitle()
-  // 独立页面组件自行加载数据（HomePage/DownloadsPage/StandardsPage/岗位模块/WikiPanel/KnowledgePanel/DiagnosticsPanel）
-  const selfManagedRoutes = ['home', 'public', 'standards', 'jobModule', 'knowledge', 'wiki', 'diagnostics']
+  // 独立页面组件自行加载数据（HomePage/DownloadsPage/StandardsPage/岗位模块/KnowledgeBasePage/DiagnosticsPanel）
+  const selfManagedRoutes = ['home', 'public', 'standards', 'jobModule', 'knowledge', 'diagnostics']
   if (selfManagedRoutes.includes(route.name)) return
   if (route.name === 'documentEditor' || route.name === 'forum' || route.name === 'forumDetail' || route.name === 'forumEditor' || route.name === 'forumMine') {
     if (route.name === 'documentEditor' && auth.token) {
@@ -519,7 +515,6 @@ async function loadSiteConfig() {
     const cfg = await request('/api/public/config', { token: null })
     siteConfig.knowledgeEnabled = cfg.knowledgeEnabled !== false
     siteConfig.diagnosticsEnabled = cfg.diagnosticsEnabled !== false
-    siteConfig.wikiEnabled = cfg.wikiEnabled !== false
   } catch { /* use defaults */ }
 }
 

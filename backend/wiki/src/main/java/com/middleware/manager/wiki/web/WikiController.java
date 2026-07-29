@@ -41,7 +41,7 @@ import java.util.*;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
-@RequestMapping("/api/wiki")
+@RequestMapping("/api/knowledge")
 @Slf4j
 public class WikiController {
 
@@ -227,7 +227,7 @@ public class WikiController {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/export")
+    @GetMapping("/pages/export")
     public ResponseEntity<byte[]> exportWiki(@RequestParam(required = false) String category,
                                               Authentication authentication, HttpServletRequest request) {
         try {
@@ -255,7 +255,7 @@ public class WikiController {
         }
     }
 
-    @PostMapping("/import")
+    @PostMapping("/pages/import")
     public ResponseEntity<WikiImportService.ImportResult> importWiki(@RequestParam("file") MultipartFile file,
                                                                       @RequestParam(defaultValue = "false") boolean dryRun,
                                                                       Authentication authentication, HttpServletRequest request) {
@@ -363,12 +363,6 @@ public class WikiController {
             return ResponseEntity.status(403).build();
         }
         return ResponseEntity.ok(source);
-    }
-
-    @DeleteMapping("/sources/{id}")
-    public ResponseEntity<Void> deleteSource(@PathVariable Long id) {
-        sourceMapper.deleteById(id);
-        return ResponseEntity.ok().build();
     }
 
     // --- Lint endpoints ---

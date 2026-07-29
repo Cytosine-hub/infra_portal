@@ -271,21 +271,6 @@ public class KnowledgeService implements KnowledgeSearchPort {
         return chunkMapper.deleteBySourceTitleAndSourceType(sourceTitle, sourceType);
     }
 
-    public int deleteTestDocuments() {
-        List<KnowledgeChunk> all = chunkMapper.findAll();
-        for (KnowledgeChunk chunk : all) {
-            if (chunk.getSourceTitle() != null &&
-                (chunk.getSourceTitle().startsWith("test") || chunk.getSourceTitle().startsWith("proxy-test"))) {
-                if (chunk.getVectorId() != null) {
-                    try { vectorStore.delete(chunk.getVectorId()); } catch (Exception ignored) {}
-                }
-            }
-        }
-        int count = chunkMapper.deleteBySourceTitleLike("test%");
-        count += chunkMapper.deleteBySourceTitleLike("proxy-test%");
-        return count;
-    }
-
     public List<Map<String, Object>> listDocuments() {
         List<Map<String, Object>> docs = new ArrayList<>();
         for (WikiSource source : wikiSourceMapper.findAll()) {

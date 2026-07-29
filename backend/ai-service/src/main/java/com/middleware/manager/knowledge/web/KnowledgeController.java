@@ -262,21 +262,4 @@ public class KnowledgeController {
         }
     }
 
-    /**
-     * DELETE /api/knowledge/docs/test
-     * Delete all test documents from the knowledge base.
-     */
-    @DeleteMapping("/docs/test")
-    public ResponseEntity<?> deleteTestDocs() {
-        try {
-            int count = knowledgeService.deleteTestDocuments();
-            Map<String, Object> result = new HashMap<>();
-            result.put("deleted", count);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
-        }
-    }
 }

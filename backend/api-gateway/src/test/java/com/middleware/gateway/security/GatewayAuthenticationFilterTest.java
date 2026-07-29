@@ -131,7 +131,7 @@ class GatewayAuthenticationFilterTest {
     void invalidTokenReturnsUnauthorized() {
         GatewayAuthenticationFilter filter = filter(token -> Mono.just(GatewayIntrospectionResult.invalid()));
         MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
-                .get("/api/wiki/pages")
+                .get("/api/knowledge/pages")
                 .header("Authorization", "Bearer expired-token"));
 
         filter.filter(exchange, ignored -> Mono.error(new AssertionError("chain must not run"))).block();
