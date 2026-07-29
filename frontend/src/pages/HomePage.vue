@@ -20,7 +20,9 @@
 
     <div class="portal-grid portal-public-grid">
       <article v-for="feature in publicFeatures" :key="feature.id" class="portal-card" @click="$emit('navigate', feature.id)">
-        <div class="portal-icon">{{ feature.icon }}</div>
+        <div class="portal-icon" :class="`module-icon-${feature.id}`">
+          <ModuleIcon :name="feature.id" :label="feature.title" />
+        </div>
         <div><h3>{{ feature.title }}</h3><p>{{ feature.description }}</p></div>
         <BaseButton variant="primary">进入</BaseButton>
       </article>
@@ -28,7 +30,9 @@
 
     <div class="portal-grid portal-jobs-grid">
       <article v-for="job in jobModules" :key="job.id" class="portal-card portal-job-card" @click="$emit('navigate', `jobs/${job.id}`)">
-        <div class="portal-icon tool-icon">{{ job.shortName.slice(0, 1) }}</div>
+        <div class="portal-icon" :class="`module-icon-${job.id}`">
+          <ModuleIcon :name="job.id" :label="job.shortName" />
+        </div>
         <div><h3>{{ job.shortName }}</h3><p>{{ job.description }}</p></div>
         <BaseButton variant="ghost">进入空间</BaseButton>
       </article>
@@ -61,6 +65,7 @@ import { request } from '../api'
 import { publicFeatures } from '../config/portalFeatures.js'
 import { jobModules } from '../modules/index.js'
 import BaseButton from '../components/ui/BaseButton.vue'
+import ModuleIcon from '../components/ui/ModuleIcon.vue'
 
 defineEmits(['navigate', 'openDetail', 'notify'])
 
@@ -79,3 +84,28 @@ async function loadData() {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+/* 模块图标底座：固定正方形不被压缩，内部图标随底座等比缩放，窄屏下同样不变形 */
+.portal-card .portal-icon {
+  box-sizing: border-box;
+  width: var(--space-3xl);
+  height: var(--space-3xl);
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+/* 八个模块各自的图标配色，取自设计令牌，保证互相可区分 */
+.portal-card .module-icon-downloads { background: var(--color-primary-light); color: var(--color-primary); }
+.portal-card .module-icon-standards { background: var(--color-success-light); color: var(--color-success); }
+.portal-card .module-icon-forum { background: var(--color-warning-light); color: var(--color-warning); }
+.portal-card .module-icon-middleware { background: var(--color-primary-50); color: var(--color-primary-900); }
+.portal-card .module-icon-database { background: var(--color-info-light); color: var(--color-info); }
+.portal-card .module-icon-network { background: var(--color-primary-100); color: var(--color-primary-700); }
+.portal-card .module-icon-host { background: var(--color-bg-tertiary); color: var(--color-text-secondary); }
+.portal-card .module-icon-network-security { background: var(--color-danger-light); color: var(--color-danger); }
+</style>
