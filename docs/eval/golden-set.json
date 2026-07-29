@@ -1,0 +1,104 @@
+{
+  "_comment": [
+    "检索质量回归集（golden set）。",
+    "",
+    "重要：下面是【种子模板】，不是真实评测集。真实条目必须从团队的工单、",
+    "群聊记录和实际排查场景里捞，目标 50~100 条。种子只用来固定文件格式、",
+    "分桶维度和跑通评测脚本，本身不构成任何质量结论。",
+    "",
+    "字段说明：",
+    "  id            唯一编号",
+    "  query         用户实际会输入的问题原文（不要改写成书面语）",
+    "  query_type    exact_param | error_code | command | semantic | cross_doc",
+    "                前三类是精确匹配场景，稠密向量召回最弱，是混合检索的主要收益来源",
+    "  source_format pdf | docx | doc | xlsx | md | standards | wiki",
+    "                用于量化各格式解析质量差异，是解析层改造的验收依据",
+    "  expected      期望命中的文档标识。任一命中即算召回：",
+    "                  source_title  原始文档标题（精确匹配）",
+    "                  section_path  期望命中的章节路径（前缀匹配即可）",
+    "                  keywords      切片正文必须包含的关键词（全部包含才算命中）",
+    "  note          备注，说明这条为什么重要"
+  ],
+  "cases": [
+    {
+      "id": "GS-001",
+      "query": "innodb_buffer_pool_size 设置多大",
+      "query_type": "exact_param",
+      "source_format": "xlsx",
+      "expected": { "keywords": ["innodb_buffer_pool_size"] },
+      "note": "参数名精确匹配。若 Excel 台账未做结构化解析，参数名与取值会落在不同切片，此条必挂"
+    },
+    {
+      "id": "GS-002",
+      "query": "ORA-01555 怎么处理",
+      "query_type": "error_code",
+      "source_format": "pdf",
+      "expected": { "keywords": ["ORA-01555"] },
+      "note": "错误码是稀有 token，稠密向量会抹平，纯向量检索大概率召不回"
+    },
+    {
+      "id": "GS-003",
+      "query": "MySQL 主从延迟怎么排查",
+      "query_type": "semantic",
+      "source_format": "standards",
+      "expected": { "section_path": "MySQL / 应急处理" },
+      "note": "语义查询，向量检索的强项。用来确认混合检索没有把语义能力搞坏"
+    },
+    {
+      "id": "GS-004",
+      "query": "Redis maxmemory-policy 用哪个",
+      "query_type": "exact_param",
+      "source_format": "xlsx",
+      "expected": { "keywords": ["maxmemory-policy"] },
+      "note": "参数取值类问题。理想情况应由 standard_parameters 精确查询直接回答，而非 RAG"
+    },
+    {
+      "id": "GS-005",
+      "query": "Kafka 分区副本数标准是多少",
+      "query_type": "exact_param",
+      "source_format": "docx",
+      "expected": { "keywords": ["副本"] },
+      "note": "docx 解析质量最好，此条应作为各格式对比的基准线"
+    },
+    {
+      "id": "GS-006",
+      "query": "wal_keep_segments 默认值",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["wal_keep_segments"] },
+      "note": "PDF 来源的参数查询。与 GS-005 对比可量化 PDF 解析的召回差距"
+    },
+    {
+      "id": "GS-007",
+      "query": "怎么看 TongWeb 集群节点状态",
+      "query_type": "command",
+      "source_format": "pdf",
+      "expected": { "section_path": "集群管理" },
+      "note": "命令类查询，依赖 PDF 书签标题回填后的 sectionPath"
+    },
+    {
+      "id": "GS-008",
+      "query": "数据库连接池满了怎么办",
+      "query_type": "semantic",
+      "source_format": "wiki",
+      "expected": { "keywords": ["连接池"] },
+      "note": "经验沉淀页命中。wiki_pages 清空后此条会挂，属预期，等团队写入经验后恢复"
+    },
+    {
+      "id": "GS-009",
+      "query": "主机磁盘告警阈值定的多少",
+      "query_type": "exact_param",
+      "source_format": "standards",
+      "expected": { "keywords": ["磁盘"] },
+      "note": "跨岗位查询（主机域）。用于验证权限过滤没有过度隔离导致跨域排查失效"
+    },
+    {
+      "id": "GS-010",
+      "query": "Nginx 和 F5 的健康检查配置差异",
+      "query_type": "cross_doc",
+      "source_format": "md",
+      "expected": { "keywords": ["健康检查"] },
+      "note": "跨文档综合，需要 topK 内同时召回两个来源，考察召回多样性"
+    }
+  ]
+}
