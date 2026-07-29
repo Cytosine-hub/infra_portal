@@ -6,7 +6,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.middleware.manager.agent.web.ExportController;
 import com.middleware.manager.knowledge.web.KnowledgeController;
-import com.middleware.manager.knowledge.web.KnowledgeGraphController;
 import com.middleware.manager.repository.ApiAuditLogMapper;
 import com.middleware.manager.wiki.web.WikiController;
 import org.junit.jupiter.api.DisplayName;
@@ -39,7 +38,6 @@ class AiServiceApplicationTests {
     @DisplayName("TC-AI-001 默认 profile 独立加载 AI 集群且关闭 Nacos")
     void defaultProfileLoadsAiClusterWithNacosDisabled() {
         assertThat(applicationContext.getBean(KnowledgeController.class)).isNotNull();
-        assertThat(applicationContext.getBean(KnowledgeGraphController.class)).isNotNull();
         assertThat(applicationContext.getBean(
                 com.middleware.manager.knowledge.web.AgentController.class)).isNotNull();
         assertThat(applicationContext.getBean(WikiController.class)).isNotNull();

@@ -61,8 +61,6 @@ class MiddlewareServiceApplicationTests {
         assertThat(classLoader.getResource(
                 "com/middleware/manager/knowledge/web/KnowledgeController.class")).isNull();
         assertThat(classLoader.getResource(
-                "com/middleware/manager/knowledge/web/KnowledgeGraphController.class")).isNull();
-        assertThat(classLoader.getResource(
                 "com/middleware/manager/knowledge/web/AgentController.class")).isNull();
         assertThat(classLoader.getResource(
                 "com/middleware/manager/wiki/web/WikiController.class")).isNull();

@@ -24,7 +24,6 @@ class WikiControllerTest {
     @Mock private WikiPageMapper pageMapper;
     @Mock private WikiLinkMapper linkMapper;
     @Mock private WikiSourceMapper sourceMapper;
-    @Mock private IngestAgent ingestAgent;
     @Mock private WikiExportService exportService;
     @Mock private WikiImportService importService;
     @Mock private WikiGraphService graphService;
@@ -34,9 +33,6 @@ class WikiControllerTest {
     @Mock private LintResultMapper lintResultMapper;
     @Mock private WikiPermissionService wikiPermissionService;
     @Mock private WikiPagePermissionMapper pagePermissionMapper;
-    @Mock private IngestTaskService taskService;
-    @Mock private IngestTaskMapper taskMapper;
-    @Mock private WikiIngestLogMapper ingestLogMapper;
     @Mock private VectorStore vectorStore;
     @Mock private WikiSearchService wikiSearchService;
 
@@ -46,11 +42,11 @@ class WikiControllerTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         controller = new WikiController(
-                pageMapper, linkMapper, sourceMapper, ingestAgent,
+                pageMapper, linkMapper, sourceMapper,
                 exportService, importService, graphService,
                 Collections.emptyList(), adminAccountMapper, auditLogMapper,
                 lintAgent, lintResultMapper, wikiPermissionService, pagePermissionMapper,
-                taskService, taskMapper, ingestLogMapper, vectorStore);
+                vectorStore);
     }
 
     @Nested

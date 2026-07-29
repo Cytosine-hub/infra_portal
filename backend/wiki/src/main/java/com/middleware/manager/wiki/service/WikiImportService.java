@@ -30,15 +30,13 @@ public class WikiImportService {
 
     private final WikiPageMapper pageMapper;
     private final WikiLinkMapper linkMapper;
-    private final IngestAgent ingestAgent;
 
     @Value("${app.wiki.export.signature-secret:middleware-resource-manager}")
     private String signatureSecret;
 
-    public WikiImportService(WikiPageMapper pageMapper, WikiLinkMapper linkMapper, IngestAgent ingestAgent) {
+    public WikiImportService(WikiPageMapper pageMapper, WikiLinkMapper linkMapper) {
         this.pageMapper = pageMapper;
         this.linkMapper = linkMapper;
-        this.ingestAgent = ingestAgent;
     }
 
     public static class ImportResult {
@@ -107,7 +105,6 @@ public class WikiImportService {
         }
 
         int created = 0, conflicts = 0;
-        List<WikiPage> savedPages = new ArrayList<>();
         for (WikiPage page : importedPages.values()) {
             WikiPage existing = pageMapper.findByTitleAndType(page.getTitle(), page.getPageType());
             if (existing != null) {
@@ -126,7 +123,6 @@ public class WikiImportService {
                 page.setStatus("ACTIVE");
                 page.setContradictionNote("这是导入包中的版本，与「" + existing.getTitle().replace(" [导入版本]", "") + "」冲突。审核后可合并或丢弃。");
                 pageMapper.insert(page);
-                savedPages.add(page);
                 result.getConflictDetails().add(new ConflictDetail(
                         existing.getTitle().replace(" [导入版本]", ""),
                         existing.getPageType(),
@@ -140,7 +136,6 @@ public class WikiImportService {
                 }
                 page.setStatus("ACTIVE");
                 pageMapper.insert(page);
-                savedPages.add(page);
             }
         }
 
@@ -148,10 +143,6 @@ public class WikiImportService {
         if (!dryRun && entries.containsKey("links.json")) {
             linksCreated = importLinks(entries.get("links.json"), importedPages);
         }
-        if (!dryRun) {
-            ingestAgent.vectorizePages(savedPages);
-        }
-
         result.setPagesCreated(created);
         result.setLinksCreated(linksCreated);
         result.setConflicts(conflicts);
