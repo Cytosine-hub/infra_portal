@@ -24,9 +24,11 @@ import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -40,6 +42,8 @@ public class MilvusVectorStore implements VectorStore {
     private static final String ID_FIELD = "id";
     private static final String VECTOR_FIELD = "vector";
     private static final String META_FIELD = "metadata";
+    private static final int META_FIELD_MAX_BYTES = 4096;
+    private static final String CONTENT_KEY = "content";
     private static final String SOURCE_FIELD = "source";
     private static final String SOURCE_TYPE_FIELD = "source_type";
     private static final String SOURCE_ID_FIELD = "source_id";
@@ -49,6 +53,7 @@ public class MilvusVectorStore implements VectorStore {
 
     private final AiConfig config;
     private final Gson gson = new Gson();
+    private static final Gson METADATA_GSON = new Gson();
     private MilvusServiceClient client;
     private volatile boolean scalarInsertSupported = true;
     private volatile boolean scalarSearchSupported = true;
@@ -144,8 +149,9 @@ public class MilvusVectorStore implements VectorStore {
     }
 
     @Override
-    public void add(String id, float[] vector, Map<String, String> metadata) {
+    public void add(String id, float[] vector, Map<String, String> rawMetadata) {
         String collection = config.getVectorCollection();
+        Map<String, String> metadata = fitMetadata(rawMetadata, META_FIELD_MAX_BYTES);
         List<InsertParam.Field> fields = scalarInsertSupported
                 ? buildScalarInsertFields(id, vector, metadata)
                 : buildLegacyInsertFields(id, vector, metadata);
@@ -243,6 +249,70 @@ public class MilvusVectorStore implements VectorStore {
         return new SearchOutcome(results, false);
     }
 
+    static String serializeMetadata(Map<String, String> metadata) {
+        return METADATA_GSON.toJson(metadata);
+    }
+
+    /**
+     * 把 metadata 压进 VarChar 字节上限。正文（content）是唯一可截断的字段——
+     * 其余字段是检索过滤依赖的标量，必须完好。超限时截断正文并告警，
+     * 好过让 Milvus insert 失败：那会让整条切片静默丢失，并把 scalarInsertSupported
+     * 永久置 false 导致整进程检索降级。
+     */
+    static Map<String, String> fitMetadata(Map<String, String> metadata, int maxBytes) {
+        if (metadata == null) {
+            return Collections.emptyMap();
+        }
+        if (byteLength(serializeMetadata(metadata)) <= maxBytes) {
+            return metadata;
+        }
+
+        Map<String, String> fitted = new LinkedHashMap<>(metadata);
+        String content = fitted.getOrDefault(CONTENT_KEY, "");
+        // 二分收敛到能放下的最长正文，避免逐字符回退带来的性能问题
+        int low = 0;
+        int high = content.length();
+        while (low < high) {
+            int mid = (low + high + 1) / 2;
+            fitted.put(CONTENT_KEY, content.substring(0, mid));
+            if (byteLength(serializeMetadata(fitted)) <= maxBytes) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+        fitted.put(CONTENT_KEY, content.substring(0, low));
+
+        if (byteLength(serializeMetadata(fitted)) > maxBytes) {
+            // 正文之外的字段本身已超限：保底只保留过滤必需的标量
+            fitted.remove(CONTENT_KEY);
+            for (Map.Entry<String, String> entry : new LinkedHashMap<>(fitted).entrySet()) {
+                if (byteLength(serializeMetadata(fitted)) <= maxBytes) {
+                    break;
+                }
+                fitted.put(entry.getKey(), truncateToBytes(entry.getValue(), 64));
+            }
+        }
+        log.warn("metadata 超出 {} 字节上限，正文已截断 {} -> {} 字符，检索展示会不完整",
+                maxBytes, content.length(), fitted.getOrDefault(CONTENT_KEY, "").length());
+        return fitted;
+    }
+
+    private static String truncateToBytes(String value, int maxBytes) {
+        if (value == null) {
+            return "";
+        }
+        String result = value;
+        while (byteLength(result) > maxBytes && !result.isEmpty()) {
+            result = result.substring(0, result.length() - 1);
+        }
+        return result;
+    }
+
+    private static int byteLength(String value) {
+        return value.getBytes(StandardCharsets.UTF_8).length;
+    }
+
     private FieldType varcharField(String name, int maxLength) {
         return FieldType.newBuilder()
                 .withName(name)
@@ -270,7 +340,7 @@ public class MilvusVectorStore implements VectorStore {
                         .build(),
                 InsertParam.Field.builder()
                         .name(META_FIELD)
-                        .values(Collections.singletonList(gson.toJson(metadata)))
+                        .values(Collections.singletonList(serializeMetadata(metadata)))
                         .build()
         );
     }

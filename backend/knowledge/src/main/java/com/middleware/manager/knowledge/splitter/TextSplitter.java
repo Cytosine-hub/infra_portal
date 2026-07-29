@@ -26,6 +26,8 @@ public class TextSplitter {
     private static final int DEFAULT_MAX_CHUNK_SIZE = 900;
     private static final int DEFAULT_OVERLAP = 150;
     private static final Pattern HEADING_PATTERN = Pattern.compile("^(#{1,6})\\s+(.*)$");
+    private static final Pattern FENCE_PATTERN = Pattern.compile("^\\s*(```|~~~)");
+    private static final Pattern TABLE_SEPARATOR = Pattern.compile("^\\|[\\s:|-]*-[\\s:|-]*\\|$");
     private static final String PATH_SEPARATOR = " / ";
 
     private final int maxChunkSize;
@@ -40,6 +42,9 @@ public class TextSplitter {
     }
 
     public TextSplitter(int maxChunkSize, int overlap) {
+        if (maxChunkSize <= 0) {
+            throw new IllegalArgumentException("maxChunkSize 必须为正数，实际: " + maxChunkSize);
+        }
         this.maxChunkSize = maxChunkSize;
         this.overlap = Math.max(0, Math.min(overlap, Math.max(0, maxChunkSize - 1)));
     }
@@ -56,8 +61,16 @@ public class TextSplitter {
             if (body.isEmpty()) {
                 continue;
             }
-            for (String part : splitSectionBody(body)) {
-                result.add(chunk(section.path(), part, sourceTitle, index));
+            // 面包屑前缀占用切片预算，必须先扣除，否则拼接后会超出 maxChunkSize
+            String path = section.path();
+            int prefixLength = path.isEmpty() ? 0 : path.length() + 2;
+            if (prefixLength >= maxChunkSize) {
+                path = "";
+                prefixLength = 0;
+            }
+            int budget = maxChunkSize - prefixLength;
+            for (String part : splitSectionBody(body, budget)) {
+                result.add(chunk(path, part, sourceTitle, index));
             }
         }
         return result;
@@ -72,9 +85,16 @@ public class TextSplitter {
         StringBuilder body = new StringBuilder();
         String currentPath = "";
 
+        boolean inFence = false;
         for (String line : text.split("\n", -1)) {
-            Matcher matcher = HEADING_PATTERN.matcher(line);
-            if (!matcher.matches()) {
+            // 代码围栏内的 # 是命令注释，不是标题——运维文档里 ```bash 块极常见
+            if (FENCE_PATTERN.matcher(line).find()) {
+                inFence = !inFence;
+                body.append(line).append("\n");
+                continue;
+            }
+            Matcher matcher = inFence ? null : HEADING_PATTERN.matcher(line);
+            if (matcher == null || !matcher.matches()) {
                 body.append(line).append("\n");
                 continue;
             }
@@ -103,18 +123,18 @@ public class TextSplitter {
 
     // ---------- 节内切分 ----------
 
-    private List<String> splitSectionBody(String body) {
+    private List<String> splitSectionBody(String body, int budget) {
         List<String> parts = new ArrayList<>();
         StringBuilder current = new StringBuilder();
 
         for (Block block : parseBlocks(body)) {
             if (block.isTable()) {
                 flush(parts, current);
-                parts.addAll(splitTable(block.text()));
+                parts.addAll(splitTable(block.text(), budget));
                 continue;
             }
             for (String line : block.text().split("\n")) {
-                appendLine(parts, current, line);
+                appendLine(parts, current, line, budget);
             }
         }
         flush(parts, current);
@@ -143,7 +163,7 @@ public class TextSplitter {
     }
 
     /** 表格按行拆分，每片重复表头与分隔行，保证参数名与取值不会失去列含义。 */
-    private List<String> splitTable(String table) {
+    private List<String> splitTable(String table, int budget) {
         List<String> rows = new ArrayList<>();
         for (String line : table.split("\n")) {
             if (!line.trim().isEmpty()) {
@@ -154,19 +174,38 @@ public class TextSplitter {
         if (rows.isEmpty()) {
             return parts;
         }
-        if (table.length() <= maxChunkSize) {
+        if (table.trim().length() <= budget) {
             parts.add(String.join("\n", rows));
             return parts;
         }
 
-        int headerRows = rows.size() > 1 && rows.get(1).contains("---") ? 2 : 1;
+        // 分隔行形如 |---|---| 或紧凑的 |:-:|:-:|，两种都要认出来
+        int headerRows = rows.size() > 1 && TABLE_SEPARATOR.matcher(rows.get(1).trim()).matches() ? 2 : 1;
         String header = String.join("\n", rows.subList(0, Math.min(headerRows, rows.size())));
+
+        // 表头自身就超预算时无法逐片重复，退化为逐行切分，至少不丢内容
+        if (header.length() >= budget) {
+            StringBuilder fallback = new StringBuilder();
+            for (String row : rows) {
+                appendLine(parts, fallback, row, budget);
+            }
+            flush(parts, fallback);
+            return parts;
+        }
+
         StringBuilder current = new StringBuilder(header);
         for (int i = headerRows; i < rows.size(); i++) {
             String row = rows.get(i);
-            if (current.length() + row.length() + 1 > maxChunkSize && current.length() > header.length()) {
+            if (current.length() + row.length() + 1 > budget && current.length() > header.length()) {
                 parts.add(current.toString());
                 current = new StringBuilder(header);
+            }
+            if (current.length() + row.length() + 1 > budget) {
+                // 单行宽于预算：独立硬切，避免产出超限切片
+                parts.add(current.toString());
+                current = new StringBuilder(header);
+                hardSplit(parts, row, budget);
+                continue;
             }
             current.append("\n").append(row);
         }
@@ -176,16 +215,14 @@ public class TextSplitter {
         return parts;
     }
 
-    private void appendLine(List<String> parts, StringBuilder current, String line) {
-        if (line.length() > maxChunkSize) {
+    private void appendLine(List<String> parts, StringBuilder current, String line, int budget) {
+        if (line.length() > budget) {
             flush(parts, current);
-            for (int i = 0; i < line.length(); i += maxChunkSize) {
-                parts.add(line.substring(i, Math.min(i + maxChunkSize, line.length())));
-            }
+            hardSplit(parts, line, budget);
             return;
         }
-        if (current.length() + line.length() + 1 > maxChunkSize && current.length() > 0) {
-            String carry = tailOverlap(current.toString());
+        if (current.length() + line.length() + 1 > budget && current.length() > 0) {
+            String carry = tailOverlap(current.toString(), budget - line.length() - 1);
             parts.add(current.toString());
             current.setLength(0);
             current.append(carry);
@@ -196,12 +233,22 @@ public class TextSplitter {
         current.append(line);
     }
 
-    /** 取上一子块末尾的若干字符作为下一子块的开头，按行边界对齐，避免切断处语义割裂。 */
-    private String tailOverlap(String text) {
-        if (overlap <= 0 || text.length() <= overlap) {
+    private void hardSplit(List<String> parts, String line, int budget) {
+        for (int i = 0; i < line.length(); i += budget) {
+            parts.add(line.substring(i, Math.min(i + budget, line.length())));
+        }
+    }
+
+    /**
+     * 取上一子块末尾的若干字符作为下一子块的开头，按行边界对齐，避免切断处语义割裂。
+     * carry 长度受 limit 约束，保证后续追加不会突破预算。
+     */
+    private String tailOverlap(String text, int limit) {
+        int window = Math.min(overlap, Math.max(0, limit));
+        if (window <= 0 || text.length() <= window) {
             return "";
         }
-        String tail = text.substring(text.length() - overlap);
+        String tail = text.substring(text.length() - window);
         int newline = tail.indexOf('\n');
         return newline >= 0 && newline + 1 < tail.length() ? tail.substring(newline + 1) : tail;
     }

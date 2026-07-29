@@ -379,63 +379,7 @@ CREATE TABLE `wiki_audit_log` (
   KEY `idx_actor` (`actor_id`),
   KEY `idx_action_time` (`action`,`created_at`),
   KEY `idx_target` (`target_type`,`target_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-DROP TABLE IF EXISTS `wiki_ingest_log`;
-CREATE TABLE `wiki_ingest_log` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `source_id` bigint NOT NULL,
-  `operator_id` bigint DEFAULT NULL,
-  `pages_created` int DEFAULT '0',
-  `pages_updated` int DEFAULT '0',
-  `links_created` int DEFAULT '0',
-  `contradictions_found` int DEFAULT '0',
-  `llm_model` varchar(100) DEFAULT NULL,
-  `llm_tokens_used` int DEFAULT NULL,
-  `duration_ms` int DEFAULT NULL,
-  `status` enum('SUCCESS','PARTIAL','FAILED') NOT NULL,
-  `error_detail` text,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_source` (`source_id`),
-  KEY `idx_operator` (`operator_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-DROP TABLE IF EXISTS `wiki_ingest_tasks`;
-CREATE TABLE `wiki_ingest_tasks` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `source_id` bigint DEFAULT NULL,
-  `file_name` varchar(200) DEFAULT NULL,
-  `status` enum('PENDING','PROCESSING','COMPLETED','PARTIAL','FAILED') DEFAULT 'PENDING',
-  `progress` int DEFAULT '0' COMMENT '0-100',
-  `step` varchar(100) DEFAULT NULL COMMENT '当前步骤描述',
-  `total_chunks` int DEFAULT '0',
-  `completed_chunks` int DEFAULT '0',
-  `pages_created` int DEFAULT '0',
-  `pages_updated` int DEFAULT '0',
-  `error_message` text,
-  `quality_report` json DEFAULT NULL COMMENT '质量门禁报告',
-  `section_facts` json DEFAULT NULL COMMENT '章节事实中间产物',
-  `page_plan` json DEFAULT NULL COMMENT '页面计划中间产物',
-  `operator_id` bigint DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_status` (`status`),
-  KEY `idx_source` (`source_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-DROP TABLE IF EXISTS `wiki_links`;
-CREATE TABLE `wiki_links` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `from_page_id` bigint NOT NULL,
-  `to_page_id` bigint NOT NULL,
-  `link_type` enum('REFERENCES','CONTRADICTS','SPECIALIZES','DEPENDS_ON','RELATED') DEFAULT 'REFERENCES',
-  `confidence` decimal(3,2) DEFAULT NULL,
-  `context` varchar(500) DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_link` (`from_page_id`,`to_page_id`,`link_type`),
-  KEY `idx_to_page` (`to_page_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-DROP TABLE IF EXISTS `wiki_lint_results`;
+) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;DROP TABLE IF EXISTS `wiki_lint_results`;
 CREATE TABLE `wiki_lint_results` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `lint_type` enum('ORPHAN','STALE','BROKEN_LINK','CONTRADICTION','GAP') NOT NULL,

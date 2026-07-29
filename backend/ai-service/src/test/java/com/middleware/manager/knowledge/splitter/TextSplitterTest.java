@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * 切片层结构穿透测试。
@@ -137,6 +138,79 @@ class TextSplitterTest {
     }
 
     @Nested
+    @DisplayName("边界与健壮性")
+    class Robustness {
+
+        @Test
+        @DisplayName("TC-SPLIT-009 代码围栏内的 # 注释不得被当作标题")
+        void fencedCodeCommentsAreNotHeadings() {
+            String text = """
+                    # 主机标准
+                    ## 内核参数
+                    调整步骤如下：
+
+                    ```bash
+                    # 关闭 swap
+                    swapoff -a
+                    # 调整脏页比例
+                    sysctl -w vm.dirty_ratio=10
+                    ```
+
+                    调整完成后需重启验证。
+                    """;
+
+            List<TextSplitter.TextChunk> chunks = new TextSplitter().split(text, "主机标准");
+
+            String all = chunks.stream().map(TextSplitter.TextChunk::getContent)
+                    .reduce("", (a, b) -> a + "\n" + b);
+            assertThat(all).contains("# 关闭 swap");
+            assertThat(all).contains("swapoff -a");
+            assertThat(chunks).allSatisfy(c ->
+                    assertThat(c.getSectionPath()).doesNotContain("关闭 swap"));
+        }
+
+        @Test
+        @DisplayName("TC-SPLIT-010 切片正文长度不得超过上限（面包屑前缀必须计入预算）")
+        void chunkNeverExceedsMaxSize() {
+            StringBuilder sb = new StringBuilder("# 数据库标准\n## 参数标准\n### 一个相当长的章节标题用来占用面包屑预算\n");
+            for (int i = 0; i < 200; i++) {
+                sb.append("这是第").append(i).append("行正文，用来把本节撑得远超单个切片上限。\n");
+            }
+
+            int max = 400;
+            List<TextSplitter.TextChunk> chunks = new TextSplitter(max, 80).split(sb.toString(), "DB标准");
+
+            assertThat(chunks).isNotEmpty();
+            assertThat(chunks).allSatisfy(c ->
+                    assertThat(c.getContent().length())
+                            .as("切片 %d 超长: %d > %d", c.getChunkIndex(), c.getContent().length(), max)
+                            .isLessThanOrEqualTo(max));
+        }
+
+        @Test
+        @DisplayName("TC-SPLIT-011 非法的 maxChunkSize 应被拒绝而非导致死循环")
+        void rejectsNonPositiveChunkSize() {
+            assertThatThrownBy(() -> new TextSplitter(0, 0))
+                    .isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> new TextSplitter(-1, 0))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        @DisplayName("TC-SPLIT-012 跳级标题（# 直接到 ###）不应产生空层级")
+        void skippedHeadingLevels() {
+            String text = "# Nginx\n### 超时参数\nproxy_read_timeout 说明。\n";
+
+            List<TextSplitter.TextChunk> chunks = new TextSplitter().split(text, "Nginx标准");
+
+            assertThat(chunks).anySatisfy(c -> {
+                assertThat(c.getSectionPath()).isEqualTo("Nginx / 超时参数");
+                assertThat(c.getSectionPath()).doesNotContain(" /  / ");
+            });
+        }
+    }
+
+    @Nested
     @DisplayName("Markdown 表格保护")
     class TableProtection {
 
@@ -160,6 +234,37 @@ class TextSplitterTest {
                 assertThat(c.getContent()).contains("param_0");
                 assertThat(c.getContent()).contains("param_2");
             });
+        }
+
+        @Test
+        @DisplayName("TC-SPLIT-013 紧凑分隔行 |:-:| 应被识别为表头分隔而非数据行")
+        void compactSeparatorRecognised() {
+            StringBuilder sb = new StringBuilder("# MySQL\n## 参数\n|参数名|建议值|\n|:-:|:-:|\n");
+            for (int i = 0; i < 60; i++) {
+                sb.append("|param_").append(i).append("|value_").append(i).append("|\n");
+            }
+
+            List<TextSplitter.TextChunk> chunks = new TextSplitter(300, 0).split(sb.toString(), "MySQL标准");
+            List<TextSplitter.TextChunk> tableChunks = chunks.stream()
+                    .filter(c -> c.getContent().contains("param_")).toList();
+
+            assertThat(tableChunks).hasSizeGreaterThan(1);
+            assertThat(tableChunks).allSatisfy(c -> {
+                assertThat(c.getContent()).contains("|参数名|建议值|");
+                assertThat(c.getContent()).contains("|:-:|:-:|");
+            });
+        }
+
+        @Test
+        @DisplayName("TC-SPLIT-014 仅有表头的超限表格不应被整体丢弃")
+        void headerOnlyOversizedTableIsKept() {
+            String header = "| " + "很长的列名".repeat(80) + " |";
+            String text = "# 标准\n## 表\n" + header + "\n| --- |\n";
+
+            List<TextSplitter.TextChunk> chunks = new TextSplitter(200, 0).split(text, "标准");
+
+            assertThat(chunks).isNotEmpty();
+            assertThat(chunks.stream().anyMatch(c -> c.getContent().contains("很长的列名"))).isTrue();
         }
 
         @Test
