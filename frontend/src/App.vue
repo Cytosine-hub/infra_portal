@@ -9,7 +9,6 @@
           <button :class="{ active: false }" @click="navigate('home')">首页</button>
           <button v-if="auth.token" :class="{ active: route.name === 'standards' }" @click="navigate('standards')">标准发布</button>
           <button v-if="auth.token" :class="{ active: route.name === 'public' }" @click="navigate('downloads')">下载中心</button>
-          <button v-if="auth.token" :class="{ active: route.name === 'jobModule' && route.jobId === 'database' && route.feature === 'data-migration' }" @click="navigate('data-migration')">数据迁移</button>
           <button v-if="auth.token" :class="{ active: route.name?.startsWith('forum') }" @click="navigate('forum')">论坛</button>
           <button v-if="auth.token && siteConfig.knowledgeEnabled" :class="{ active: route.name === 'knowledge' }" @click="navigate('knowledge')">知识库</button>
           <button v-if="auth.token && siteConfig.wikiEnabled" :class="{ active: route.name === 'wiki' }" @click="navigate('wiki')">Wiki</button>
