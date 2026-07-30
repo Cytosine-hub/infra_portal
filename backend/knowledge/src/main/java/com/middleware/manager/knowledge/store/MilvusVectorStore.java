@@ -37,6 +37,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,9 +92,10 @@ public class MilvusVectorStore implements VectorStore {
                 .uri("http://" + config.getVectorHost() + ":" + config.getVectorPort())
                 .build());
         createCollection();
-        log.info("Milvus 已连接 {}:{} collection={} 维度={}",
+        log.info("Milvus 已连接 {}:{} collection={} 维度={} 分词器={}",
                 config.getVectorHost(), config.getVectorPort(),
-                config.getVectorCollection(), config.getVectorDimension());
+                config.getVectorCollection(), config.getVectorDimension(),
+                config.getVectorAnalyzer());
     }
 
     @PreDestroy
@@ -117,9 +119,17 @@ public class MilvusVectorStore implements VectorStore {
                 .maxLength(100).isPrimaryKey(true).autoID(false).build());
         schema.addField(AddFieldReq.builder().fieldName(VECTOR_FIELD).dataType(DataType.FloatVector)
                 .dimension(config.getVectorDimension()).build());
-        // enableAnalyzer 打开后 Milvus 才会为该列分词并驱动 BM25 Function
+        // enableAnalyzer 打开后 Milvus 才会为该列分词并驱动 BM25 Function。
+        // 必须显式指定 analyzer：默认的 standard 分词器按非字母数字切分，
+        // 中文没有空格会被当成一个巨大 token，BM25 那一路等于失效。
+        // 该配置在 collection 创建后不可更改，要换只能重建 collection。
+        Map<String, Object> analyzerParams = new HashMap<>();
+        analyzerParams.put("type", config.getVectorAnalyzer());
         schema.addField(AddFieldReq.builder().fieldName(TEXT_FIELD).dataType(DataType.VarChar)
-                .maxLength(TEXT_MAX_LENGTH).enableAnalyzer(true).build());
+                .maxLength(TEXT_MAX_LENGTH)
+                .enableAnalyzer(true)
+                .analyzerParams(analyzerParams)
+                .build());
         schema.addField(AddFieldReq.builder().fieldName(SPARSE_FIELD)
                 .dataType(DataType.SparseFloatVector).build());
         schema.addField(AddFieldReq.builder().fieldName(META_FIELD).dataType(DataType.VarChar)
@@ -255,6 +265,20 @@ public class MilvusVectorStore implements VectorStore {
                 .collectionName(config.getVectorCollection())
                 .ids(Collections.singletonList(id))
                 .build());
+    }
+
+    @Override
+    public void deleteBySource(String sourceType, Long sourceId) {
+        if (sourceType == null || sourceId == null) {
+            return;
+        }
+        String filter = SOURCE_TYPE_FIELD + " == " + quote(sourceType)
+                + " and " + SOURCE_ID_FIELD + " == " + quote(String.valueOf(sourceId));
+        client.delete(DeleteReq.builder()
+                .collectionName(config.getVectorCollection())
+                .filter(filter)
+                .build());
+        log.debug("已按来源删除向量 {}", filter);
     }
 
     @Override

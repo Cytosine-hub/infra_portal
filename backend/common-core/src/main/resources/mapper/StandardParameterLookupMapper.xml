@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.middleware.manager.repository.StandardParameterLookupMapper">
+
+    <!--
+      只查已发布标准下的生效参数。答案必须带标准标题与版本号，
+      这是「精确查询」相对 RAG 的核心价值：可追溯、可追责。
+    -->
+    <select id="search" resultType="com.middleware.manager.knowledge.service.ParameterAnswerRow">
+        SELECT p.code, p.name, p.value, p.param_type AS paramType,
+               p.value_range AS valueRange, p.description,
+               p.deployment_standard AS deploymentStandard,
+               s.software, s.title AS standardTitle, s.version AS standardVersion,
+               s.published_at AS publishedAt
+        FROM standard_parameters p
+        JOIN parameter_standards s ON s.id = p.parameter_standard_id
+        WHERE p.active = 1
+          AND s.status = 'PUBLISHED'
+        <if test="software != null and software != ''">
+            AND s.software = #{software}
+        </if>
+        <if test="name != null and name != ''">
+            AND (p.code = #{name} OR p.name = #{name}
+                 OR p.code LIKE CONCAT('%', #{name}, '%')
+                 OR p.name LIKE CONCAT('%', #{name}, '%'))
+        </if>
+        <!-- 精确命中排在模糊命中之前 -->
+        ORDER BY
+            CASE WHEN p.code = #{name} OR p.name = #{name} THEN 0 ELSE 1 END,
+            p.code
+        LIMIT #{limit}
+    </select>
+</mapper>

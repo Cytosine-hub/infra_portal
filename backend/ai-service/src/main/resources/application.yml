@@ -64,6 +64,7 @@ app:
     collection: ${VECTOR_COLLECTION:knowledge_chunks}
     dimension: ${VECTOR_DIMENSION:1024}
     rrf-k: ${VECTOR_RRF_K:60}
+    analyzer: ${VECTOR_ANALYZER:chinese}
   wiki:
     search:
       max-context-pages: ${WIKI_MAX_CONTEXT_PAGES:8}
@@ -103,7 +104,7 @@ mybatis:
     - classpath*:mapper/StandardDocumentMapper.xml
     - classpath*:mapper/WikiSourceMapper.xml
     - classpath*:mapper/ParameterStandardIndexMapper.xml
-    - classpath*:mapper/KnowledgeChunkMapper.xml
+    - classpath*:mapper/StandardParameterLookupMapper.xml
     - classpath*:mapper/LintResultMapper.xml
     - classpath*:mapper/WikiAuditLogMapper.xml
     - classpath*:mapper/WikiLinkMapper.xml

@@ -5,9 +5,7 @@ import com.middleware.manager.constant.ErrorCode;
 import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.exception.BusinessException;
 import com.middleware.manager.knowledge.embedding.EmbeddingService;
-import com.middleware.manager.knowledge.entity.KnowledgeChunk;
 import com.middleware.manager.knowledge.loader.DocumentLoader;
-import com.middleware.manager.knowledge.repository.KnowledgeChunkMapper;
 import com.middleware.manager.knowledge.splitter.TextSplitter;
 import com.middleware.manager.knowledge.store.VectorStore;
 import com.middleware.manager.knowledge.store.VectorSearchFilter;
@@ -29,7 +27,6 @@ public class KnowledgeService implements KnowledgeSearchPort {
     private final TextSplitter textSplitter;
     private final EmbeddingService embeddingService;
     private final VectorStore vectorStore;
-    private final KnowledgeChunkMapper chunkMapper;
     private final List<DocumentLoader> documentLoaders;
     private final StorageService storageService;
     private final WikiSourceMapper wikiSourceMapper;
@@ -37,14 +34,12 @@ public class KnowledgeService implements KnowledgeSearchPort {
     public KnowledgeService(TextSplitter textSplitter,
                             EmbeddingService embeddingService,
                             VectorStore vectorStore,
-                            KnowledgeChunkMapper chunkMapper,
                             List<DocumentLoader> documentLoaders,
                             StorageService storageService,
                             WikiSourceMapper wikiSourceMapper) {
         this.textSplitter = textSplitter;
         this.embeddingService = embeddingService;
         this.vectorStore = vectorStore;
-        this.chunkMapper = chunkMapper;
         this.documentLoaders = documentLoaders;
         this.storageService = storageService;
         this.wikiSourceMapper = wikiSourceMapper;
@@ -212,7 +207,7 @@ public class KnowledgeService implements KnowledgeSearchPort {
             }
             wikiSourceMapper.deleteById(source.getId());
         }
-        return chunkMapper.deleteBySourceTitleAndSourceType(sourceTitle, sourceType);
+        return 0;
     }
 
     public List<Map<String, Object>> listDocuments() {
@@ -313,10 +308,7 @@ public class KnowledgeService implements KnowledgeSearchPort {
     }
 
     private void deleteSourceVectors(WikiSource source) {
-        int chunkCount = previewChunks(source).size();
-        for (int i = 0; i < chunkCount; i++) {
-            try { vectorStore.delete(vectorId(source.getId(), i)); } catch (Exception ignored) {}
-        }
+        vectorStore.deleteBySource(source.getSourceType(), source.getId());
     }
 
     private String vectorId(Long sourceId, int chunkIndex) {

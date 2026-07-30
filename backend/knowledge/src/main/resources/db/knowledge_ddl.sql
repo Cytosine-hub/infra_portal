@@ -1,18 +1,3 @@
-CREATE TABLE IF NOT EXISTS knowledge_chunks (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    content TEXT NOT NULL COMMENT '切片文本内容',
-    source_title VARCHAR(500) COMMENT '来源文档标题',
-    source_type VARCHAR(50) COMMENT '来源类型：STANDARD_DOC / UPLOAD',
-    source_id BIGINT COMMENT '来源文档ID',
-    category VARCHAR(80) COMMENT '分类',
-    software VARCHAR(120) COMMENT '软件名称',
-    chunk_index INT DEFAULT 0 COMMENT '切片在文档中的序号',
-    vector_id VARCHAR(100) COMMENT '向量存储ID',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_source (source_type, source_id),
-    INDEX idx_category (category),
-    INDEX idx_software (software)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='知识库文本切片';
 
 CREATE TABLE IF NOT EXISTS chat_sessions (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

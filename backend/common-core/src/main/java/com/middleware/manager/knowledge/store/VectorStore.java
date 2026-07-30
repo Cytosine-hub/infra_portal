@@ -33,6 +33,15 @@ public interface VectorStore {
 
     void delete(String id);
 
+    /**
+     * 按来源批量删除该源的全部切片。
+     * <p>此前的做法是「把旧内容重新切一遍数出片数」再逐个猜 ID 删除，切片逻辑一改
+     * 或内容一变就会留下孤儿向量。改由存储层按条件删除，不依赖对片数的猜测。
+     * <p>默认实现为空操作，供不支持条件删除的存储（如内存实现）使用。
+     */
+    default void deleteBySource(String sourceType, Long sourceId) {
+    }
+
     void createCollection();
 
     long count();

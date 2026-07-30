@@ -26,6 +26,13 @@ public class AiConfig {
     @Value("${app.vector.rrf-k:60}")
     private int rrfK;
 
+    /**
+     * BM25 分词器类型。中文必须显式指定，否则默认 standard 分词器会把整段中文
+     * 当成一个 token，BM25 那一路等于失效。该配置在 collection 创建后不可更改。
+     */
+    @Value("${app.vector.analyzer:chinese}")
+    private String vectorAnalyzer;
+
     @Bean
     public OkHttpClient okHttpClient() {
         return new OkHttpClient.Builder()
@@ -53,5 +60,9 @@ public class AiConfig {
 
     public int getRrfK() {
         return rrfK;
+    }
+
+    public String getVectorAnalyzer() {
+        return vectorAnalyzer;
     }
 }

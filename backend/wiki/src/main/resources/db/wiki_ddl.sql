@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS wiki_pages (
     INDEX idx_status (status),
     INDEX idx_software_version (software, version),
     INDEX idx_canonical_title (canonical_title),
-    FULLTEXT INDEX ft_content (title, summary, content)
+    FULLTEXT INDEX ft_content (title, summary, content) WITH PARSER ngram
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- 页面间关系（知识图谱的边）
@@ -60,46 +60,6 @@ CREATE TABLE IF NOT EXISTS wiki_sources (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_ingested (ingested),
     INDEX idx_content_hash (content_hash)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 编译任务
-CREATE TABLE IF NOT EXISTS wiki_ingest_tasks (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    source_id BIGINT,
-    file_name VARCHAR(200),
-    status ENUM('PENDING','PROCESSING','COMPLETED','PARTIAL','FAILED') DEFAULT 'PENDING',
-    progress INT DEFAULT 0 COMMENT '0-100',
-    step VARCHAR(100) COMMENT 'current step description',
-    total_chunks INT DEFAULT 0,
-    completed_chunks INT DEFAULT 0,
-    pages_created INT DEFAULT 0,
-    pages_updated INT DEFAULT 0,
-    error_message TEXT,
-    quality_report JSON COMMENT 'quality gate report',
-    operator_id BIGINT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_status (status),
-    INDEX idx_source (source_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 编译日志（审计 + 可追溯）
-CREATE TABLE IF NOT EXISTS wiki_ingest_log (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    source_id BIGINT NOT NULL,
-    operator_id BIGINT,
-    pages_created INT DEFAULT 0,
-    pages_updated INT DEFAULT 0,
-    links_created INT DEFAULT 0,
-    contradictions_found INT DEFAULT 0,
-    llm_model VARCHAR(100),
-    llm_tokens_used INT,
-    duration_ms INT,
-    status ENUM('SUCCESS','PARTIAL','FAILED') NOT NULL,
-    error_detail TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_source (source_id),
-    INDEX idx_operator (operator_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Lint 检查结果

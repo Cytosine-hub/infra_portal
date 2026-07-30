@@ -128,25 +128,7 @@ CREATE TABLE `forum_tags` (
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-DROP TABLE IF EXISTS `knowledge_chunks`;
-CREATE TABLE `knowledge_chunks` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `content` text NOT NULL COMMENT '切片文本内容',
-  `source_title` varchar(500) DEFAULT NULL COMMENT '来源文档标题',
-  `source_type` varchar(50) DEFAULT NULL COMMENT '来源类型：STANDARD_DOC / UPLOAD',
-  `source_id` bigint DEFAULT NULL COMMENT '来源文档ID',
-  `category` varchar(80) DEFAULT NULL COMMENT '分类',
-  `software` varchar(120) DEFAULT NULL COMMENT '软件名称',
-  `chunk_index` int DEFAULT '0' COMMENT '切片在文档中的序号',
-  `vector_id` varchar(100) DEFAULT NULL COMMENT '向量存储ID',
-  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_source` (`source_type`,`source_id`),
-  KEY `idx_category` (`category`),
-  KEY `idx_software` (`software`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识库文本切片';
-DROP TABLE IF EXISTS `middleware_commands`;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;DROP TABLE IF EXISTS `middleware_commands`;
 CREATE TABLE `middleware_commands` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `software_type_id` bigint NOT NULL,
@@ -437,7 +419,7 @@ CREATE TABLE `wiki_pages` (
   KEY `idx_status` (`status`),
   KEY `idx_software_version` (`software`,`version`),
   KEY `idx_canonical_title` (`canonical_title`),
-  FULLTEXT KEY `ft_content` (`title`,`summary`,`content`)
+  FULLTEXT KEY `ft_content` (`title`,`summary`,`content`) /*!50700 WITH PARSER `ngram` */
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 DROP TABLE IF EXISTS `wiki_sources`;
 CREATE TABLE `wiki_sources` (

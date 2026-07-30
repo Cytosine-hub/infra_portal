@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.middleware.manager.knowledge.service.ParameterLookupService;
 import com.middleware.manager.knowledge.service.StandardIndexSyncService;
 import com.middleware.manager.security.PermissionService;
 import org.springframework.security.core.Authentication;
@@ -43,15 +44,18 @@ public class KnowledgeController {
     private final StorageService storageService;
     private final StandardIndexSyncService standardIndexSyncService;
     private final PermissionService permissionService;
+    private final ParameterLookupService parameterLookupService;
 
     public KnowledgeController(KnowledgeService knowledgeService,
                                StorageService storageService,
                                StandardIndexSyncService standardIndexSyncService,
-                               PermissionService permissionService) {
+                               PermissionService permissionService,
+                               ParameterLookupService parameterLookupService) {
         this.knowledgeService = knowledgeService;
         this.storageService = storageService;
         this.standardIndexSyncService = standardIndexSyncService;
         this.permissionService = permissionService;
+        this.parameterLookupService = parameterLookupService;
     }
 
     /**
@@ -85,6 +89,18 @@ public class KnowledgeController {
             return ResponseEntity.status(403).build();
         }
         return ResponseEntity.ok(standardIndexSyncService.sync());
+    }
+
+    /**
+     * 参数标准精确查询。参数值必须 100% 准确且可追责，RAG 只能给语义相近的片段，
+     * 因此这类问题直接查表并返回带标准版本号的确定答案，不走检索。
+     */
+    @GetMapping("/parameters")
+    public ResponseEntity<List<ParameterLookupService.ParameterAnswer>> lookupParameters(
+            @RequestParam(required = false) String software,
+            @RequestParam(required = false) String name,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(parameterLookupService.lookup(software, name, limit));
     }
 
     @GetMapping("/search")
