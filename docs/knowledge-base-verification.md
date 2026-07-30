@@ -17,7 +17,7 @@
 | 组件 | 版本要求 | 说明 |
 |---|---|---|
 | JDK | **17** | 项目编译目标 |
-| Node | **20.x**（`>=20.19 <21`） | `package.json` engines 锁定，Node 21+ 或更低版本装依赖会失败 |
+| Node | 建议 **20.x**（`.nvmrc` 指定 20） | `package.json` engines 声明 `>=20.19 <21`，但**未设 engine-strict，不强制**。实测 Node 26 也能 install / build / test 通过，仅有 EBADENGINE 警告。CI 与发布环境建议对齐 20 保持一致 |
 | MySQL | **8.0** | ngram 全文解析器需 5.7.6+，本项目按 8.0 |
 | Milvus | **2.5.10**（不能低于 2.5） | BM25 自 2.5 引入，2.3.x 无 `text` / `sparse` 字段 |
 | Docker | 支持 compose v2 | Milvus 及其依赖 |
@@ -270,11 +270,15 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 cd frontend
-node -v          # 必须 20.x（package.json engines: >=20.19 <21）
+node -v          # 建议 20.x；高版本仅有 EBADENGINE 警告，不阻断安装与构建
 npm install
 npm run build    # 应通过
 npm test         # 60 用例应全绿
 ```
+
+> 若 `npm install` 报 `ETARGET: No matching version found for wrap-ansi-cjs`，
+> 是 lockfile 与 npm 版本不兼容，**与 Node 版本无关**。确认分支已 rebase 到最新
+> master（远端已重写 `package-lock.json` 修复此问题）。
 
 页面在「知识库」入口，五个标签：检索 / 文档 / 经验沉淀 / 图谱 / 健康度。
 
