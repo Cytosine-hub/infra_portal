@@ -28,68 +28,6 @@
     </select>
 
     <!-- 带权重的关键词搜索：精确匹配 100 分，双字匹配 10 分，单字匹配 1 分 -->
-    <select id="findByTermsWithScore" resultMap="chunkResultMap">
-        SELECT * FROM knowledge_chunks
-        WHERE
-        <foreach collection="terms" item="term" separator=" OR ">
-            content LIKE CONCAT('%', #{term}, '%')
-        </foreach>
-        ORDER BY
-        (<foreach collection="terms" item="term" index="i" separator=" + ">
-            <choose>
-                <when test="i == 0">(CASE WHEN content LIKE CONCAT('%', #{term}, '%') THEN 100 ELSE 0 END)</when>
-                <when test="i &lt; terms.size() - 1">(CASE WHEN content LIKE CONCAT('%', #{term}, '%') THEN 10 ELSE 0 END)</when>
-                <otherwise>(CASE WHEN content LIKE CONCAT('%', #{term}, '%') THEN 1 ELSE 0 END)</otherwise>
-            </choose>
-        </foreach>)
-        DESC
-        LIMIT #{limit}
-    </select>
-
-    <select id="findByTermsWithScoreFiltered" resultMap="chunkResultMap">
-        SELECT * FROM knowledge_chunks
-        <where>
-            (
-            <foreach collection="terms" item="term" separator=" OR ">
-                content LIKE CONCAT('%', #{term}, '%')
-            </foreach>
-            )
-            <if test="filter != null and filter.categories != null and filter.categories.size > 0">
-                AND category IN
-                <foreach collection="filter.categories" item="category" open="(" separator="," close=")">
-                    #{category}
-                </foreach>
-            </if>
-            <if test="filter != null and filter.software != null and filter.software.size > 0">
-                AND software IN
-                <foreach collection="filter.software" item="softwareName" open="(" separator="," close=")">
-                    #{softwareName}
-                </foreach>
-            </if>
-            <if test="filter != null and filter.sourceTypes != null and filter.sourceTypes.size > 0">
-                AND source_type IN
-                <foreach collection="filter.sourceTypes" item="sourceType" open="(" separator="," close=")">
-                    #{sourceType}
-                </foreach>
-            </if>
-            <if test="filter != null and filter.sourceIds != null and filter.sourceIds.size > 0">
-                AND source_id IN
-                <foreach collection="filter.sourceIds" item="sourceId" open="(" separator="," close=")">
-                    #{sourceId}
-                </foreach>
-            </if>
-        </where>
-        ORDER BY
-        (<foreach collection="terms" item="term" index="i" separator=" + ">
-            <choose>
-                <when test="i == 0">(CASE WHEN content LIKE CONCAT('%', #{term}, '%') THEN 100 ELSE 0 END)</when>
-                <when test="i &lt; terms.size() - 1">(CASE WHEN content LIKE CONCAT('%', #{term}, '%') THEN 10 ELSE 0 END)</when>
-                <otherwise>(CASE WHEN content LIKE CONCAT('%', #{term}, '%') THEN 1 ELSE 0 END)</otherwise>
-            </choose>
-        </foreach>)
-        DESC
-        LIMIT #{limit}
-    </select>
 
     <select id="findBySourceTitleAndSourceType" resultMap="chunkResultMap">
         SELECT * FROM knowledge_chunks WHERE source_title = #{sourceTitle} AND source_type = #{sourceType} ORDER BY chunk_index

@@ -17,21 +17,6 @@ public interface KnowledgeChunkMapper {
 
     List<KnowledgeChunk> findBySourceTitleContaining(@Param("keyword") String keyword);
 
-    /**
-     * 带权重的关键词搜索。
-     * @param terms 搜索词列表（第一个是完整关键词，后面是双字和单字）
-     * @param weights 对应权重列表（100, 10, 1）
-     * @param limit 返回数量限制
-     */
-    List<KnowledgeChunk> findByTermsWithScore(@Param("terms") List<String> terms,
-                                               @Param("weights") List<Integer> weights,
-                                               @Param("limit") int limit);
-
-    List<KnowledgeChunk> findByTermsWithScoreFiltered(@Param("terms") List<String> terms,
-                                                       @Param("weights") List<Integer> weights,
-                                                       @Param("limit") int limit,
-                                                       @Param("filter") VectorSearchFilter filter);
-
     List<KnowledgeChunk> findBySourceTitleAndSourceType(@Param("sourceTitle") String sourceTitle, @Param("sourceType") String sourceType);
 
     List<Map<String, Object>> findDistinctSources();

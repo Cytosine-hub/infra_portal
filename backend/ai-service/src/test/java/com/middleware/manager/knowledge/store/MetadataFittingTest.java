@@ -10,72 +10,90 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Milvus metadata 字段是 VarChar(4096)（字节），而正文也塞在里面。
- * 切片上限提到 900 后，中文按 3 字节/字符计算已逼近上限；超限时 Milvus insert 会失败，
- * 而失败路径只 log.error 且会把 scalarInsertSupported 永久置 false（整进程检索降级）。
- * 因此写入前必须先把 metadata 压进限制内。
+ * Milvus 2.5 schema 的边界保障。
+ * <p>升级前正文塞在 metadata JSON 里受 VarChar(4096) 限制，切片一大就 insert 失败、
+ * 静默丢失，还会永久关闭标量过滤。升级后正文移到独立的 text 列（65535，同时是 BM25
+ * 的输入），metadata 只放过滤用的轻量字段——这里守住这个结构性前提不被改回去。
  */
 class MetadataFittingTest {
 
-    private Map<String, String> metadata(String content) {
+    private static int bytes(String s) {
+        return s.getBytes(StandardCharsets.UTF_8).length;
+    }
+
+    @Test
+    @DisplayName("TC-META-001 轻量 metadata 应原样序列化")
+    void keepsLightMetadataIntact() {
         Map<String, String> meta = new LinkedHashMap<>();
-        meta.put("source", "knowledge");
-        meta.put("content", content);
-        meta.put("sourceTitle", "MySQL 8.0 参数标准 V2.3");
-        meta.put("sectionPath", "MySQL / 参数标准 / InnoDB 存储引擎 / 缓冲池相关参数");
+        meta.put("sourceTitle", "MySQL 8.0 参数标准");
+        meta.put("sectionPath", "MySQL / 参数标准 / InnoDB");
         meta.put("category", "数据库");
-        meta.put("software", "MySQL");
-        return meta;
+
+        String json = MilvusVectorStore.fitMetadata(meta);
+
+        assertThat(json).contains("MySQL 8.0 参数标准");
+        assertThat(json).contains("MySQL / 参数标准 / InnoDB");
+        assertThat(bytes(json)).isLessThanOrEqualTo(4096);
     }
 
     @Test
-    @DisplayName("TC-META-001 未超限的 metadata 应原样保留")
-    void keepsMetadataUnderLimitIntact() {
-        Map<String, String> meta = metadata("短正文内容");
-
-        Map<String, String> fitted = MilvusVectorStore.fitMetadata(meta, 4096);
-
-        assertThat(fitted.get("content")).isEqualTo("短正文内容");
-        assertThat(fitted).containsAllEntriesOf(meta);
-    }
-
-    @Test
-    @DisplayName("TC-META-002 超限时应截断正文而非丢弃整条切片")
-    void truncatesContentInsteadOfLosingChunk() {
-        Map<String, String> meta = metadata("中文内容".repeat(500));
-
-        Map<String, String> fitted = MilvusVectorStore.fitMetadata(meta, 4096);
-
-        assertThat(fitted.get("content")).isNotEmpty();
-        assertThat(fitted.get("content").length()).isLessThan(2000);
-        // 过滤用的标量字段必须完好，否则检索过滤会失效
-        assertThat(fitted.get("category")).isEqualTo("数据库");
-        assertThat(fitted.get("software")).isEqualTo("MySQL");
-        assertThat(fitted.get("sectionPath")).isEqualTo(meta.get("sectionPath"));
-    }
-
-    @Test
-    @DisplayName("TC-META-003 截断后序列化字节数必须落在限制内")
-    void fittedMetadataFitsByteLimit() {
-        int limit = 4096;
-        Map<String, String> meta = metadata("参数说明".repeat(800));
-
-        Map<String, String> fitted = MilvusVectorStore.fitMetadata(meta, limit);
-
-        int bytes = MilvusVectorStore.serializeMetadata(fitted).getBytes(StandardCharsets.UTF_8).length;
-        assertThat(bytes).isLessThanOrEqualTo(limit);
-    }
-
-    @Test
-    @DisplayName("TC-META-004 正文之外的字段已超限时应保底截断，不得返回超限结果")
-    void degradesGracefullyWhenNonContentFieldsAlreadyOverflow() {
+    @DisplayName("TC-META-002 metadata 极端超限时应裁剪而非产出超限字符串")
+    void trimsOversizedMetadata() {
         Map<String, String> meta = new LinkedHashMap<>();
-        meta.put("content", "正文");
-        meta.put("sourceTitle", "超长标题".repeat(500));
+        meta.put("sourceTitle", "超长标题".repeat(400));
+        meta.put("sectionPath", "很长的章节路径".repeat(400));
 
-        Map<String, String> fitted = MilvusVectorStore.fitMetadata(meta, 4096);
+        String json = MilvusVectorStore.fitMetadata(meta);
 
-        int bytes = MilvusVectorStore.serializeMetadata(fitted).getBytes(StandardCharsets.UTF_8).length;
-        assertThat(bytes).isLessThanOrEqualTo(4096);
+        assertThat(bytes(json)).isLessThanOrEqualTo(4096);
+    }
+
+    @Test
+    @DisplayName("TC-META-003 截断应按 UTF-8 字节计算，中文一字三字节不得撑爆列")
+    void truncatesByUtf8Bytes() {
+        String chinese = "参数".repeat(500);
+
+        String truncated = MilvusVectorStore.truncate(chinese, 200);
+
+        assertThat(bytes(truncated)).isLessThanOrEqualTo(200);
+        assertThat(truncated).startsWith("参数");
+    }
+
+    @Test
+    @DisplayName("TC-META-004 未超限的内容不应被截断")
+    void keepsShortValueIntact() {
+        assertThat(MilvusVectorStore.truncate("短内容", 200)).isEqualTo("短内容");
+        assertThat(MilvusVectorStore.truncate(null, 200)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("TC-META-005 过滤条件应下推为 Milvus 标量表达式，而非召回后内存过滤")
+    void buildsScalarFilterExpression() {
+        VectorSearchFilter filter = VectorSearchFilter.none()
+                .addSource("knowledge")
+                .addCategory("数据库");
+
+        String expr = MilvusVectorStore.buildExpr(filter);
+
+        assertThat(expr).contains("source in [\"knowledge\"]");
+        assertThat(expr).contains("category in [\"数据库\"]");
+        assertThat(expr).contains(" and ");
+    }
+
+    @Test
+    @DisplayName("TC-META-006 空过滤器应产出空表达式，不得拼出恒真条件")
+    void emptyFilterProducesNoExpression() {
+        assertThat(MilvusVectorStore.buildExpr(VectorSearchFilter.none())).isEmpty();
+        assertThat(MilvusVectorStore.buildExpr(null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("TC-META-007 过滤值中的引号应被转义，避免表达式注入")
+    void escapesQuotesInFilterValues() {
+        VectorSearchFilter filter = VectorSearchFilter.none().addSoftware("My\"SQL");
+
+        String expr = MilvusVectorStore.buildExpr(filter);
+
+        assertThat(expr).contains("\\\"");
     }
 }

@@ -61,56 +61,6 @@ public class KnowledgeController {
     }
 
     /**
-     * POST /api/knowledge/batch-upload
-     * Upload multiple files into the knowledge base.
-     */
-    @PostMapping("/batch-upload")
-    public ResponseEntity<?> batchUpload(@RequestParam(value = "files", required = false) MultipartFile[] files) {
-        if (files == null || files.length == 0) {
-            Map<String, String> error = new HashMap<>();
-            error.put("error", "未选择文件");
-            return ResponseEntity.badRequest().body(error);
-        }
-        List<Map<String, Object>> results = new java.util.ArrayList<>();
-        for (MultipartFile file : files) {
-            Map<String, Object> item = new HashMap<>();
-            item.put("fileName", file.getOriginalFilename());
-            try {
-                ImportResult result = knowledgeService.importFile(file);
-                item.put("status", "success");
-                item.put("chunkCount", result.getChunkCount());
-                item.put("sourceTitle", result.getSourceTitle());
-            } catch (Exception e) {
-                log.warn("Knowledge batch upload failed file={}: {}", file.getOriginalFilename(), e.getMessage());
-                item.put("status", "error");
-                item.put("error", "知识库文档上传失败，请查看后台日志");
-            }
-            results.add(item);
-        }
-        Map<String, Object> response = new HashMap<>();
-        response.put("total", files.length);
-        response.put("results", results);
-        return ResponseEntity.ok(response);
-    }
-
-    /**
-     * POST /api/knowledge/import/{docId}
-     * Import an existing StandardDocument into the knowledge base.
-     */
-    @PostMapping("/import/{docId}")
-    public ResponseEntity<?> importDoc(@PathVariable Long docId) {
-        try {
-            ImportResult result = knowledgeService.importStandardDocument(docId);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            log.warn("Knowledge standard document import failed docId={}: {}", docId, e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", "知识库文档导入失败，请查看后台日志");
-            return ResponseEntity.badRequest().body(error);
-        }
-    }
-
-    /**
      * GET /api/knowledge/search?q=xxx&topK=5
      * Search the knowledge base.
      */

@@ -19,6 +19,13 @@ public class AiConfig {
     @Value("${app.vector.collection}")
     private String vectorCollection;
 
+    @Value("${app.vector.dimension:1024}")
+    private int vectorDimension;
+
+    /** RRF 融合的 k 值，越大越平滑；60 是文献常用默认值。 */
+    @Value("${app.vector.rrf-k:60}")
+    private int rrfK;
+
     @Bean
     public OkHttpClient okHttpClient() {
         return new OkHttpClient.Builder()
@@ -38,5 +45,13 @@ public class AiConfig {
 
     public String getVectorCollection() {
         return vectorCollection;
+    }
+
+    public int getVectorDimension() {
+        return vectorDimension;
+    }
+
+    public int getRrfK() {
+        return rrfK;
     }
 }

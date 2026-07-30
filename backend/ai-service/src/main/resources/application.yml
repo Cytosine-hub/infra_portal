@@ -62,6 +62,8 @@ app:
     host: ${VECTOR_HOST:localhost}
     port: ${VECTOR_PORT:19530}
     collection: ${VECTOR_COLLECTION:knowledge_chunks}
+    dimension: ${VECTOR_DIMENSION:1024}
+    rrf-k: ${VECTOR_RRF_K:60}
   wiki:
     search:
       max-context-pages: ${WIKI_MAX_CONTEXT_PAGES:8}

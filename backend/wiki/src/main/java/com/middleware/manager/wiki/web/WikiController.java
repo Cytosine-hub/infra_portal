@@ -416,19 +416,6 @@ public class WikiController {
                 .toList();
     }
 
-    @GetMapping("/sources/{id}")
-    public ResponseEntity<WikiSource> getSource(@PathVariable Long id, Authentication authentication,
-                                                HttpServletRequest request) {
-        WikiSource source = sourceMapper.findById(id);
-        if (source == null) return ResponseEntity.notFound().build();
-        if (!canViewSource(authentication, source)) {
-            recordAudit("ACCESS_DENIED", "SOURCE", id, authentication, request,
-                    "{\"reason\":\"wiki_source_view_denied\"}");
-            return ResponseEntity.status(403).build();
-        }
-        return ResponseEntity.ok(source);
-    }
-
     // --- Lint endpoints ---
 
     @GetMapping("/lint/results")
