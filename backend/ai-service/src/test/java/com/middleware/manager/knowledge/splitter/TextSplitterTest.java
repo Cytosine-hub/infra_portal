@@ -210,15 +210,17 @@ class TextSplitterTest {
         }
 
         @Test
-        @DisplayName("TC-SPLIT-015 默认切片长度不得超过本地 embedding 的安全上限")
+        @DisplayName("TC-SPLIT-015 默认切片长度不得超过 embedding 模型的安全预算")
         void defaultChunksFitEmbeddingLimit() {
+            // 预算由默认 embedding 模型（bge-large，512 token）推导，不写死字符数
+            int budget = TextSplitter.budgetForTokenLimit(512);
             String text = "# 长文档\n" + "中文运维说明".repeat(300);
 
             List<TextSplitter.TextChunk> chunks = new TextSplitter().split(text, "长文档");
 
             assertThat(chunks).isNotEmpty();
             assertThat(chunks).allSatisfy(chunk ->
-                    assertThat(chunk.getContent().length()).isLessThanOrEqualTo(300));
+                    assertThat(chunk.getContent().length()).isLessThanOrEqualTo(budget));
         }
     }
 

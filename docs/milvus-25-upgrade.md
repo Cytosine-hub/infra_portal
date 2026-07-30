@@ -78,3 +78,54 @@ python3 scripts/eval-retrieval.py --k 5 --json .scratch/after.json
 
 重点看 `exact_param` 与 `error_code` 两个分桶——如果混合检索生效，这两桶的 Recall@5
 应显著高于升级前；`semantic` 桶不应下降（下降说明 RRF 参数需要调）。
+
+---
+
+## 附：切换 embedding 模型到 bge-m3
+
+`bge-large` 的 512 token 上下文是 KBV-001（长 PDF 上传失败）的根因。切到 `bge-m3`
+后上下文提升到 8192 token，参数表格可以整块进一个切片，不必再为迁就模型把切片
+砍碎。
+
+**维度不变**：bge-m3 的稠密输出同样是 1024 维，`VECTOR_DIMENSION` 不用改。
+
+| | bge-large | bge-m3 |
+|---|---|---|
+| 参数量 | 326M | 568M |
+| 上下文 | 512 token | 8192 token |
+| 输出维度 | 1024 | 1024 |
+| Ollama 体积 | ~670MB | ~1.2GB |
+| 运行内存 | ~1GB | ~2~3GB |
+
+```bash
+ollama pull bge-m3
+
+# 环境变量
+EMBEDDING_MODEL=bge-m3
+EMBEDDING_MAX_TOKENS=8192     # 切片预算与 embedding 截断长度都由它推导
+```
+
+改完必须**删除 collection 重建并重新导入**——向量由新模型生成，与旧向量不可混用。
+
+### 内存吃紧时（16G 机器）
+
+不必把 8192 token 跑满。切片预算有 1600 字符的实际上限（`MAX_PRACTICAL_CHUNK_SIZE`），
+切片过大反而稀释语义。16G 机器上的分配建议：
+
+- Docker 给 Milvus 栈 4G（小数据量够用，不必按 8G 配）
+- Ollama + bge-m3 约 2~3G
+- 三个 JVM 各 512M（`-Xmx512m`）
+- 其余留给 MySQL 与系统
+
+### 切片预算怎么算的
+
+```
+预算 = min(1600, token上限 × 0.85)
+```
+
+中文最坏情况约 1 字 1 token，0.85 是留给面包屑前缀与分词波动的余量。
+bge-large → 435 字符；bge-m3 → 1600 字符（触到实际上限）。
+
+此前 splitter 与 embedding 各自持有不同的字符上限（900 vs 1500/300），两个数字对不上，
+结果要么撑爆模型上下文，要么切片后半段被静默丢弃。现在统一由 `app.embedding.max-tokens`
+推导，只有一个来源。

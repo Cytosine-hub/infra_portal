@@ -23,8 +23,31 @@ import java.util.regex.Pattern;
 @Component
 public class TextSplitter {
 
-    private static final int DEFAULT_MAX_CHUNK_SIZE = 300;
-    private static final int DEFAULT_OVERLAP = 50;
+    /**
+     * 中文最坏情况约 1 字 1 token；再留 15% 余量给面包屑前缀与分词波动。
+     * 按 token 上限反推字符预算，而不是拍一个固定值——固定值要么撑爆模型上下文
+     * （KBV-001），要么为了迁就小模型把预算砍得连参数表都装不下。
+     */
+    private static final double CHARS_PER_TOKEN = 0.85;
+
+    /** 单个切片的字符上限不超过这个值，避免大上下文模型下切片过大稀释语义。 */
+    private static final int MAX_PRACTICAL_CHUNK_SIZE = 1600;
+
+    /** bge-large 的 512 token 是当前默认 embedding 模型的上限。 */
+    private static final int DEFAULT_TOKEN_LIMIT = 512;
+    private static final int DEFAULT_MAX_CHUNK_SIZE = budgetForTokenLimit(DEFAULT_TOKEN_LIMIT);
+    private static final int DEFAULT_OVERLAP = DEFAULT_MAX_CHUNK_SIZE / 6;
+
+    /**
+     * 由 embedding 模型的 token 上限推导安全的切片字符预算。
+     * <p>换模型时只需改配置里的 token 上限：bge-large 512、bge-m3 8192。
+     */
+    public static int budgetForTokenLimit(int tokenLimit) {
+        if (tokenLimit <= 0) {
+            throw new IllegalArgumentException("embedding token 上限必须为正数，实际: " + tokenLimit);
+        }
+        return Math.min(MAX_PRACTICAL_CHUNK_SIZE, (int) Math.floor(tokenLimit * CHARS_PER_TOKEN));
+    }
     private static final Pattern HEADING_PATTERN = Pattern.compile("^(#{1,6})\\s+(.*)$");
     private static final Pattern FENCE_PATTERN = Pattern.compile("^\\s*(```|~~~)");
     private static final Pattern TABLE_SEPARATOR = Pattern.compile("^\\|[\\s:|-]*-[\\s:|-]*\\|$");
@@ -35,6 +58,17 @@ public class TextSplitter {
 
     public TextSplitter() {
         this(DEFAULT_MAX_CHUNK_SIZE, DEFAULT_OVERLAP);
+    }
+
+    /**
+     * Spring 装配入口：切片预算跟随 embedding 模型的 token 上限。
+     * bge-large 填 512，换 bge-m3 改成 8192 即可，无需改代码。
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public TextSplitter(@org.springframework.beans.factory.annotation.Value(
+            "${app.embedding.max-tokens:512}") Integer embeddingMaxTokens) {
+        this(budgetForTokenLimit(embeddingMaxTokens),
+                budgetForTokenLimit(embeddingMaxTokens) / 6);
     }
 
     public TextSplitter(int maxChunkSize) {
