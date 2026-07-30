@@ -275,5 +275,5 @@ void getMissingThrows() { ... }
 - **模块开关在 `system_settings` 表**（knowledge-enabled、diagnostics-enabled）：功能"不见了"先查开关再查代码；前端门户级开关另见 `src/config/portalFeatures.js`。
 - **权限模型有两级**：管理员（`isCategoryAdmin`，可改可审）vs 管理岗（`isManagement`，只能改不能审），审核相关接口必须走 `PermissionService.canReview(auth, category)`，只按角色名判断会放过管理岗越权审核。
 - **文件存储路径**：上传文件落在 `./storage/<middlewareName>/`，下载走公开的 `/files/**`；本地调试删库不删 storage 会出现悬空记录。
-- **前端 Node 版本是建议而非强制**（`package.json` engines `>=20.19 <21`，`.nvmrc` 指定 20）：仓库未设 `engine-strict`，高版本 Node 只会打印 `EBADENGINE` 警告，install / build / test 仍可通过（实测 Node 26 可用）。底层工具链实际要求更宽（vite `>=20`、vitest `^20 || ^22 || >=24`），`<21` 上界是项目自加的。CI 与发布环境建议对齐 20 保持一致；若要真正强制，需新增 `.npmrc` 设 `engine-strict=true`。
+- **前端 Node 只限最低版本**（`package.json` engines `>=20.19`）：不设上界，高版本可直接用（实测 Node 26 通过）。构建确定性由 `deploy/Dockerfile.frontend` 的 `node:20.19-alpine` 保证，`.nvmrc` 的 20 只是本地 nvm 的默认值，都不是硬约束。
 - **9 个服务共享一个签名密钥**：本地起多服务时用 `scripts/services.env.example` 派生统一环境，漏设或不一致会导致所有受保护端点 401。

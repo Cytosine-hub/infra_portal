@@ -17,7 +17,7 @@
 | 组件 | 版本要求 | 说明 |
 |---|---|---|
 | JDK | **17** | 项目编译目标 |
-| Node | 建议 **20.x**（`.nvmrc` 指定 20） | `package.json` engines 声明 `>=20.19 <21`，但**未设 engine-strict，不强制**。实测 Node 26 也能 install / build / test 通过，仅有 EBADENGINE 警告。CI 与发布环境建议对齐 20 保持一致 |
+| Node | **>= 20.19**，无上界 | 高版本可直接用（实测 Node 26 通过）。CI 构建走 `deploy/Dockerfile.frontend` 的 `node:20.19-alpine`，与本地版本无关 |
 | MySQL | **8.0** | ngram 全文解析器需 5.7.6+，本项目按 8.0 |
 | Milvus | **2.5.10**（不能低于 2.5） | BM25 自 2.5 引入，2.3.x 无 `text` / `sparse` 字段 |
 | Docker | 支持 compose v2 | Milvus 及其依赖 |
@@ -270,7 +270,7 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 cd frontend
-node -v          # 建议 20.x；高版本仅有 EBADENGINE 警告，不阻断安装与构建
+node -v          # >= 20.19 即可，无上界
 npm install
 npm run build    # 应通过
 npm test         # 60 用例应全绿
