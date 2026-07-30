@@ -8,26 +8,86 @@
 
 ---
 
-## 一、前置准备
+## 一、部署要求
 
-### 1.1 依赖服务
+完整部署参见 `docs/startup-manual.md` 与 `docs/production-deploy.md`，本节只列**验证本次改造所必需**的部分。
+
+### 1.1 运行时版本
+
+| 组件 | 版本要求 | 说明 |
+|---|---|---|
+| JDK | **17** | 项目编译目标 |
+| Node | **20.x**（`>=20.19 <21`） | `package.json` engines 锁定，Node 21+ 或更低版本装依赖会失败 |
+| MySQL | **8.0** | ngram 全文解析器需 5.7.6+，本项目按 8.0 |
+| Milvus | **2.5.10**（不能低于 2.5） | BM25 自 2.5 引入，2.3.x 无 `text` / `sparse` 字段 |
+| Docker | 支持 compose v2 | Milvus 及其依赖 |
+
+### 1.2 只需起三个服务
+
+项目共 9 个服务（8080~8089），但**验证知识库只需要三个**：
+
+| 服务 | 端口 | 为什么需要 |
+|---|---|---|
+| `api-gateway` | 8080 | 唯一入口，集中认证 |
+| `core-service` | 8084 | 登录与 token introspect，网关依赖它校验身份 |
+| `ai-service` | 8083 | 知识库本体（knowledge + wiki + ops-agent） |
+
+其余六个（community 8082、middleware 8085、database 8086、host 8087、network 8088、security 8089）与知识库无关，不必启动。
 
 ```bash
-# Milvus 必须是 2.5+（BM25 自 2.5 引入）
-cd deploy/milvus-offline
-docker compose down
-docker compose pull              # 离线环境改为 docker load -i milvus-images.tar
-docker compose up -d
-docker ps | grep milvus          # 确认版本是 v2.5.10
-
-# embedding 模型
-ollama serve && ollama pull bge-large     # 或按 application-prod.yml 指向智谱
-
-# MySQL
-mysql -uroot -p < db/init.sql
+cd backend && mvn clean package -DskipTests
+# 三个终端分别执行，或用 scripts/ 下的启动脚本
+mvn -pl core-service -am spring-boot:run
+mvn -pl ai-service   -am spring-boot:run
+mvn -pl api-gateway  -am spring-boot:run
 ```
 
-### 1.2 执行四个 DDL（都可重复执行，**执行前先备份**）
+### 1.3 必需环境变量（无默认值，缺失会直接失败）
+
+以 `scripts/services.env.example` 为模板，**三个服务必须使用同一份环境**：
+
+| 变量 | 必需性 | 缺失后果 |
+|---|---|---|
+| `GATEWAY_SIGNING_SECRET` | **必填**，至少 32 UTF-8 字节 | 三个服务必须**完全一致**。不一致或漏设 → 所有受保护端点 401，且现象是"登录成功但什么都调不通" |
+| `APP_DB_PASSWORD` | 必填 | 无法连库 |
+| `AI_API_KEY` | 起草与 RAG 问答需要 | 缺失时检索仍可用，但「从文档起草」和对话会失败 |
+| `ADMIN_DEFAULT_PASSWORD` | 首次初始化需要 | 无法登录 |
+| `EMBEDDING_BASE_URL` | 默认 `http://localhost:11434/v1` | 指向实际 embedding 服务 |
+| `EMBEDDING_MODEL` | 默认 `bge-large` | 必须与 `VECTOR_DIMENSION` 匹配 |
+| `VECTOR_HOST` / `VECTOR_PORT` | 默认 `localhost:19530` | 指向 Milvus |
+
+`ZABBIX_*`、`NACOS_*`、`WIKI_EXPORT_SIGNATURE_SECRET` 本次验证用不到，可留空（Nacos 仅在 `cloud` profile 启用，默认关闭）。
+
+### 1.4 Milvus（含两个依赖组件）
+
+Milvus standalone 需要 **etcd + minio** 一起跑，离线环境三个镜像都要准备：
+
+```bash
+cd deploy/milvus-offline
+cat images.txt          # milvusdb/milvus:v2.5.10 / etcd:v3.5.5 / minio
+
+# 联网环境
+docker compose pull && docker compose up -d
+
+# 离线环境：先在有网机器上导出
+docker pull $(cat images.txt | tr '\n' ' ')
+docker save $(cat images.txt | tr '\n' ' ') -o milvus-images.tar
+# 拷到目标机后
+docker load -i milvus-images.tar && docker compose up -d
+
+docker ps | grep milvus   # 确认是 v2.5.10
+```
+
+⚠️ **镜像版本本次已从 v2.3.4 升到 v2.5.10**，离线环境需要重新导出，不能沿用旧的 tar 包。
+
+资源上，Milvus standalone 建议至少 4C8G；数据量小（几万切片）时磁盘占用不大。
+
+### 1.5 其他
+
+- **文件存储目录**：上传的原始文档落在 `./storage/`（`app.storage.location`），确保 ai-service 进程对该目录有写权限
+- **MySQL 初始化**：`mysql -uroot -p < db/init.sql`
+
+### 1.6 执行四个 DDL（都可重复执行，**执行前先备份**）
 
 ```bash
 mysql -uroot -p middleware_resource_manager < db/upgrade_20260729_drop_wiki_ingest_tables.sql
@@ -38,7 +98,7 @@ mysql -uroot -p middleware_resource_manager < db/upgrade_20260730_wiki_fulltext_
 
 第二个会**清空 `wiki_pages`**（按既定决策：LLM 编译产物全部清除，经验区改为人工书写）。如需留档，先跑 `GET /api/knowledge/pages/export`。
 
-### 1.3 删除旧 Milvus collection
+### 1.7 删除旧 Milvus collection
 
 2.3.4 建的 collection 没有 `text` / `sparse` 字段。**应用启动时会主动抛异常拦住**（`verifyHybridSchema`），不会带病运行——看到下面这条报错属于预期，按提示删除即可：
 
@@ -50,7 +110,7 @@ Milvus collection 'knowledge_chunks' 缺少 text / sparse 字段，是 2.5 之�
 
 > 命名提示：Milvus collection 仍叫 `knowledge_chunks`，与刚删掉的 MySQL 同名表**没有关系**。嫌混淆可以设 `VECTOR_COLLECTION=knowledge_index`，反正这次要重建。
 
-### 1.4 关键配置核对
+### 1.8 关键配置核对
 
 | 配置 | 环境变量 | 默认 | 必须确认 |
 |---|---|---|---|
