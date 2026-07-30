@@ -16,12 +16,15 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class EmbeddingService implements EmbeddingProvider {
     private final EmbeddingModel embeddingModel;
+    private final int maxChars;
 
-    @Value("${app.embedding.max-chars:1500}")
-    private int maxChars;
-
-    public EmbeddingService(EmbeddingModel embeddingModel) {
+    public EmbeddingService(EmbeddingModel embeddingModel,
+                            @Value("${app.embedding.max-chars:300}") int maxChars) {
+        if (maxChars <= 0) {
+            throw new IllegalArgumentException("app.embedding.max-chars must be positive");
+        }
         this.embeddingModel = embeddingModel;
+        this.maxChars = maxChars;
     }
 
     @Override

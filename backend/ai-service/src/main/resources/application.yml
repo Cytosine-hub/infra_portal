@@ -51,6 +51,8 @@ app:
   llm:
     max-concurrent: ${LLM_MAX_CONCURRENT:5}
     timeout-seconds: ${LLM_TIMEOUT_SECONDS:600}
+  embedding:
+    max-chars: ${EMBEDDING_MAX_CHARS:300}
   ai:
     base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
     api-key: ${AI_API_KEY:}

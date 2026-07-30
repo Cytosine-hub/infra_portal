@@ -39,6 +39,8 @@ class StandardIndexSyncServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         service = new StandardIndexSyncService(standardMapper, sourceMapper, knowledgeService);
+        when(knowledgeService.removeStandardIfUnindexable(any(ParameterStandard.class))).thenReturn(false);
+        when(knowledgeService.indexStandard(any(ParameterStandard.class))).thenReturn(importResult(1));
     }
 
     private ParameterStandard standard(Long id, String title, String content) {
@@ -146,5 +148,41 @@ class StandardIndexSyncServiceTest {
 
         verify(knowledgeService, never()).indexStandard(any());
         assertThat(report.getSkipped()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("TC-SYNC-007 标准未生成切片时应跳过且不得虚报已索引")
+    void skipsStandardThatProducesNoChunks() {
+        when(standardMapper.findPublished())
+                .thenReturn(List.of(standard(1L, "只有标题的标准", "# 参数标准")));
+        when(sourceMapper.findAllByType("STANDARD_DOC")).thenReturn(List.of());
+        when(knowledgeService.indexStandard(any(ParameterStandard.class))).thenReturn(importResult(0));
+
+        StandardIndexSyncService.SyncReport report = service.sync();
+
+        assertThat(report.getIndexed()).isZero();
+        assertThat(report.getSkipped()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("TC-SYNC-008 零切片标准应在内容哈希短路前清理历史来源")
+    void removesUnindexableStandardBeforeHashShortcut() {
+        ParameterStandard std = standard(1L, "只有标题的标准", "# 参数标准");
+        when(standardMapper.findPublished()).thenReturn(List.of(std));
+        when(sourceMapper.findAllByType("STANDARD_DOC"))
+                .thenReturn(List.of(indexed(1L, std.getTitle(), service.hashOf(std))));
+        when(knowledgeService.removeStandardIfUnindexable(std)).thenReturn(true);
+
+        StandardIndexSyncService.SyncReport report = service.sync();
+
+        verify(knowledgeService).removeStandardIfUnindexable(std);
+        verify(knowledgeService, never()).indexStandard(any());
+        assertThat(report.getSkipped()).isEqualTo(1);
+    }
+
+    private KnowledgeService.ImportResult importResult(int chunks) {
+        KnowledgeService.ImportResult result = new KnowledgeService.ImportResult();
+        result.setChunkCount(chunks);
+        return result;
     }
 }

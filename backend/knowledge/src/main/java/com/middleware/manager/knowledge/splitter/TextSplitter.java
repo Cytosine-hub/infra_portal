@@ -23,8 +23,8 @@ import java.util.regex.Pattern;
 @Component
 public class TextSplitter {
 
-    private static final int DEFAULT_MAX_CHUNK_SIZE = 900;
-    private static final int DEFAULT_OVERLAP = 150;
+    private static final int DEFAULT_MAX_CHUNK_SIZE = 300;
+    private static final int DEFAULT_OVERLAP = 50;
     private static final Pattern HEADING_PATTERN = Pattern.compile("^(#{1,6})\\s+(.*)$");
     private static final Pattern FENCE_PATTERN = Pattern.compile("^\\s*(```|~~~)");
     private static final Pattern TABLE_SEPARATOR = Pattern.compile("^\\|[\\s:|-]*-[\\s:|-]*\\|$");

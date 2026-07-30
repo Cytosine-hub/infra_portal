@@ -51,6 +51,11 @@ public class StandardIndexSyncService {
 
         for (ParameterStandard standard : published) {
             stillPublished.add(standard.getTitle());
+            if (knowledgeService.removeStandardIfUnindexable(standard)) {
+                log.debug("标准未生成可索引切片，已清理历史索引: {}", standard.getTitle());
+                report.skipped++;
+                continue;
+            }
             if (standard.getContent() == null || standard.getContent().isBlank()) {
                 log.debug("标准正文为空，跳过索引: {}", standard.getTitle());
                 report.skipped++;
@@ -61,8 +66,13 @@ public class StandardIndexSyncService {
                 continue;
             }
             try {
-                knowledgeService.indexStandard(standard);
-                report.indexed++;
+                KnowledgeService.ImportResult result = knowledgeService.indexStandard(standard);
+                if (result != null && result.getChunkCount() > 0) {
+                    report.indexed++;
+                } else {
+                    log.debug("标准未生成可索引切片，跳过: {}", standard.getTitle());
+                    report.skipped++;
+                }
             } catch (Exception e) {
                 // 单篇失败不中断整批：下次对账会重试，好过一篇挂掉全部标准都进不去
                 log.warn("标准索引失败，将在下次对账重试 title={}: {}", standard.getTitle(), e.getMessage());

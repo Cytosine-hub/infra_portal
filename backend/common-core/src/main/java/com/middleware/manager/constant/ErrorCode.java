@@ -24,6 +24,7 @@ public final class ErrorCode {
     public static final String FILE_TOO_LARGE = "FILE_TOO_LARGE";
     public static final String FILE_UPLOAD_FAILED = "FILE_UPLOAD_FAILED";
     public static final String FILE_READ_FAILED = "FILE_READ_FAILED";
+    public static final String KNOWLEDGE_CONTENT_EMPTY = "KNOWLEDGE_CONTENT_EMPTY";
 
     // 用户相关
     public static final String USER_NOT_FOUND = "USER_NOT_FOUND";

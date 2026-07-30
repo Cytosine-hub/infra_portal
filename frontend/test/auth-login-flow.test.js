@@ -1,0 +1,68 @@
+// @vitest-environment jsdom
+
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+
+import App from '../src/App.vue'
+import { useAuth } from '../src/composables/useAuth.js'
+
+const storage = new Map()
+const localStorageMock = {
+  clear: () => storage.clear(),
+  getItem: (key) => storage.get(key) ?? null,
+  removeItem: (key) => storage.delete(key),
+  setItem: (key, value) => storage.set(key, String(value))
+}
+
+function response(data, status = 200, statusText = 'OK') {
+  return Promise.resolve(new Response(JSON.stringify(data), {
+    status,
+    statusText,
+    headers: { 'Content-Type': 'application/json' }
+  }))
+}
+
+describe('登录错误边界', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    Object.defineProperty(window, 'localStorage', { value: localStorageMock, configurable: true })
+    vi.stubGlobal('localStorage', localStorageMock)
+    localStorageMock.clear()
+    useAuth().logout(false)
+    window.location.hash = '#/admin'
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  test('TC-AUTH-001 登录成功后的数据加载 403 不得被误报为登录失败', async () => {
+    vi.stubGlobal('fetch', vi.fn((input) => {
+      const path = new URL(String(input), 'http://localhost').pathname
+      if (path === '/api/auth/login') {
+        return response({
+          token: 'valid-token', username: 'sysadmin', displayName: '系统管理员',
+          role: '系统管理员', expiresAt: '2999-01-01T00:00:00Z'
+        })
+      }
+      if (path === '/api/public/config') return response({ knowledgeEnabled: true, diagnosticsEnabled: true })
+      return response({ message: 'Forbidden' }, 403, 'Forbidden')
+    }))
+
+    const wrapper = mount(App)
+    await flushPromises()
+    await wrapper.find('.login-form input[autocomplete="username"]').setValue('sysadmin')
+    await wrapper.find('.login-form input[type="password"]').setValue('admin123')
+    await wrapper.find('.login-form').trigger('submit')
+    await flushPromises()
+
+    expect(useAuth().auth.token).toBe('valid-token')
+    expect(wrapper.find('.login-page').exists()).toBe(false)
+    expect(wrapper.find('.toast-message').text()).toContain('登录成功')
+    expect(wrapper.find('.toast-message').text()).not.toBe('Forbidden')
+
+    wrapper.unmount()
+  })
+})

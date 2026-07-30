@@ -402,19 +402,31 @@ function updateDocumentTitle() {
 async function login() {
   try {
     await authLogin(loginForm.username, loginForm.password)
-    loginForm.password = ''
-    notify('登录成功', 'success')
-    if (isReadOnly.value) {
-      window.location.hash = '#/home'
-    } else {
-      await loadSoftwareCategories()
-      await loadSoftwareTypes()
-      await loadAdmin()
-      await loadStandardModule()
-    }
   } catch (error) {
     loginForm.password = ''
     notify(error.message || '登录失败', 'error')
+    return
+  }
+
+  loginForm.password = ''
+  if (isReadOnly.value) {
+    notify('登录成功', 'success')
+    window.location.hash = '#/home'
+    return
+  }
+
+  const loadResults = await Promise.allSettled([
+    loadSoftwareCategories(),
+    loadSoftwareTypes(),
+    loadAdmin(),
+    loadStandardModule()
+  ])
+  const failedLoads = loadResults.filter((result) => result.status === 'rejected')
+  if (failedLoads.length > 0) {
+    console.warn('登录后管理数据加载失败', failedLoads.map((result) => result.reason))
+    notify('登录成功，但部分管理数据暂不可用', 'error')
+  } else {
+    notify('登录成功', 'success')
   }
 }
 

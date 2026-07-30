@@ -208,6 +208,18 @@ class TextSplitterTest {
                 assertThat(c.getSectionPath()).doesNotContain(" /  / ");
             });
         }
+
+        @Test
+        @DisplayName("TC-SPLIT-015 默认切片长度不得超过本地 embedding 的安全上限")
+        void defaultChunksFitEmbeddingLimit() {
+            String text = "# 长文档\n" + "中文运维说明".repeat(300);
+
+            List<TextSplitter.TextChunk> chunks = new TextSplitter().split(text, "长文档");
+
+            assertThat(chunks).isNotEmpty();
+            assertThat(chunks).allSatisfy(chunk ->
+                    assertThat(chunk.getContent().length()).isLessThanOrEqualTo(300));
+        }
     }
 
     @Nested

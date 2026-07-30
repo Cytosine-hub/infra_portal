@@ -185,7 +185,27 @@ public class MilvusVectorStore implements VectorStore {
 
     @Override
     public void add(String id, float[] vector, Map<String, String> metadata) {
-        Map<String, String> meta = metadata == null ? Collections.emptyMap() : metadata;
+        addAll(Collections.singletonList(new VectorRecord(id, vector, metadata)));
+    }
+
+    @Override
+    public void addAll(List<VectorRecord> records) {
+        if (records.isEmpty()) {
+            return;
+        }
+        List<JsonObject> rows = records.stream()
+                .map(this::toRow)
+                .toList();
+        client.upsert(UpsertReq.builder()
+                .collectionName(config.getVectorCollection())
+                .data(rows)
+                .build());
+    }
+
+    private JsonObject toRow(VectorRecord record) {
+        Map<String, String> meta = record.metadata() == null
+                ? Collections.emptyMap()
+                : record.metadata();
         // 正文搬到独立的 text 列：既作为 BM25 输入，也不再受 metadata 的 4096 字节限制
         String text = truncate(meta.getOrDefault(CONTENT_KEY, ""), TEXT_MAX_LENGTH);
 
@@ -193,19 +213,14 @@ public class MilvusVectorStore implements VectorStore {
         rest.remove(CONTENT_KEY);
 
         JsonObject row = new JsonObject();
-        row.addProperty(ID_FIELD, id);
-        row.add(VECTOR_FIELD, GSON.toJsonTree(toBoxed(vector)));
+        row.addProperty(ID_FIELD, record.id());
+        row.add(VECTOR_FIELD, GSON.toJsonTree(toBoxed(record.vector())));
         row.addProperty(TEXT_FIELD, text);
         row.addProperty(META_FIELD, fitMetadata(rest));
         for (String field : SCALAR_FIELDS) {
             row.addProperty(field, truncate(meta.getOrDefault(toMetaKey(field), ""), SCALAR_MAX_LENGTH));
         }
-
-        // upsert 而非 insert：同一切片重新导入时按主键覆盖，不残留旧数据
-        client.upsert(UpsertReq.builder()
-                .collectionName(config.getVectorCollection())
-                .data(Collections.singletonList(row))
-                .build());
+        return row;
     }
 
     @Override
@@ -279,6 +294,29 @@ public class MilvusVectorStore implements VectorStore {
                 .filter(filter)
                 .build());
         log.debug("已按来源删除向量 {}", filter);
+    }
+
+    @Override
+    public void deleteBySourceExcept(String sourceType, Long sourceId, Set<String> retainedIds) {
+        if (sourceType == null || sourceId == null || retainedIds == null) {
+            return;
+        }
+        if (retainedIds.isEmpty()) {
+            deleteBySource(sourceType, sourceId);
+            return;
+        }
+        String retainedIdExpression = retainedIds.stream()
+                .map(MilvusVectorStore::quote)
+                .collect(java.util.stream.Collectors.joining(","));
+        String filter = SOURCE_TYPE_FIELD + " == " + quote(sourceType)
+                + " and " + SOURCE_ID_FIELD + " == " + quote(String.valueOf(sourceId))
+                + " and " + ID_FIELD + " not in [" + retainedIdExpression + "]";
+        client.delete(DeleteReq.builder()
+                .collectionName(config.getVectorCollection())
+                .filter(filter)
+                .build());
+        log.debug("已清理来源的过期向量 sourceType={} sourceId={} retained={}",
+                sourceType, sourceId, retainedIds.size());
     }
 
     @Override

@@ -17,7 +17,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,7 +41,7 @@ public class TroubleshootAgent {
             "必须遵守：\n" +
             "1. 优先基于提供的内部知识库内容回答，不要编造内部标准、参数、流程或版本信息。\n" +
             "2. 如果上下文来自 Wiki，引用时标注【Wiki：页面标题】；如果上下文来自知识库文档，引用时标注【知识库：来源标题】。\n" +
-            "3. 如果知识库中完全没有相关信息，明确告知用户：'知识库中未找到相关内容，无法给出基于内部知识库的结论'。\n" +
+            "3. 如果知识库中完全没有相关信息，明确告知用户：'知识库中未找到足够相关的内容，无法给出基于内部知识库的结论。'\n" +
             "4. 只有用户问题明显是故障、告警或线上异常排查时，才使用'问题诊断、排查步骤、解决方案'结构。\n" +
             "5. 对介绍、说明、是什么、有哪些、如何配置、使用场景等知识问答类问题，按'概述、关键能力/配置要点、适用场景、参考来源'组织，不要输出问题诊断。\n" +
             "6. 如果确需补充通用知识，只能放在'通用补充'中，并明确不是内部知识库依据。";
@@ -50,29 +50,34 @@ public class TroubleshootAgent {
     private static final int DEFAULT_SEARCH_TOP_K = 5;
     private static final int MAX_RETRIES = 5;
     private static final int MAX_CONTEXT_CHARS = 6000;
+    private static final String NO_RELIABLE_CONTEXT_ANSWER =
+            "知识库中未找到足够相关的内容，无法给出基于内部知识库的结论。";
     private static final Pattern TROUBLESHOOTING_INTENT = Pattern.compile(
             ".*(故障|报错|错误|异常|失败|超时|无法|不能|卡顿|变慢|宕机|不可用|告警|报警|排查|诊断|根因|恢复|重启|连接池|CPU|cpu|内存|OOM|oom|磁盘|日志).*");
 
     private final ChatModel chatModel;
     private final OpenAiStreamClient streamClient;
-
-    @Autowired
-    private KnowledgeSearchPort knowledgeService;
-
-    @Autowired(required = false)
-    private WikiSearchPort wikiSearchService;
-
-    @Autowired
-    private ChatSessionMapper chatSessionMapper;
-
-    @Autowired
-    private ChatMessageMapper chatMessageMapper;
-
+    private final KnowledgeSearchPort knowledgeService;
+    private final WikiSearchPort wikiSearchService;
+    private final ChatSessionMapper chatSessionMapper;
+    private final ChatMessageMapper chatMessageMapper;
+    private final RetrievalEvidenceFilter evidenceFilter;
     private final Gson gson = new Gson();
 
-    public TroubleshootAgent(ChatModel chatModel, OpenAiStreamClient streamClient) {
+    public TroubleshootAgent(ChatModel chatModel,
+                             OpenAiStreamClient streamClient,
+                             KnowledgeSearchPort knowledgeService,
+                             ObjectProvider<WikiSearchPort> wikiSearchServiceProvider,
+                             ChatSessionMapper chatSessionMapper,
+                             ChatMessageMapper chatMessageMapper,
+                             RetrievalEvidenceFilter evidenceFilter) {
         this.chatModel = chatModel;
         this.streamClient = streamClient;
+        this.knowledgeService = knowledgeService;
+        this.wikiSearchService = wikiSearchServiceProvider.getIfAvailable();
+        this.chatSessionMapper = chatSessionMapper;
+        this.chatMessageMapper = chatMessageMapper;
+        this.evidenceFilter = evidenceFilter;
     }
 
     /**
@@ -107,6 +112,9 @@ public class TroubleshootAgent {
     public AgentResponse chat(Long sessionId, String userMessage, Consumer<String> onRetry,
                               Authentication authentication) {
         ChatContext context = prepareChatContext(sessionId, userMessage, authentication);
+        if (!context.hasReliableEvidence()) {
+            return answerWithoutModel(sessionId, context, null);
+        }
 
         // 4. Call LLM (with retry)
         log.info("Calling LLM for session {}, message count: {}", sessionId, context.messages().size());
@@ -148,6 +156,9 @@ public class TroubleshootAgent {
     public AgentResponse chatStream(Long sessionId, String userMessage, Consumer<String> onRetry,
                                     Consumer<String> onDelta, Authentication authentication) {
         ChatContext context = prepareChatContext(sessionId, userMessage, authentication);
+        if (!context.hasReliableEvidence()) {
+            return answerWithoutModel(sessionId, context, onDelta);
+        }
         AtomicBoolean deltaSent = new AtomicBoolean(false);
         try {
             log.info("Calling streaming LLM for session {}, message count: {}", sessionId, context.messages().size());
@@ -219,6 +230,14 @@ public class TroubleshootAgent {
         chatMessageMapper.insert(assistantMsg);
     }
 
+    private AgentResponse answerWithoutModel(Long sessionId, ChatContext context, Consumer<String> onDelta) {
+        if (onDelta != null) {
+            onDelta.accept(NO_RELIABLE_CONTEXT_ANSWER);
+        }
+        saveAssistantMessage(sessionId, NO_RELIABLE_CONTEXT_ANSWER, context.references());
+        return new AgentResponse(NO_RELIABLE_CONTEXT_ANSWER, context.references());
+    }
+
     /**
      * Get all messages for a session.
      */
@@ -277,10 +296,14 @@ public class TroubleshootAgent {
         }
 
         List<KnowledgeSearchResult> searchResults = knowledgeService.search(userMessage, DEFAULT_SEARCH_TOP_K);
+        RetrievalEvidenceFilter.EvidenceSelection evidence =
+                evidenceFilter.select(userMessage, wikiResults, searchResults);
+        wikiResults = evidence.wikiResults();
+        searchResults = evidence.knowledgeResults();
         List<Map<String, Object>> references = buildReferences(wikiResults, searchResults);
         String contextMessage = buildHybridContextMessage(userMessage, wikiResults, searchResults);
         List<ChatMessage> messages = buildMessages(sessionId, contextMessage);
-        return new ChatContext(messages, references);
+        return new ChatContext(messages, references, evidence.hasReliableEvidence());
     }
 
     private List<Map<String, Object>> buildReferences(List<WikiSearchResult> wikiResults,
@@ -422,6 +445,8 @@ public class TroubleshootAgent {
         }
     }
 
-    private record ChatContext(List<ChatMessage> messages, List<Map<String, Object>> references) {
+    private record ChatContext(List<ChatMessage> messages,
+                               List<Map<String, Object>> references,
+                               boolean hasReliableEvidence) {
     }
 }

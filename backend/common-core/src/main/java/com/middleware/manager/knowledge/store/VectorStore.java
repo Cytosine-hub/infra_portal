@@ -2,10 +2,17 @@ package com.middleware.manager.knowledge.store;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public interface VectorStore {
 
     void add(String id, float[] vector, Map<String, String> metadata);
+
+    default void addAll(List<VectorRecord> records) {
+        for (VectorRecord record : records) {
+            add(record.id(), record.vector(), record.metadata());
+        }
+    }
 
     List<VectorSearchResult> search(float[] queryVector, int topK);
 
@@ -42,9 +49,19 @@ public interface VectorStore {
     default void deleteBySource(String sourceType, Long sourceId) {
     }
 
+    /**
+     * 删除某来源中已不属于当前版本的切片。调用方应先完整写入当前版本，避免更新失败时
+     * 提前破坏旧索引。默认实现为空操作，不支持条件删除的实现可保留少量旧切片。
+     */
+    default void deleteBySourceExcept(String sourceType, Long sourceId, Set<String> retainedIds) {
+    }
+
     void createCollection();
 
     long count();
+
+    record VectorRecord(String id, float[] vector, Map<String, String> metadata) {
+    }
 
     class VectorSearchResult {
         private String id;
