@@ -38,17 +38,21 @@ public class RetrievalEvidenceFilter {
         String aggregate = aggregateText(safeWiki, safeKnowledge);
         Set<String> technicalTokens = technicalTokens(query);
         Set<String> chineseBigrams = chineseBigrams(query);
-        boolean technicalCovered = technicalTokens.isEmpty()
-                || technicalTokens.stream().allMatch(token -> containsIgnoreCase(aggregate, token));
-        double chineseCoverage = coverage(chineseBigrams, aggregate);
-        boolean chineseCovered = chineseBigrams.isEmpty() || chineseCoverage >= MIN_CHINESE_COVERAGE;
-        boolean reliable = (!technicalTokens.isEmpty() || !chineseBigrams.isEmpty())
-                && technicalCovered && chineseCovered;
 
-        if (!reliable) {
+        // 入口只拦「确定无证据」这一种情形：问题里点名了技术标识，而全部上下文里
+        // 一个都没出现。此时无论如何都答不了，直接拒答省掉一次模型调用。
+        // 用 any 而非 all：跨文档比较类问题（如「Nginx 和 F5 的差异」）只召回其中
+        // 一方时，部分回答仍然有价值，不该整体拒答。
+        boolean technicalEvidenceMissing = !technicalTokens.isEmpty()
+                && technicalTokens.stream().noneMatch(token -> containsIgnoreCase(aggregate, token));
+        if (technicalEvidenceMissing) {
             return new EvidenceSelection(List.of(), List.of(), false);
         }
 
+        // 不再用「聚合文本的中文覆盖率」做整体否决。词法重合度无法区分
+        // 「同义不同词」（应放行）与「同词不同题」（应拒绝），拿它当否决条件会把
+        // 稠密向量检索的核心收益抵消掉。可靠性改由「是否还剩下相关条目」判定，
+        // 编造内容则交给出口侧的 AnswerGroundingVerifier 拦截。
         List<WikiSearchResult> filteredWiki = safeWiki.stream()
                 .filter(result -> itemRelevant(wikiText(result), technicalTokens, chineseBigrams))
                 .toList();

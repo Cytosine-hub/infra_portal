@@ -39,7 +39,7 @@ class TroubleshootAgentTest {
 
         TroubleshootAgent agent = new TroubleshootAgent(
                 chatModel, streamClient, knowledgeService, wikiProvider,
-                sessionMapper, messageMapper, new RetrievalEvidenceFilter());
+                sessionMapper, messageMapper, new RetrievalEvidenceFilter(), new AnswerGroundingVerifier());
 
         TroubleshootAgent.AgentResponse response = agent.chat(1L, "ORA-01555 怎么处理");
 

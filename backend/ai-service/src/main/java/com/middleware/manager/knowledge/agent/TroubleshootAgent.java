@@ -62,6 +62,7 @@ public class TroubleshootAgent {
     private final ChatSessionMapper chatSessionMapper;
     private final ChatMessageMapper chatMessageMapper;
     private final RetrievalEvidenceFilter evidenceFilter;
+    private final AnswerGroundingVerifier groundingVerifier;
     private final Gson gson = new Gson();
 
     public TroubleshootAgent(ChatModel chatModel,
@@ -70,7 +71,8 @@ public class TroubleshootAgent {
                              ObjectProvider<WikiSearchPort> wikiSearchServiceProvider,
                              ChatSessionMapper chatSessionMapper,
                              ChatMessageMapper chatMessageMapper,
-                             RetrievalEvidenceFilter evidenceFilter) {
+                             RetrievalEvidenceFilter evidenceFilter,
+                             AnswerGroundingVerifier groundingVerifier) {
         this.chatModel = chatModel;
         this.streamClient = streamClient;
         this.knowledgeService = knowledgeService;
@@ -78,6 +80,7 @@ public class TroubleshootAgent {
         this.chatSessionMapper = chatSessionMapper;
         this.chatMessageMapper = chatMessageMapper;
         this.evidenceFilter = evidenceFilter;
+        this.groundingVerifier = groundingVerifier;
     }
 
     /**
@@ -145,7 +148,7 @@ public class TroubleshootAgent {
             throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
         }
 
-        String answer = response.aiMessage() != null ? response.aiMessage().text() : "";
+        String answer = finalizeAnswer(context, response.aiMessage() != null ? response.aiMessage().text() : "");
         saveAssistantMessage(sessionId, answer, context.references());
 
         // 6. Return response
@@ -169,6 +172,7 @@ public class TroubleshootAgent {
             if (answer.isBlank()) {
                 throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
             }
+            answer = finalizeAnswer(context, answer);
             saveAssistantMessage(sessionId, answer, context.references());
             return new AgentResponse(answer, context.references());
         } catch (BusinessException e) {
@@ -216,9 +220,30 @@ public class TroubleshootAgent {
             }
             throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
         }
-        String answer = response.aiMessage() != null ? response.aiMessage().text() : "";
+        String answer = finalizeAnswer(context, response.aiMessage() != null ? response.aiMessage().text() : "");
         saveAssistantMessage(sessionId, answer, context.references());
         return new AgentResponse(answer, context.references());
+    }
+
+    /**
+     * 出口侧防幻觉：核对答案中的技术标识是否在检索上下文或用户问题里有据可查。
+     * <p>不改写正文、也不整体丢弃——多数情况下答案的主体是对的，只是掺入了个别
+     * 编造的参数名或错误码。把这些标识显式列出来交给用户判断，比悄悄给出看似
+     * 专业的错误建议要安全，也比一律拒答有用。
+     */
+    private String finalizeAnswer(ChatContext context, String answer) {
+        if (answer == null || answer.isBlank()) {
+            return answer;
+        }
+        AnswerGroundingVerifier.GroundingResult result =
+                groundingVerifier.verify(context.userMessage(), answer, context.evidenceText());
+        if (result.grounded()) {
+            return answer;
+        }
+        log.warn("答案包含无出处的技术标识 tokens={} question={}",
+                result.ungroundedTokens(), context.userMessage());
+        return answer + "\n\n---\n⚠️ 以下内容未能在知识库中找到依据，请人工核实："
+                + String.join("、", result.ungroundedTokens());
     }
 
     private void saveAssistantMessage(Long sessionId, String answer, List<Map<String, Object>> references) {
@@ -303,7 +328,9 @@ public class TroubleshootAgent {
         List<Map<String, Object>> references = buildReferences(wikiResults, searchResults);
         String contextMessage = buildHybridContextMessage(userMessage, wikiResults, searchResults);
         List<ChatMessage> messages = buildMessages(sessionId, contextMessage);
-        return new ChatContext(messages, references, evidence.hasReliableEvidence());
+        // contextMessage 即拼给模型的证据原文，出口校验据此判断答案有无出处
+        return new ChatContext(messages, references, evidence.hasReliableEvidence(),
+                userMessage, contextMessage);
     }
 
     private List<Map<String, Object>> buildReferences(List<WikiSearchResult> wikiResults,
@@ -447,6 +474,8 @@ public class TroubleshootAgent {
 
     private record ChatContext(List<ChatMessage> messages,
                                List<Map<String, Object>> references,
-                               boolean hasReliableEvidence) {
+                               boolean hasReliableEvidence,
+                               String userMessage,
+                               String evidenceText) {
     }
 }

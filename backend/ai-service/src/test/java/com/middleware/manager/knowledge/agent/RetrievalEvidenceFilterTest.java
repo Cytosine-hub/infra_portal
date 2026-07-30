@@ -34,11 +34,16 @@ class RetrievalEvidenceFilterTest {
     }
 
     @Test
-    @DisplayName("TC-RAG-003 中文关键短语覆盖不足时必须拒绝无关上下文")
-    void rejectsWeakChineseOverlap() {
+    @DisplayName("TC-RAG-003 完全无关的上下文必须拒绝")
+    void rejectsUnrelatedContext() {
+        // 设计变更说明：原用例断言「弱词法重合」（共享「数据库」二字的备份文档）也要拒答。
+        // 但同一条词法规则会连带误杀「用户口语提问命中技术表述」这类语义检索的正常收益
+        // （见 EvidenceGateRecallTest），而词法重合度无法区分「同义不同词」与「同词不同题」。
+        // 因此入口只保留「完全无关」这个确定性边界，弱相关放行后由出口侧
+        // AnswerGroundingVerifier 拦截编造内容。
         RetrievalEvidenceFilter.EvidenceSelection selection = filter.select(
                 "数据库连接池满了怎么办", List.of(),
-                List.of(result("数据库变更", "登录数据库执行备份 SQL")));
+                List.of(result("机房环境标准", "空调温度设置为 22 度，湿度保持 45%")));
 
         assertThat(selection.hasReliableEvidence()).isFalse();
     }
