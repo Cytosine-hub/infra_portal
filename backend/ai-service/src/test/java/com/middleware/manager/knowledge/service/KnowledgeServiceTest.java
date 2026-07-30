@@ -52,7 +52,7 @@ class KnowledgeServiceTest {
     }
 
     @Test
-    @DisplayName("TC-KNOWLEDGE-001 embedding 失败时应删除已存文件且不创建来源记录")
+    @DisplayName("TC-KNOWLEDGE-IMPORT-001 embedding 失败时应删除已存文件且不创建来源记录")
     void cleansStoredFileWhenEmbeddingFails() throws Exception {
         MockMultipartFile file = file("manual.pdf");
         when(storageService.store(file, "knowledge")).thenReturn(stored("knowledge/manual.pdf"));
@@ -67,7 +67,7 @@ class KnowledgeServiceTest {
     }
 
     @Test
-    @DisplayName("TC-KNOWLEDGE-002 向量写入失败时应补偿删除新来源、向量和文件")
+    @DisplayName("TC-KNOWLEDGE-IMPORT-002 向量写入失败时应补偿删除新来源、向量和文件")
     void compensatesNewSourceWhenVectorWriteFails() throws Exception {
         MockMultipartFile file = file("manual.pdf");
         when(storageService.store(file, "knowledge")).thenReturn(stored("knowledge/manual.pdf"));
@@ -90,7 +90,7 @@ class KnowledgeServiceTest {
     }
 
     @Test
-    @DisplayName("TC-KNOWLEDGE-003 相同正文的不同标准必须创建独立来源")
+    @DisplayName("TC-KNOWLEDGE-IMPORT-003 相同正文的不同标准必须创建独立来源")
     void keepsDifferentStandardsSeparateWhenContentMatches() {
         AtomicLong ids = new AtomicLong(100);
         AtomicReference<WikiSource> firstInserted = new AtomicReference<>();
@@ -112,7 +112,7 @@ class KnowledgeServiceTest {
     }
 
     @Test
-    @DisplayName("TC-KNOWLEDGE-004 只有标题而没有正文的上传应失败并清理文件")
+    @DisplayName("TC-KNOWLEDGE-IMPORT-004 只有标题而没有正文的上传应失败并清理文件")
     void rejectsUploadThatProducesNoChunks() throws Exception {
         MockMultipartFile file = file("empty.md");
         when(storageService.store(file, "knowledge")).thenReturn(stored("knowledge/empty.md"));
@@ -129,7 +129,7 @@ class KnowledgeServiceTest {
     }
 
     @Test
-    @DisplayName("TC-KNOWLEDGE-005 零切片标准应清理历史来源和向量")
+    @DisplayName("TC-KNOWLEDGE-IMPORT-005 零切片标准应清理历史来源和向量")
     void removesStaleSourceWhenStandardProducesNoChunks() {
         ParameterStandard standard = standard(3L, "空标准");
         standard.setContent("# 参数标准\n");
@@ -147,7 +147,7 @@ class KnowledgeServiceTest {
     }
 
     @Test
-    @DisplayName("TC-KNOWLEDGE-006 同名文档更新成功后应删除被替换的旧文件")
+    @DisplayName("TC-KNOWLEDGE-IMPORT-006 同名文档更新成功后应删除被替换的旧文件")
     void deletesReplacedFileAfterSuccessfulUpdate() throws Exception {
         MockMultipartFile file = file("manual.pdf");
         when(storageService.store(file, "knowledge")).thenReturn(stored("knowledge/new.pdf"));
@@ -167,7 +167,7 @@ class KnowledgeServiceTest {
     }
 
     @Test
-    @DisplayName("TC-KNOWLEDGE-007 同名文档更新失败时必须保留旧向量和旧文件")
+    @DisplayName("TC-KNOWLEDGE-IMPORT-007 同名文档更新失败时必须保留旧向量和旧文件")
     void keepsExistingDocumentWhenReplacementVectorWriteFails() throws Exception {
         MockMultipartFile file = file("manual.pdf");
         when(storageService.store(file, "knowledge")).thenReturn(stored("knowledge/new.pdf"));
