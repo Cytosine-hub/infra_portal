@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.middleware.manager.knowledge.service.KnowledgeService;
+import com.middleware.manager.knowledge.service.StandardIndexSyncService;
+import com.middleware.manager.security.PermissionService;
 import com.middleware.manager.service.StorageService;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,7 +16,6 @@ import org.mockito.MockitoAnnotations;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
-import org.springframework.test.util.ReflectionTestUtils;
 
 class KnowledgeControllerTest {
 
@@ -24,14 +25,19 @@ class KnowledgeControllerTest {
     @Mock
     private StorageService storageService;
 
+    @Mock
+    private StandardIndexSyncService standardIndexSyncService;
+
+    @Mock
+    private PermissionService permissionService;
+
     private KnowledgeController controller;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        controller = new KnowledgeController();
-        ReflectionTestUtils.setField(controller, "knowledgeService", knowledgeService);
-        ReflectionTestUtils.setField(controller, "storageService", storageService);
+        controller = new KnowledgeController(knowledgeService, storageService,
+                standardIndexSyncService, permissionService);
     }
 
     @Test

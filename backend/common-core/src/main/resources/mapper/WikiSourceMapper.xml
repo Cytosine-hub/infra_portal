@@ -61,4 +61,8 @@
         SELECT COUNT(*) FROM wiki_sources WHERE ingested = #{ingested}
     </select>
 
+
+    <select id="findAllByType" resultMap="wikiSourceResultMap">
+        SELECT * FROM wiki_sources WHERE source_type = #{sourceType} ORDER BY id
+    </select>
 </mapper>

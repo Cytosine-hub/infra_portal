@@ -57,13 +57,12 @@ public class WikiPermissionService {
             // VISIBLE: fall through to default category-based check
         }
 
-        // Default: use category-based access
-        String category = page.getCategory();
-        if (category == null || category.isBlank()) {
-            // Pages without category are visible to all authenticated users
-            return true;
-        }
-        return permissionService.canManageCategory(auth, category);
+        // 默认：已认证用户均可查看。
+        // 运维排查天然跨域——数据库慢可能是主机 IO 或网络丢包——按岗位隔离读权限
+        // 会直接废掉跨域排查能力。敏感内容用页面级 RESTRICTED / HIDDEN 单独收口，
+        // 写权限（编辑、发布、改分类）仍按岗位限制。
+        // SecurityConfig 的 anyRequest().authenticated() 已保证请求经过认证，此处只需非空
+        return auth != null;
     }
 
     /**

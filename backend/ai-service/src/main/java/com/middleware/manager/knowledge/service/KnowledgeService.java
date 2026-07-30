@@ -50,6 +50,20 @@ public class KnowledgeService implements KnowledgeSearchPort {
         this.wikiSourceMapper = wikiSourceMapper;
     }
 
+    /**
+     * 把一篇已发布的参数标准写入索引。由 StandardIndexSyncService 对账时调用，
+     * 不再提供人工「导入」入口——人工导入会产生标准的静态副本，标准更新后必然腐烂。
+     */
+    public ImportResult indexStandard(com.middleware.manager.domain.ParameterStandard standard) {
+        String sourceTitle = standard.getTitle();
+        String content = standard.getContent();
+        List<TextSplitter.TextChunk> chunks = textSplitter.split(content, sourceTitle);
+        WikiSource source = upsertSource(sourceTitle, "STANDARD_DOC", null, content,
+                standard.getCategory(), standard.getSoftware(), null);
+        return persistVectors(chunks, source.getId(), "STANDARD_DOC",
+                standard.getCategory(), standard.getSoftware(), null);
+    }
+
     public ImportResult importFile(MultipartFile file) throws Exception {
         String fileName = file.getOriginalFilename();
         DocumentLoader loader = resolveLoader(fileName);

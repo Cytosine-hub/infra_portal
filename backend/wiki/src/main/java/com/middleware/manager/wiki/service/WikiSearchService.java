@@ -291,7 +291,9 @@ public class WikiSearchService implements WikiSearchPort {
                 float[] queryVec = embeddingService.embed(query);
                 log.debug("Vector search (attempt {}): query='{}', dim={}, topK={}", attempt, query, queryVec.length, topK * 2);
                 VectorSearchFilter filter = VectorSearchFilter.none().addSource("wiki_source");
-                List<VectorStore.VectorSearchResult> vecResults = vectorStore.search(queryVec, topK * 2, filter);
+                // 与知识库检索一致走混合检索：参数名、错误码这类精确 token 稠密向量召不回
+                List<VectorStore.VectorSearchResult> vecResults =
+                        vectorStore.hybridSearch(query, queryVec, topK * 2, filter);
                 log.debug("Vector search returned {} results", vecResults.size());
                 List<WikiPage> pages = new ArrayList<>();
                 Set<Long> added = new HashSet<>();

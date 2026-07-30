@@ -9,7 +9,6 @@ import com.middleware.manager.service.StorageService;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.sax.ToXMLContentHandler;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -30,6 +29,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.middleware.manager.knowledge.service.StandardIndexSyncService;
+import com.middleware.manager.security.PermissionService;
+import org.springframework.security.core.Authentication;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
@@ -37,11 +39,20 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class KnowledgeController {
 
-    @Autowired
-    private KnowledgeService knowledgeService;
+    private final KnowledgeService knowledgeService;
+    private final StorageService storageService;
+    private final StandardIndexSyncService standardIndexSyncService;
+    private final PermissionService permissionService;
 
-    @Autowired
-    private StorageService storageService;
+    public KnowledgeController(KnowledgeService knowledgeService,
+                               StorageService storageService,
+                               StandardIndexSyncService standardIndexSyncService,
+                               PermissionService permissionService) {
+        this.knowledgeService = knowledgeService;
+        this.storageService = storageService;
+        this.standardIndexSyncService = standardIndexSyncService;
+        this.permissionService = permissionService;
+    }
 
     /**
      * POST /api/knowledge/upload
@@ -64,6 +75,18 @@ public class KnowledgeController {
      * GET /api/knowledge/search?q=xxx&topK=5
      * Search the knowledge base.
      */
+    /**
+     * 触发参数标准 → 知识库索引的对账。标准发布后由启动对账或此端点同步，
+     * 不提供人工「导入」入口（导入会产生会腐烂的静态副本）。
+     */
+    @PostMapping("/sync-standards")
+    public ResponseEntity<StandardIndexSyncService.SyncReport> syncStandards(Authentication authentication) {
+        if (!permissionService.isAdmin(authentication)) {
+            return ResponseEntity.status(403).build();
+        }
+        return ResponseEntity.ok(standardIndexSyncService.sync());
+    }
+
     @GetMapping("/search")
     public ResponseEntity<?> search(
             @RequestParam String q,

@@ -9,6 +9,9 @@ import java.util.List;
 @Mapper
 public interface WikiSourceMapper {
 
+    /** 按来源类型列出，用于索引对账。 */
+    List<WikiSource> findAllByType(@Param("sourceType") String sourceType);
+
     WikiSource findById(@Param("id") Long id);
 
     WikiSource findByContentHash(@Param("contentHash") String contentHash);

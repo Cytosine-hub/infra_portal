@@ -108,8 +108,10 @@ class WikiPermissionServiceTest {
         }
 
         @Test
-        @DisplayName("VISIBLE 页面回退到分类权限检查")
-        void visiblePageFallsBackToCategory() {
+        @DisplayName("VISIBLE 页面对所有岗位开放，不再按分类隔离读权限")
+        void visiblePageIsOpenToAllRoles() {
+            // 运维排查天然跨域，按岗位隔离读权限会废掉跨域排查能力。
+            // 敏感内容改用页面级 RESTRICTED / HIDDEN 收口，写权限仍按岗位限制。
             when(permissionService.isAdmin(authentication)).thenReturn(false);
 
             WikiPagePermission perm = new WikiPagePermission();
@@ -118,11 +120,8 @@ class WikiPermissionServiceTest {
 
             WikiPage page = createPage(1L, "中间件");
 
-            when(permissionService.canManageCategory(authentication, "中间件")).thenReturn(true);
-            assertTrue(wikiPermissionService.canView(authentication, page));
-
             when(permissionService.canManageCategory(authentication, "中间件")).thenReturn(false);
-            assertFalse(wikiPermissionService.canView(authentication, page));
+            assertTrue(wikiPermissionService.canView(authentication, page));
         }
     }
 

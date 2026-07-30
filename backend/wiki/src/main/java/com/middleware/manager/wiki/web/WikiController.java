@@ -166,7 +166,13 @@ public class WikiController {
     }
 
     @PutMapping("/pages-batch-category")
-    public ResponseEntity<Void> batchUpdateCategory(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<Void> batchUpdateCategory(@RequestBody Map<String, Object> body,
+                                                    Authentication authentication) {
+        // 分类是权限边界（写权限按 category 判定），改分类等于改归属，必须是管理岗
+        if (!wikiPermissionService.isAdmin(authentication)
+                && wikiPermissionService.getManagedCategory(authentication) == null) {
+            return ResponseEntity.status(403).build();
+        }
         List<?> ids = (List<?>) body.get("ids");
         String category = (String) body.get("category");
         String software = (String) body.get("software");
@@ -407,13 +413,8 @@ public class WikiController {
 
     @GetMapping("/sources")
     public List<WikiSource> listSources(Authentication authentication) {
-        List<WikiSource> sources = sourceMapper.findAll();
-        if (authentication == null || wikiPermissionService.isAdmin(authentication)) return sources;
-        String category = wikiPermissionService.getManagedCategory(authentication);
-        if (category == null) return Collections.emptyList();
-        return sources.stream()
-                .filter(source -> source.getCategory() == null || category.equals(source.getCategory()))
-                .toList();
+        // 原始文档对所有已认证用户开放，与经验页面的查看权限保持一致
+        return sourceMapper.findAll();
     }
 
     // --- Lint endpoints ---
