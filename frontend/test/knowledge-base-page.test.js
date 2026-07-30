@@ -1,0 +1,269 @@
+// @vitest-environment jsdom
+// 知识库合并页 —— KnowledgePanel + WikiPanel 合并为单页 5 标签
+// 验收用例 TC-KB-001 ~ TC-KB-014
+//
+// 这组用例针对的是 code review 抓到、而构建不会报错的那一类缺陷：
+//   1. 插槽名不匹配 —— 内容静默不渲染（Toolbar 只有 #filters/#actions，无默认插槽）
+//   2. 字段名不匹配 —— 接口通了但界面空白（如后端返回 chunks，前端读 content）
+// 因此断言集中在「操作区确实渲染出来」与「按后端真实返回结构取值」两点。
+
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+
+import KnowledgeBasePage from '../src/components/KnowledgeBasePage.vue'
+import SearchTab from '../src/components/knowledge/SearchTab.vue'
+import DocumentsTab from '../src/components/knowledge/DocumentsTab.vue'
+import ExperienceTab from '../src/components/knowledge/ExperienceTab.vue'
+import HealthTab from '../src/components/knowledge/HealthTab.vue'
+import * as api from '../src/api.js'
+
+const mounted = []
+
+function mountTab(component, props = {}) {
+  const wrapper = mount(component, {
+    props: { notify: vi.fn(), confirm: vi.fn(), ...props }
+  })
+  mounted.push(wrapper)
+  return wrapper
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks()
+})
+
+afterEach(() => {
+  while (mounted.length) mounted.pop().unmount()
+  document.body.innerHTML = ''
+})
+
+describe('页面骨架', () => {
+  test('TC-KB-001 应渲染检索/文档/经验沉淀/图谱/健康度五个标签', () => {
+    vi.spyOn(api, 'request').mockResolvedValue([])
+    const wrapper = mountTab(KnowledgeBasePage)
+
+    const text = wrapper.text()
+    for (const label of ['检索', '文档', '经验沉淀', '图谱', '健康度']) {
+      expect(text).toContain(label)
+    }
+  })
+
+  test('TC-KB-002 默认停留在检索标签', () => {
+    vi.spyOn(api, 'request').mockResolvedValue([])
+    const wrapper = mountTab(KnowledgeBasePage)
+
+    expect(wrapper.findComponent(SearchTab).exists()).toBe(true)
+    expect(wrapper.findComponent(DocumentsTab).exists()).toBe(false)
+  })
+})
+
+describe('检索标签', () => {
+  test('TC-KB-003 工具栏内容必须真实渲染（Toolbar 无默认插槽，放错插槽会静默消失）', () => {
+    const wrapper = mountTab(SearchTab)
+
+    expect(wrapper.find('input').exists()).toBe(true)
+    expect(wrapper.text()).toContain('检索')
+  })
+
+  test('TC-KB-004 应并行检索文档切片与经验页面，并按来源分别标注', async () => {
+    const request = vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path.startsWith('/api/knowledge/search')) {
+        return [{ sourceTitle: 'MySQL标准', sectionPath: 'MySQL / 应急处理', content: '主从延迟处理', score: 0.83 }]
+      }
+      return [{ title: '连接池耗尽', summary: '经验总结', pageType: 'EXPERIENCE' }]
+    })
+
+    const wrapper = mountTab(SearchTab)
+    await wrapper.find('input').setValue('主从延迟')
+    await wrapper.findAll('button').at(-1).trigger('click')
+    await flushPromises()
+
+    const calls = request.mock.calls.map(([path]) => path)
+    expect(calls.some(p => p.startsWith('/api/knowledge/search'))).toBe(true)
+    expect(calls.some(p => p.startsWith('/api/knowledge/pages/search'))).toBe(true)
+
+    const text = wrapper.text()
+    expect(text).toContain('MySQL标准')
+    expect(text).toContain('连接池耗尽')
+  })
+
+  test('TC-KB-005 应展示 sectionPath 面包屑（切片层改造的可见产出）', async () => {
+    vi.spyOn(api, 'request').mockImplementation(async (path) =>
+      path.startsWith('/api/knowledge/search')
+        ? [{ sourceTitle: 'PG标准', sectionPath: 'PostgreSQL / 应急处理 / 连接数耗尽', content: '调整 max_connections' }]
+        : [])
+
+    const wrapper = mountTab(SearchTab)
+    await wrapper.find('input').setValue('连接数')
+    await wrapper.findAll('button').at(-1).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('PostgreSQL / 应急处理 / 连接数耗尽')
+  })
+
+  test('TC-KB-006 一路检索失败不应拖垮另一路', async () => {
+    vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path.startsWith('/api/knowledge/search')) throw new Error('向量库不可用')
+      return [{ title: '仍然可见的经验页' }]
+    })
+
+    const wrapper = mountTab(SearchTab)
+    await wrapper.find('input').setValue('任意')
+    await wrapper.findAll('button').at(-1).trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('仍然可见的经验页')
+  })
+})
+
+describe('文档标签', () => {
+  const SOURCES = [{ id: 7, title: 'MySQL运维手册.pdf', sourceType: 'UPLOAD', category: '数据库', software: 'MySQL' }]
+
+  test('TC-KB-007 隐藏的文件输入框必须存在，否则上传按钮点了没反应', async () => {
+    vi.spyOn(api, 'request').mockResolvedValue(SOURCES)
+    const wrapper = mountTab(DocumentsTab)
+    await flushPromises()
+
+    expect(wrapper.find('input[type="file"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('上传文档')
+  })
+
+  test('TC-KB-008 应列出源文档并把来源类型显示为中文', async () => {
+    vi.spyOn(api, 'request').mockResolvedValue(SOURCES)
+    const wrapper = mountTab(DocumentsTab)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('MySQL运维手册.pdf')
+    expect(wrapper.text()).toContain('上传')
+  })
+
+  test('TC-KB-009 预览应按后端真实结构读取 chunks 而非 content', async () => {
+    vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path.startsWith('/api/knowledge/docs/preview')) {
+        return { title: 'MySQL运维手册.pdf', totalChunks: 2, chunks: [{ chunkIndex: 0, content: '第一片内容' }, { chunkIndex: 1, content: '第二片内容' }] }
+      }
+      return SOURCES
+    })
+
+    const wrapper = mountTab(DocumentsTab)
+    await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === '预览').trigger('click')
+    await flushPromises()
+
+    // BaseModal 用 Teleport to="body"，弹窗内容不在 wrapper 内
+    const text = document.body.textContent
+    expect(text).toContain('第一片内容')
+    expect(text).toContain('第二片内容')
+    expect(text).toContain('共 2 个切片')
+  })
+
+  test('TC-KB-010 删除应先确认，确认后调用带完整清理的 DELETE /docs', async () => {
+    const request = vi.spyOn(api, 'request').mockResolvedValue(SOURCES)
+    const confirm = vi.fn()
+    const wrapper = mountTab(DocumentsTab, { confirm })
+    await flushPromises()
+
+    await wrapper.findAll('button').find(b => b.text() === '删除').trigger('click')
+    expect(confirm).toHaveBeenCalled()
+
+    await confirm.mock.calls[0][1]()
+    const deleteCall = request.mock.calls.find(([, opts]) => opts?.method === 'DELETE')
+    expect(deleteCall[0]).toContain('/api/knowledge/docs?')
+  })
+})
+
+describe('经验沉淀标签', () => {
+  const PAGES = [{ id: 3, title: '主从延迟处理', category: '数据库', software: 'MySQL', status: 'DRAFT' }]
+
+  test('TC-KB-011 必须提供新建入口（编译流水线下线后页面只能人工创建）', async () => {
+    vi.spyOn(api, 'request').mockResolvedValue(PAGES)
+    const wrapper = mountTab(ExperienceTab)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('新建页面')
+  })
+
+  test('TC-KB-012 新建保存应 POST /pages，编辑保存应 PUT /pages/{id}', async () => {
+    const request = vi.spyOn(api, 'request').mockResolvedValue(PAGES)
+    const wrapper = mountTab(ExperienceTab)
+    await flushPromises()
+
+    await wrapper.findAll('button').find(b => b.text() === '新建页面').trigger('click')
+    await flushPromises()
+
+    // 编辑器在 Teleport 出去的弹窗里，需直接操作 document.body 中的元素
+    const titleInput = document.body.querySelector('.modal-body input[type="text"]')
+    titleInput.value = '新经验'
+    titleInput.dispatchEvent(new Event('input'))
+    const textarea = document.body.querySelector('.modal-body textarea')
+    textarea.value = '正文'
+    textarea.dispatchEvent(new Event('input'))
+    await flushPromises()
+
+    const saveBtn = [...document.body.querySelectorAll('.modal-body button')]
+      .find(b => b.textContent.trim() === '保存为草稿')
+    saveBtn.click()
+    await flushPromises()
+
+    const post = request.mock.calls.find(([p, o]) => p === '/api/knowledge/pages' && o?.method === 'POST')
+    expect(post).toBeTruthy()
+    expect(post[1].body.title).toBe('新经验')
+  })
+
+  test('TC-KB-013 关联页面应按 outgoing/incoming 结构与 relatedTitle 字段渲染', async () => {
+    vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path.endsWith('/links')) {
+        return {
+          outgoing: [{ linkId: 1, relatedPageId: 9, relatedTitle: '连接池配置', direction: 'outgoing' }],
+          incoming: [{ linkId: 2, relatedPageId: 8, relatedTitle: '慢查询排查', direction: 'incoming' }]
+        }
+      }
+      if (/\/pages\/\d+$/.test(path)) return { id: 3, title: '主从延迟处理', content: '正文' }
+      return PAGES
+    })
+
+    const wrapper = mountTab(ExperienceTab)
+    await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === '查看').trigger('click')
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('连接池配置')
+    expect(text).toContain('慢查询排查')
+  })
+
+  test('TC-KB-014 导出必须走 api.js 的 fetchBinary，不能用 window.open（会丢 Bearer 头）', async () => {
+    vi.spyOn(api, 'request').mockResolvedValue(PAGES)
+    const fetchBinary = vi.spyOn(api, 'fetchBinary').mockResolvedValue(new Blob(['x']))
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:stub')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+
+    const wrapper = mountTab(ExperienceTab)
+    await flushPromises()
+    await wrapper.findAll('button').find(b => b.text() === '导出').trigger('click')
+    await flushPromises()
+
+    expect(fetchBinary).toHaveBeenCalledWith('/api/knowledge/pages/export')
+    expect(openSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('健康度标签', () => {
+  test('TC-KB-015 应按 lintType/severity 字段渲染体检结果并展示统计', async () => {
+    vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path.endsWith('/lint/results')) {
+        return [{ id: 1, lintType: 'BROKEN_LINK', severity: 'HIGH', description: '指向不存在的页面' }]
+      }
+      if (path.endsWith('/stats')) return { total_pages: 12, total_sources: 5, uningested_sources: 1 }
+      return []
+    })
+
+    const wrapper = mountTab(HealthTab)
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('断链')
+    expect(text).toContain('指向不存在的页面')
+    expect(text).toContain('12')
+  })
+})
