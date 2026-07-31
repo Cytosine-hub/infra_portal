@@ -715,6 +715,58 @@ python3 scripts/seed-test-corpus.py --cleanup                       # 测完清�
 
 后端全量 274 个用例、前端 61 个用例、`npm run build` 均通过。
 
+### 11.11 最新修复远端隔离复测（2026-07-31）
+
+本轮拉取并部署提交 `1b28a57`，远端 AI 服务和前端镜像为
+`1b28a57-bgem3`，两个容器均为 healthy。远端 AI 容器通过现有反向通道访问本机
+Ollama，`/v1/models` 可见 `bge-m3:latest`。远端配置已备份到
+`/app/infra-portal/backups/pre-1b28a57-20260731-1450`。
+
+KBV-014 的业务目标清单按本轮提供的信息配置为 16 类，不为满足数字强行补足 22 类：
+
+| 分类 | 软件 / 设备 |
+|---|---|
+| 中间件 | Tomcat、WebLogic、Nginx、Kafka、RabbitMQ、RocketMQ、Redis、Nacos |
+| 数据库 | OB、TiDB、MySQL、Oracle |
+| 网络 | F5、SLB |
+| 主机 | 交换机、操作系统 |
+
+本地固定 JDK 17 执行后端 26 模块全量测试，共 281 个用例通过；前端 61 个用例通过，
+`npm run build` 成功。远端 AI 镜像构建执行其依赖范围内 192 个测试，全部通过。
+
+#### 11.11.1 全新数据运行态验证
+
+每组运行态测试都使用新的唯一 `runId`，测试结束立即清理，并在清理后再次查询接口或
+数据库确认无残留；没有复用 11.8 的问题语料作为断言依据。
+
+| 项目 | 全新夹具与断言 | 结果 |
+|---|---|---|
+| KBV-012 出边重建 | 新建目标 A、目标 B、来源页和断链页；创建时 A 边存在，更新后只保留 B 边，`relink` 成功，保存响应均无 `linkWarning` | **通过** |
+| KBV-013 向量存在性 | 上传唯一文件 `kbv013-fresh-20260731-1508.md`，生成 3 个切片；按唯一 token 与 `sourceId=9` 能命中，`unindexedSources` 未误报；删除后文档列表和同来源检索均为 0 | **通过** |
+| KBV-014 覆盖率分母 | 空语料时 16 类形成 64 格、`missingCells=64`；临时补 MySQL 参数/监控和 Nginx 部署后覆盖从 0 增至 3 格（4.6875%），其余缺口保留 | **通过** |
+| 参数矛盾 | 两条临时已发布标准给 `tc_conflict_parameter` 写入 100 / 200 | **通过，明确检出冲突及两份来源标准** |
+| 隔离清理 | 临时标准、Wiki 页面、上传来源分别按唯一标记复核 | **通过，数据库计数均为 0** |
+
+最终业务快照恢复为：`totalSources=6`、`totalParameters=0`、
+`coveredCells/totalCells=0/64`、`missingCells=64`、`parameterConflicts=[]`、
+`unindexedSources=[]`、`indexStatusReliable=true`。
+
+#### 11.11.2 本轮仍存在的问题
+
+| 编号 | 严重度 | 证据与影响 | 状态 |
+|---|---|---|---|
+| KBV-015 | 高 | 前端健康度页上方仍读取旧 `/api/knowledge/stats` 的 `uningested_sources` 口径，显示“待索引文档 6”；同页新接口返回 `unindexedSources=[]`。后端修复已生效，但页面给出互相矛盾的结论 | 待修复 |
+| KBV-016 | 高 | `scripts/seed-test-corpus.py` 要求发布标准后再测，`--cleanup` 却直接 DELETE。实测发布后的唯一夹具返回 HTTP 400 / `PARAMETER_STANDARD_PUBLISHED`，与“可一键清除、不污染真实语料”的承诺不符；脚本还会匹配全部 `[TEST]`，没有按本次 runId 收口 | 待修复 |
+| KBV-017 | 中 | `indexedChunks` 使用 Milvus `getCollectionStats().num_entities`。本轮上传 3 个可检索切片后仍为 819，删除并确认检索为 0 后反而延迟变为 822，说明它不是实时有效实体数。当前文案“已索引切片”会让人误认为是精确实时值 | 待优化 |
+| KBV-018 | 高 | 新增 `POST /pages/{id}/relink` 只判断用户是否管理任意分类，没有校验页面分类；某分类管理员可重建其他分类页面的图边 | 待修复 |
+| KBV-019 | 中 | 新增的 `CORPUS_TARGET_CATALOG` 未加入 `deploy/services.env.example`。本轮远端是人工补入；按模板新部署仍会落回未配置分母 | 待修复 |
+| KBV-020 | 低 | 健康度摘要 DOM 渲染为“文档 6 份 · · 已索引切片 819”，模板在条件字段前后各写了一个分隔点 | 待修复 |
+
+真实浏览器完成登录和“知识库 -> 健康度”检查：64 项 `missingCells` 可见、没有遮挡或
+控制台 WARN / ERROR；除 KBV-015 与 KBV-020 外，新增健康度字段均正常展示。现有前端
+测试没有覆盖 `linkWarning/relink` 和新增语料健康度字段，建议修复上述界面问题时补上
+组件级回归，避免继续只靠真实浏览器发现口径冲突。
+
 ---
 
 ## 十二、回滚
