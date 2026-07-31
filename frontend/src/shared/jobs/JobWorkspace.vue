@@ -1,14 +1,6 @@
 <template>
   <section class="workspace job-workspace">
     <main class="job-workspace-main">
-      <header class="job-workspace-header">
-        <div class="job-mark">{{ job.shortName }}</div>
-        <div>
-          <h2>集成中心·{{ job.shortName }}</h2>
-          <p>{{ job.description }}</p>
-        </div>
-      </header>
-
       <slot v-if="feature" :feature="feature" />
       <div v-else class="job-feature-grid">
         <article v-for="item in job.features" :key="item.id" class="job-feature-card" @click="openFeature(item.id)">
@@ -37,10 +29,6 @@ function openFeature(featureId) {
 <style scoped>
 .job-workspace { padding-top: var(--space-xl); }
 .job-workspace-main { display: grid; align-content: start; gap: var(--space-xl); min-width: 0; }
-.job-workspace-header { display: flex; align-items: center; gap: var(--space-lg); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: var(--space-xl); background: var(--color-bg); }
-.job-workspace-header h2, .job-workspace-header p { margin: 0; }
-.job-workspace-header p:last-child { margin-top: var(--space-sm); color: var(--color-text-secondary); }
-.job-mark { display: grid; place-items: center; width: 64px; height: 64px; border-radius: var(--radius-lg); color: var(--color-text-inverse); background: var(--color-primary); font-size: var(--text-xl); font-weight: 800; }
 .job-feature-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-lg); }
 .job-feature-card { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-md); align-items: center; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: var(--space-xl); background: var(--color-bg); cursor: pointer; }
 .job-feature-card:hover { border-color: var(--color-primary-200); box-shadow: var(--shadow-md); }

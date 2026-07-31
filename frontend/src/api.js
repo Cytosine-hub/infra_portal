@@ -9,10 +9,10 @@ export function getSavedAuth() {
 
   if (!token || !user) return null
 
-  // 校验 token 过期时间
   if (expiresAt) {
-    const expiry = new Date(expiresAt)
-    if (!isNaN(expiry.getTime()) && expiry < new Date()) {
+    const hasTimeZone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(expiresAt)
+    const expiry = new Date(hasTimeZone ? expiresAt : `${expiresAt}Z`)
+    if (!Number.isNaN(expiry.getTime()) && expiry <= new Date()) {
       clearAuth()
       return null
     }
@@ -37,6 +37,11 @@ export function clearAuth() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(USER_KEY)
   localStorage.removeItem(EXPIRES_KEY)
+}
+
+export function handleUnauthorized() {
+  clearAuth()
+  window.dispatchEvent(new Event('auth:logout'))
 }
 
 export async function request(path, options = {}) {
@@ -66,8 +71,7 @@ export async function request(path, options = {}) {
 
   if (!response.ok) {
     if (response.status === 401) {
-      clearAuth()
-      window.dispatchEvent(new Event('auth:logout'))
+      handleUnauthorized()
     }
     let message = response.statusText || 'Request failed'
     try {
@@ -100,8 +104,7 @@ export async function fetchBinary(path) {
   const response = await fetch(path, { headers })
   if (!response.ok) {
     if (response.status === 401) {
-      clearAuth()
-      window.dispatchEvent(new Event('auth:logout'))
+      handleUnauthorized()
     }
     throw new Error(`文件加载失败 (${response.status})`)
   }

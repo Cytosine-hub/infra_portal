@@ -137,8 +137,9 @@ describe('门户页面结构优化验收', () => {
       expect(job.entryComponent).toBeTruthy()
 
       const entry = track(mount(job.entryComponent, { props: { job, feature: null, context: {} } }))
-      expect(entry.find('.job-workspace-header').text()).toContain(`集成中心·${job.shortName}`)
-      expect(entry.find('.job-mark').text()).toBe(job.shortName)
+      expect(entry.find('.job-workspace-header').exists()).toBe(false)
+      expect(entry.find('.job-mark').exists()).toBe(false)
+      expect(entry.find('.job-feature-grid').exists()).toBe(true)
     }
   })
 

@@ -65,4 +65,30 @@ describe('登录错误边界', () => {
 
     wrapper.unmount()
   })
+
+  test('TC-AUTH-003 已登录用户在首页也应看到完整顶部导航', async () => {
+    localStorageMock.setItem('mrm.token', 'valid-token')
+    localStorageMock.setItem('mrm.user', JSON.stringify({
+      username: 'sysadmin', displayName: '系统管理员', role: '系统管理员'
+    }))
+    localStorageMock.setItem('mrm.expiresAt', '2999-01-01T00:00:00Z')
+    window.location.hash = '#/home'
+    vi.stubGlobal('fetch', vi.fn((input) => {
+      const path = new URL(String(input), 'http://localhost').pathname
+      if (path === '/api/public/config') return response({ knowledgeEnabled: true, diagnosticsEnabled: true })
+      if (path === '/api/public/releases') return response({ content: [] })
+      return response([])
+    }))
+
+    const wrapper = mount(App)
+    await flushPromises()
+
+    const navigation = wrapper.find('nav.nav-tabs')
+    expect(navigation.exists()).toBe(true)
+    expect(navigation.text()).toContain('首页')
+    expect(navigation.text()).toContain('论坛')
+    expect(navigation.text()).toContain('智能排查')
+
+    wrapper.unmount()
+  })
 })

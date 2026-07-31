@@ -5,7 +5,7 @@
         <h1>{{ pageTitle }}</h1>
       </div>
       <div class="topbar-right">
-        <nav v-if="route.name !== 'home'" class="nav-tabs" aria-label="Primary">
+        <nav v-if="auth.token" class="nav-tabs" aria-label="Primary">
           <button :class="{ active: false }" @click="navigate('home')">首页</button>
           <button v-if="auth.token" :class="{ active: route.name === 'standards' }" @click="navigate('standards')">标准发布</button>
           <button v-if="auth.token" :class="{ active: route.name === 'public' }" @click="navigate('downloads')">下载中心</button>

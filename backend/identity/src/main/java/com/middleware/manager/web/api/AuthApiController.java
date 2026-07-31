@@ -17,7 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.Base64;
 import lombok.extern.slf4j.Slf4j;
 
@@ -62,7 +64,9 @@ public class AuthApiController {
 
         // 生成 token
         String token = tokenService.createToken(credentials.username);
-        LocalDateTime expiresAt = LocalDateTime.now().plusHours(2);
+        OffsetDateTime expiresAt = OffsetDateTime.now(ZoneOffset.UTC)
+                .plusHours(2)
+                .truncatedTo(ChronoUnit.MILLIS);
 
         log.debug("login success: username={} role={}", credentials.username, roleName);
         return new AuthResponse(user.getUsername(),

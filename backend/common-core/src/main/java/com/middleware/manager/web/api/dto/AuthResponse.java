@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 @Data
 @NoArgsConstructor
@@ -14,7 +14,7 @@ public class AuthResponse {
     private String displayName;
     private String role;
     private String token;
-    private LocalDateTime expiresAt;
+    private OffsetDateTime expiresAt;
 
     public AuthResponse(String username, String displayName, String role) {
         this.username = username;

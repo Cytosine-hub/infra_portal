@@ -135,7 +135,8 @@ CREATE TABLE `forum_posts` (
   `published_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_status` (`status`),
-  KEY `idx_author` (`author_username`)
+  KEY `idx_author` (`author_username`),
+  FULLTEXT KEY `ft_forum_posts_title_content` (`title`,`content`) /*!50100 WITH PARSER `ngram` */
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 DROP TABLE IF EXISTS `forum_tags`;
 CREATE TABLE `forum_tags` (

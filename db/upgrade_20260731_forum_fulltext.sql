@@ -1,5 +1,5 @@
+-- 论坛标题与正文全文索引。脚本可重复执行。
 -- 中文分词依赖 MySQL 全局参数 ngram_token_size，默认值为 2。
--- 如需调整粒度，应先修改全局参数并重启 MySQL，再创建或重建此索引。
 SET @forum_fulltext_index_exists = (
     SELECT COUNT(*)
     FROM information_schema.statistics

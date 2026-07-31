@@ -7,7 +7,9 @@
     <select id="search" resultType="ForumPost">
         SELECT p.* FROM forum_posts p
         WHERE p.status = 'PUBLISHED'
-        AND (#{keyword} IS NULL OR MATCH(p.title, p.content) AGAINST(#{keyword} IN BOOLEAN MODE))
+        <if test="keyword != null">
+            AND MATCH(p.title, p.content) AGAINST(#{keyword} IN BOOLEAN MODE)
+        </if>
         AND (#{tag} IS NULL OR EXISTS (
             SELECT 1 FROM forum_post_tags fpt
             INNER JOIN forum_tags t ON fpt.tag_id = t.id
