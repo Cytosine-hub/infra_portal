@@ -685,7 +685,35 @@ python3 scripts/eval-retrieval.py --k 5 --json .scratch/baseline-bgem3.json
 
 追加用例 TC-LINK-009~011、TC-VECTOR-003~006、TC-HEALTH-017~020。
 
-后端全量 268 个用例、前端 61 个用例、`npm run build` 均通过。
+#### 建边失败的可见性与补救
+
+审查后追加：此前 Controller 吞掉建边异常只写日志，用户以为交叉引用已生效，实际
+图谱与关联检索都少了边且无重试入口。现在保存仍成功（页面内容不因副产物出问题而
+丢失），但响应带 `linkWarning`，并新增 `POST /pages/{id}/relink` 补救入口；
+前端展示警告条与「重建关联」按钮。顺带修掉 agent.md §10 禁止的「Controller 返回
+domain 实体」——改为 `WikiPageSaveResponse`。
+
+追加用例 TC-LINK-012~017。
+
+#### 测试阶段的语料补齐
+
+召回覆盖率必须基于**系统内实际有的数据**统计——首轮 Recall@5 只有 10%，正是因为
+评测集问的内容不在库里，测出来的是语料覆盖率而非检索质量。但测试阶段语料常常不全，
+凑合着测结论无效，等内容团队补完又会阻塞验证。
+
+新增 `scripts/seed-test-corpus.py`：按目标清单造出结构完整的测试标准（含章节与
+参数表，能真正触发切片器的 sectionPath 与表格保护逻辑）。
+
+```bash
+python3 scripts/seed-test-corpus.py --dry-run                       # 只看缺口
+python3 scripts/seed-test-corpus.py --catalog "数据库:MySQL,中间件:Nginx"
+python3 scripts/seed-test-corpus.py --cleanup                       # 测完清理
+```
+
+造出的数据统一带 `[TEST]` 前缀与 runId，`--cleanup` 一键清除，不污染真实语料。
+标准需**发布**后才会被 `/api/knowledge/sync-standards` 收录。
+
+后端全量 274 个用例、前端 61 个用例、`npm run build` 均通过。
 
 ---
 
