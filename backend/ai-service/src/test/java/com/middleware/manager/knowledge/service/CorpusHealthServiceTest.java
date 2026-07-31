@@ -43,7 +43,7 @@ class CorpusHealthServiceTest {
         when(standardMapper.findPublished()).thenReturn(List.of());
         when(parameterMapper.search(any(), any(), anyInt())).thenReturn(List.of());
         when(sourceMapper.findAll()).thenReturn(List.of());
-        when(vectorStore.countBySource(any(), any())).thenReturn(0L);
+        when(vectorStore.existsBySource(any(), any())).thenReturn(false);
     }
 
     private ParameterStandard standard(String category, String software, String title) {
@@ -109,8 +109,8 @@ class CorpusHealthServiceTest {
         WikiSource noVectors = source("无向量.pdf", true);
         noVectors.setId(2L);
         when(sourceMapper.findAll()).thenReturn(List.of(hasVectors, noVectors));
-        when(vectorStore.countBySource("UPLOAD", 1L)).thenReturn(12L);
-        when(vectorStore.countBySource("UPLOAD", 2L)).thenReturn(0L);
+        when(vectorStore.existsBySource("UPLOAD", 1L)).thenReturn(true);
+        when(vectorStore.existsBySource("UPLOAD", 2L)).thenReturn(false);
 
         CorpusHealthReport report = service.report();
 

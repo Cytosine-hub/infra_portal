@@ -322,18 +322,21 @@ public class MilvusVectorStore implements VectorStore {
     }
 
     @Override
-    public long countBySource(String sourceType, Long sourceId) {
+    public boolean existsBySource(String sourceType, Long sourceId) {
         if (sourceType == null || sourceId == null) {
-            return 0L;
+            return false;
         }
         String filter = SOURCE_TYPE_FIELD + " == " + quote(sourceType)
                 + " and " + SOURCE_ID_FIELD + " == " + quote(String.valueOf(sourceId));
+        // limit(1)：只需判断有没有。不设 limit 会受服务端默认条数上限影响，
+        // 且来源多时逐个全量拉取会显著放大开销。
         QueryResp resp = client.query(QueryReq.builder()
                 .collectionName(config.getVectorCollection())
                 .filter(filter)
                 .outputFields(Collections.singletonList(ID_FIELD))
+                .limit(1L)
                 .build());
-        return resp == null || resp.getQueryResults() == null ? 0L : resp.getQueryResults().size();
+        return resp != null && resp.getQueryResults() != null && !resp.getQueryResults().isEmpty();
     }
 
     @Override

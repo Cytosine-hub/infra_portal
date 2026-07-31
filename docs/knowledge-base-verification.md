@@ -657,7 +657,19 @@ python3 scripts/eval-retrieval.py --k 5 --json .scratch/baseline-bgem3.json
 | TC-HEALTH-011 | 未配置清单时显式标注 | 通过 |
 | TC-HEALTH-012 | 清单外已录标准的软件也计入 | 通过 |
 
-后端全量 254 个用例、前端 61 个用例、`npm run build` 均通过。
+#### 自查追加修正
+
+提交后自查发现两处隐患，已在同轮修掉并补测试：
+
+| 隐患 | 影响 | 修正 |
+|---|---|---|
+| `MilvusVectorStore` 用 `client.query(...)` 全量拉取再计数，未设 `limit` | Milvus query 有服务端默认条数上限，切片多的文档计数被截断；来源多时逐个全量扫描开销放大 | 改为 `existsBySource` + `limit(1)`。判定只需要「有没有」；切片总量改取集合总数 `count()` |
+| `targetCatalog.isEmpty()` 判定是否已配置 | Spring 把 `${prop:}` 空配置转 `List<String>` 时可能给出 `[""]`，会把「没配」误判成「已配」，`coverageHint` 提示失效 | 改用解析出的有效条目判定，空白条目一律过滤 |
+
+追加用例 TC-HEALTH-013~016：空白配置不算已配置 / 混有空白只取有效项 /
+索引判定只用存在性 / 切片总数取集合总量。
+
+后端全量 258 个用例、前端 61 个用例、`npm run build` 均通过。
 
 ---
 

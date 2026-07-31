@@ -95,12 +95,14 @@ public class CorpusHealthService {
         // 分母 = 业务目标清单 ∪ 已录入标准的软件。
         // 取并集而非只用清单：清单外但确实录了标准的软件也应计入，否则会漏掉真实语料。
         Set<String> denominator = new LinkedHashSet<>();
+        Set<String> catalogSoftwares = new LinkedHashSet<>();
         for (String entry : targetCatalog) {
             String software = parseCatalogSoftware(entry);
             if (software != null) {
-                denominator.add(software);
+                catalogSoftwares.add(software);
             }
         }
+        denominator.addAll(catalogSoftwares);
         denominator.addAll(softwares);
 
         List<String> missing = new ArrayList<>();
@@ -119,8 +121,10 @@ public class CorpusHealthService {
         report.coverage = totalCells == 0 ? 0.0 : (double) covered.size() / totalCells;
         report.missingCells = missing;
         report.softwareByCategory = byCategory;
-        report.targetCatalogConfigured = !targetCatalog.isEmpty();
-        report.coverageHint = targetCatalog.isEmpty()
+        // 以解析出的有效条目判定，而非原始列表长度：Spring 把空配置转成 List 时
+        // 可能给出 [""]，用 isEmpty() 会把「没配」误判成「已配」
+        report.targetCatalogConfigured = !catalogSoftwares.isEmpty();
+        report.coverageHint = catalogSoftwares.isEmpty()
                 ? "未配置目标清单（app.corpus.target-catalog），当前分母仅来自已录入标准的软件，"
                         + "无法反映整套语料空白。配置后可发现「某软件一份标准都没有」的缺口。"
                 : "分母来自目标清单与已录入标准的并集。";
@@ -180,15 +184,20 @@ public class CorpusHealthService {
 
         for (WikiSource s : sources) {
             try {
-                long chunks = vectorStore.countBySource(s.getSourceType(), s.getId());
-                indexedChunks += chunks;
-                if (chunks == 0L) {
+                if (!vectorStore.existsBySource(s.getSourceType(), s.getId())) {
                     unindexed.add(s.getTitle());
                 }
             } catch (Exception e) {
-                log.warn("查询来源 {} 的向量数失败，本次不判定索引状态: {}", s.getTitle(), e.getMessage());
+                log.warn("查询来源 {} 的索引状态失败，本次不下结论: {}", s.getTitle(), e.getMessage());
                 reliable = false;
             }
+        }
+        try {
+            // 切片总量取集合总数：逐源累加既受条数上限截断，也没有额外信息量
+            indexedChunks = vectorStore.count();
+        } catch (Exception e) {
+            log.warn("查询索引切片总数失败: {}", e.getMessage());
+            reliable = false;
         }
 
         report.totalSources = sources.size();

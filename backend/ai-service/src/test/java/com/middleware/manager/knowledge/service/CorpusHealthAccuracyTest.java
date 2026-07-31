@@ -49,7 +49,7 @@ class CorpusHealthAccuracyTest {
         when(standardMapper.findPublished()).thenReturn(List.of());
         when(parameterMapper.search(any(), any(), anyInt())).thenReturn(List.of());
         when(sourceMapper.findAll()).thenReturn(List.of());
-        when(vectorStore.countBySource(anyString(), anyLong())).thenReturn(0L);
+        when(vectorStore.existsBySource(anyString(), anyLong())).thenReturn(false);
     }
 
     @AfterEach
@@ -84,7 +84,8 @@ class CorpusHealthAccuracyTest {
             // 上传类文档从不参与 Wiki 编译，该字段恒为 false，但切片确实可检索。
             WikiSource doc = source(1L, "已向量化.pdf", false);
             when(sourceMapper.findAll()).thenReturn(List.of(doc));
-            when(vectorStore.countBySource("UPLOAD", 1L)).thenReturn(34L);
+            when(vectorStore.existsBySource("UPLOAD", 1L)).thenReturn(true);
+            when(vectorStore.count()).thenReturn(34L);
 
             CorpusHealthReport report = service(List.of()).report();
 
@@ -97,7 +98,7 @@ class CorpusHealthAccuracyTest {
         void documentWithoutVectorsIsReported() {
             WikiSource doc = source(2L, "未向量化.pdf", true);
             when(sourceMapper.findAll()).thenReturn(List.of(doc));
-            when(vectorStore.countBySource("UPLOAD", 2L)).thenReturn(0L);
+            when(vectorStore.existsBySource("UPLOAD", 2L)).thenReturn(false);
 
             CorpusHealthReport report = service(List.of()).report();
 
@@ -109,7 +110,7 @@ class CorpusHealthAccuracyTest {
         void vectorStoreFailureDoesNotFalselyReportAll() {
             WikiSource doc = source(3L, "查询失败.pdf", false);
             when(sourceMapper.findAll()).thenReturn(List.of(doc));
-            when(vectorStore.countBySource("UPLOAD", 3L))
+            when(vectorStore.existsBySource("UPLOAD", 3L))
                     .thenThrow(new RuntimeException("Milvus 不可达"));
 
             CorpusHealthReport report = service(List.of()).report();
