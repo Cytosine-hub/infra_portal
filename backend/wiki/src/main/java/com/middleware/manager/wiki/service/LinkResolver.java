@@ -51,6 +51,9 @@ public class LinkResolver {
         int created = 0;
         for (WikiPage page : pages) {
             if (page.getId() == null) continue;
+            // 先清掉本页已有的出边再按当前正文重建：仅做幂等插入的话，正文把 [[A]]
+            // 改成 [[B]] 后 A 的旧边会一直留着，反复编辑持续累积过期引用。
+            linkMapper.deleteOutgoingReferences(page.getId());
             List<String> linkTargets = extractWikiLinks(page.getContent());
             for (String target : linkTargets) {
                 Long targetId = titleIndex.get(target);

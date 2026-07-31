@@ -20,12 +20,14 @@ import io.milvus.v2.service.collection.response.GetCollectionStatsResp;
 import io.milvus.v2.service.vector.request.AnnSearchReq;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.HybridSearchReq;
+import io.milvus.v2.service.vector.request.QueryReq;
 import io.milvus.v2.service.vector.request.SearchReq;
 import io.milvus.v2.service.vector.request.UpsertReq;
 import io.milvus.v2.service.vector.request.data.BaseVector;
 import io.milvus.v2.service.vector.request.data.EmbeddedText;
 import io.milvus.v2.service.vector.request.data.FloatVec;
 import io.milvus.v2.service.vector.request.ranker.RRFRanker;
+import io.milvus.v2.service.vector.response.QueryResp;
 import io.milvus.v2.service.vector.response.SearchResp;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -317,6 +319,21 @@ public class MilvusVectorStore implements VectorStore {
                 .build());
         log.debug("已清理来源的过期向量 sourceType={} sourceId={} retained={}",
                 sourceType, sourceId, retainedIds.size());
+    }
+
+    @Override
+    public long countBySource(String sourceType, Long sourceId) {
+        if (sourceType == null || sourceId == null) {
+            return 0L;
+        }
+        String filter = SOURCE_TYPE_FIELD + " == " + quote(sourceType)
+                + " and " + SOURCE_ID_FIELD + " == " + quote(String.valueOf(sourceId));
+        QueryResp resp = client.query(QueryReq.builder()
+                .collectionName(config.getVectorCollection())
+                .filter(filter)
+                .outputFields(Collections.singletonList(ID_FIELD))
+                .build());
+        return resp == null || resp.getQueryResults() == null ? 0L : resp.getQueryResults().size();
     }
 
     @Override

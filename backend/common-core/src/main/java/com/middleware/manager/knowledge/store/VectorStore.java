@@ -60,6 +60,17 @@ public interface VectorStore {
 
     long count();
 
+    /**
+     * 统计某个来源当前在索引中的切片数。
+     * <p>用于判断文档「是否真的可检索」。不能用 wiki_sources.ingested 代替——
+     * 那个字段表示 Wiki 编译状态，上传类文档从不参与编译，该字段恒为 false，
+     * 但切片确实存在且可检索。
+     * <p>默认实现返回 0，供不支持条件统计的存储使用。
+     */
+    default long countBySource(String sourceType, Long sourceId) {
+        return 0L;
+    }
+
     record VectorRecord(String id, float[] vector, Map<String, String> metadata) {
     }
 

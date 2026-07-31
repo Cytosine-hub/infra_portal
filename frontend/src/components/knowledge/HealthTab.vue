@@ -20,7 +20,12 @@
         覆盖率
         <strong>{{ (corpus.coverage * 100).toFixed(1) }}%</strong>
         （{{ corpus.coveredCells }} / {{ corpus.totalCells }} 个格子）·
-        参数 {{ corpus.totalParameters }} 条 · 文档 {{ corpus.totalSources }} 份
+        参数 {{ corpus.totalParameters }} 条 · 文档 {{ corpus.totalSources }} 份 ·
+        已索引切片 {{ corpus.indexedChunks }}
+      </p>
+      <p v-if="!corpus.targetCatalogConfigured" class="corpus-hint">{{ corpus.coverageHint }}</p>
+      <p v-if="!corpus.indexStatusReliable" class="corpus-hint danger">
+        向量库查询失败，本次不判定索引状态（避免把「查不到」误读成「没索引」）
       </p>
 
       <div v-if="corpus.missingCells?.length" class="corpus-block">
@@ -33,7 +38,7 @@
         <ul><li v-for="c in corpus.parameterConflicts" :key="c">{{ c }}</li></ul>
       </div>
 
-      <div v-if="corpus.unindexedSources?.length" class="corpus-block">
+      <div v-if="corpus.indexStatusReliable && corpus.unindexedSources?.length" class="corpus-block">
         <h4>未索引的文档（{{ corpus.unindexedSources.length }}）—— 列表里看得到，检索命中不了</h4>
         <ul><li v-for="c in corpus.unindexedSources" :key="c">{{ c }}</li></ul>
       </div>
@@ -170,6 +175,16 @@ onMounted(load)
   margin: 0 0 var(--space-sm);
   color: var(--color-text-secondary);
   font-size: 0.875rem;
+}
+
+.corpus-hint {
+  margin: 0 0 var(--space-sm);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.corpus-hint.danger {
+  color: var(--color-danger);
 }
 
 .corpus-block {

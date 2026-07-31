@@ -5,6 +5,7 @@ import com.middleware.manager.knowledge.service.CorpusHealthService.CorpusHealth
 import com.middleware.manager.repository.ParameterStandardIndexMapper;
 import com.middleware.manager.repository.StandardParameterLookupMapper;
 import com.middleware.manager.wiki.entity.WikiSource;
+import com.middleware.manager.knowledge.store.VectorStore;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -30,16 +31,19 @@ class CorpusHealthServiceTest {
     @Mock private ParameterStandardIndexMapper standardMapper;
     @Mock private StandardParameterLookupMapper parameterMapper;
     @Mock private WikiSourceMapper sourceMapper;
+    @Mock private VectorStore vectorStore;
 
     private CorpusHealthService service;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new CorpusHealthService(standardMapper, parameterMapper, sourceMapper);
+        service = new CorpusHealthService(standardMapper, parameterMapper, sourceMapper,
+                vectorStore, List.of());
         when(standardMapper.findPublished()).thenReturn(List.of());
         when(parameterMapper.search(any(), any(), anyInt())).thenReturn(List.of());
         when(sourceMapper.findAll()).thenReturn(List.of());
+        when(vectorStore.countBySource(any(), any())).thenReturn(0L);
     }
 
     private ParameterStandard standard(String category, String software, String title) {
@@ -96,16 +100,22 @@ class CorpusHealthServiceTest {
     }
 
     @Test
-    @DisplayName("TC-HEALTH-004 未索引的来源应被单独列出，它们检索不到")
+    @DisplayName("TC-HEALTH-004 未索引判定以向量为准，不看 ingested 字段")
     void reportsUnindexedSources() {
-        WikiSource indexed = source("已索引.pdf", true);
-        WikiSource pending = source("待索引.pdf", false);
-        when(sourceMapper.findAll()).thenReturn(List.of(indexed, pending));
+        // KBV-013 修正：原用例按 wiki_sources.ingested 判定，但该字段表示 Wiki 编译
+        // 状态，上传类文档恒为 false，会把已可检索的文档误报为未索引。
+        WikiSource hasVectors = source("已向量化.pdf", false);
+        hasVectors.setId(1L);
+        WikiSource noVectors = source("无向量.pdf", true);
+        noVectors.setId(2L);
+        when(sourceMapper.findAll()).thenReturn(List.of(hasVectors, noVectors));
+        when(vectorStore.countBySource("UPLOAD", 1L)).thenReturn(12L);
+        when(vectorStore.countBySource("UPLOAD", 2L)).thenReturn(0L);
 
         CorpusHealthReport report = service.report();
 
         assertThat(report.getTotalSources()).isEqualTo(2);
-        assertThat(report.getUnindexedSources()).containsExactly("待索引.pdf");
+        assertThat(report.getUnindexedSources()).containsExactly("无向量.pdf");
     }
 
     @Test
@@ -131,6 +141,7 @@ class CorpusHealthServiceTest {
     private WikiSource source(String title, boolean ingested) {
         WikiSource s = new WikiSource();
         s.setTitle(title);
+        s.setSourceType("UPLOAD");
         s.setIngested(ingested);
         return s;
     }

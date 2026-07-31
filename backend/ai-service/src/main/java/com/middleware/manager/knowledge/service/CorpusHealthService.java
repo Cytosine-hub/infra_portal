@@ -4,7 +4,9 @@ import com.middleware.manager.domain.ParameterStandard;
 import com.middleware.manager.repository.ParameterStandardIndexMapper;
 import com.middleware.manager.repository.StandardParameterLookupMapper;
 import com.middleware.manager.wiki.entity.WikiSource;
+import com.middleware.manager.knowledge.store.VectorStore;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
+import org.springframework.beans.factory.annotation.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -40,13 +42,24 @@ public class CorpusHealthService {
     private final ParameterStandardIndexMapper standardMapper;
     private final StandardParameterLookupMapper parameterMapper;
     private final WikiSourceMapper sourceMapper;
+    private final VectorStore vectorStore;
+    /**
+     * 业务维护的目标软件清单，形如 {@code 数据库:MySQL}。
+     * <p>覆盖率分母必须独立于「现有已发布标准」——从现有标准反推的话，整套语料空白时
+     * 分母也是 0，覆盖率显示 0/0，反而看不出问题。清单内容由业务配置，代码不臆造。
+     */
+    private final List<String> targetCatalog;
 
     public CorpusHealthService(ParameterStandardIndexMapper standardMapper,
                                StandardParameterLookupMapper parameterMapper,
-                               WikiSourceMapper sourceMapper) {
+                               WikiSourceMapper sourceMapper,
+                               VectorStore vectorStore,
+                               @Value("${app.corpus.target-catalog:}") List<String> targetCatalog) {
         this.standardMapper = standardMapper;
         this.parameterMapper = parameterMapper;
         this.sourceMapper = sourceMapper;
+        this.vectorStore = vectorStore;
+        this.targetCatalog = targetCatalog == null ? List.of() : targetCatalog;
     }
 
     public CorpusHealthReport report() {
@@ -79,8 +92,19 @@ public class CorpusHealthService {
                     s.getCategory() == null ? "未分类" : s.getCategory(), k -> new ArrayList<>()).add(software);
         }
 
+        // 分母 = 业务目标清单 ∪ 已录入标准的软件。
+        // 取并集而非只用清单：清单外但确实录了标准的软件也应计入，否则会漏掉真实语料。
+        Set<String> denominator = new LinkedHashSet<>();
+        for (String entry : targetCatalog) {
+            String software = parseCatalogSoftware(entry);
+            if (software != null) {
+                denominator.add(software);
+            }
+        }
+        denominator.addAll(softwares);
+
         List<String> missing = new ArrayList<>();
-        for (String software : softwares) {
+        for (String software : denominator) {
             for (String type : STANDARD_TYPES) {
                 String cell = software + " / " + type;
                 if (!covered.contains(cell)) {
@@ -89,12 +113,17 @@ public class CorpusHealthService {
             }
         }
 
-        int totalCells = softwares.size() * STANDARD_TYPES.size();
+        int totalCells = denominator.size() * STANDARD_TYPES.size();
         report.coveredCells = covered.size();
         report.totalCells = totalCells;
         report.coverage = totalCells == 0 ? 0.0 : (double) covered.size() / totalCells;
         report.missingCells = missing;
         report.softwareByCategory = byCategory;
+        report.targetCatalogConfigured = !targetCatalog.isEmpty();
+        report.coverageHint = targetCatalog.isEmpty()
+                ? "未配置目标清单（app.corpus.target-catalog），当前分母仅来自已录入标准的软件，"
+                        + "无法反映整套语料空白。配置后可发现「某软件一份标准都没有」的缺口。"
+                : "分母来自目标清单与已录入标准的并集。";
     }
 
     /** 标题里带「参数 / 部署 / 监控 / 应急」即归入对应类型，识别不出的不计入覆盖。 */
@@ -136,17 +165,48 @@ public class CorpusHealthService {
         report.totalParameters = rows.size();
     }
 
-    /** 已入库但未索引的文档：用户在文档列表看得到，检索却命中不了。 */
+    /**
+     * 已入库但检索不到的文档。
+     * <p>判定以**向量是否存在**为准，不能用 wiki_sources.ingested——那个字段表示
+     * Wiki 编译状态，上传类文档从不参与编译、该字段恒为 false，用它判断会把已经
+     * 可检索的文档全部误报为未索引。
+     * <p>向量库不可用时降级为「不下结论」：宁可不报，也不能把全部文档误报成未索引。
+     */
     private void fillSources(CorpusHealthReport report) {
         List<WikiSource> sources = safeList(sourceMapper.findAll());
         List<String> unindexed = new ArrayList<>();
+        long indexedChunks = 0L;
+        boolean reliable = true;
+
         for (WikiSource s : sources) {
-            if (!Boolean.TRUE.equals(s.getIngested())) {
-                unindexed.add(s.getTitle());
+            try {
+                long chunks = vectorStore.countBySource(s.getSourceType(), s.getId());
+                indexedChunks += chunks;
+                if (chunks == 0L) {
+                    unindexed.add(s.getTitle());
+                }
+            } catch (Exception e) {
+                log.warn("查询来源 {} 的向量数失败，本次不判定索引状态: {}", s.getTitle(), e.getMessage());
+                reliable = false;
             }
         }
+
         report.totalSources = sources.size();
-        report.unindexedSources = unindexed;
+        report.indexedChunks = indexedChunks;
+        report.indexStatusReliable = reliable;
+        // 判定不可信时不输出清单，避免把「查不到」误读成「没索引」
+        report.unindexedSources = reliable ? unindexed : List.of();
+    }
+
+    /** 目标清单条目形如 {@code 分类:软件}，只取软件名；缺少分隔符时整条视为软件名。 */
+    private String parseCatalogSoftware(String entry) {
+        if (entry == null || entry.isBlank()) {
+            return null;
+        }
+        String trimmed = entry.trim();
+        int idx = trimmed.indexOf(':');
+        String software = idx >= 0 ? trimmed.substring(idx + 1).trim() : trimmed;
+        return software.isEmpty() ? null : software;
     }
 
     private <T> List<T> safeList(List<T> list) {
@@ -167,6 +227,10 @@ public class CorpusHealthService {
         private int totalParameters;
         private int totalSources;
         private List<String> unindexedSources = List.of();
+        private long indexedChunks;
+        private boolean indexStatusReliable = true;
+        private boolean targetCatalogConfigured;
+        private String coverageHint = "";
 
         public int getCoveredCells() { return coveredCells; }
         public int getTotalCells() { return totalCells; }
@@ -177,5 +241,9 @@ public class CorpusHealthService {
         public int getTotalParameters() { return totalParameters; }
         public int getTotalSources() { return totalSources; }
         public List<String> getUnindexedSources() { return unindexedSources; }
+        public long getIndexedChunks() { return indexedChunks; }
+        public boolean isIndexStatusReliable() { return indexStatusReliable; }
+        public boolean isTargetCatalogConfigured() { return targetCatalogConfigured; }
+        public String getCoverageHint() { return coverageHint; }
     }
 }

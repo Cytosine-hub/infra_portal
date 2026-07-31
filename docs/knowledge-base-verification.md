@@ -623,6 +623,42 @@ python3 scripts/eval-retrieval.py --k 5 --json .scratch/baseline-bgem3.json
 
 部署后再次执行 50 条检索基线，结果仍为 `Recall@5 = 94.0%`、`MRR = 0.751`，三个未命中用例仍是 `BGEM3-012/048/050`，与 11.8 基线一致，无检索回退。
 
+### 11.10 KBV-012 / 013 / 014 修复（2026-07-31）
+
+严格 TDD：三项均先补失败测试再修实现。测试夹具一律使用唯一 `runId` 前缀构造，
+不复用既有 6 份问题语料，`tearDown` 清空并校验无残留。
+
+| 问题 | 根因 | 修复 |
+|---|---|---|
+| KBV-012 | `resolveLinks` 只做幂等插入，页面正文把 `[[A]]` 改成 `[[B]]` 后 A 的旧边一直保留 | 写入前先删本页出边再按当前正文重建。**新增 `deleteOutgoingReferences` 而非复用 `deleteByPageId`**——后者删的是双向边，会连带删掉别的页面指向本页的入边，那些边归属对方页面 |
+| KBV-013 | `unindexedSources` 用 `wiki_sources.ingested` 判定，该字段表示 Wiki 编译状态；上传类文档从不参与编译、恒为 `false`，导致 6 份已可检索文档全部被误报 | 改以**向量是否存在**为准，新增 `VectorStore.countBySource`。向量库不可用时降级为「不下结论」并置 `indexStatusReliable=false`，不输出清单——宁可不报，也不能把「查不到」误读成「没索引」 |
+| KBV-014 | 覆盖率分母只从已发布标准反推，整套语料空白时返回 `0/0` 和空 `missingCells`，反而看不出问题 | 分母改为**业务目标清单 ∪ 已录入标准的软件**。清单由 `app.corpus.target-catalog`（`分类:软件`）配置，代码不臆造业务数据；未配置时显式给出 `coverageHint` 说明分母局限，不用 `0/0` 掩盖 |
+
+新增接口字段：`indexedChunks`、`indexStatusReliable`、`targetCatalogConfigured`、`coverageHint`，
+前端「健康度」标签已同步展示；索引状态不可信时不渲染未索引清单。
+
+**同时更正了一条既有用例**：`TC-HEALTH-004` 原本断言「`ingested=false` 即未索引」，
+那正是 KBV-013 的错误口径，已改为按向量判定。
+
+#### 验收用例
+
+| TC | 场景 | 结果 |
+|---|---|---|
+| TC-LINK-004 | 改换引用目标后删除失效旧出边 | 通过 |
+| TC-LINK-005 | 清理只针对出边，不波及入边 | 通过 |
+| TC-LINK-006 | 清空全部引用后出边全删且不新增 | 通过 |
+| TC-LINK-007 | 未落库页面不触发清理 | 通过 |
+| TC-LINK-008 | 夹具 runId 隔离校验 | 通过 |
+| TC-HEALTH-006 | 有向量的文档不被误报未索引 | 通过 |
+| TC-HEALTH-007 | 确无向量的文档被列出 | 通过 |
+| TC-HEALTH-008 | 向量库故障时降级不下结论 | 通过 |
+| TC-HEALTH-009 | 目标清单驱动分母，空白软件计入 | 通过 |
+| TC-HEALTH-010 | 已发布标准正确落格 | 通过 |
+| TC-HEALTH-011 | 未配置清单时显式标注 | 通过 |
+| TC-HEALTH-012 | 清单外已录标准的软件也计入 | 通过 |
+
+后端全量 254 个用例、前端 61 个用例、`npm run build` 均通过。
+
 ---
 
 ## 十二、回滚
