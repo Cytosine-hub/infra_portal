@@ -120,4 +120,5 @@ public final class ErrorMessages {
     // 知识库源文档与起草
     public static final String WIKI_SOURCE_NOT_FOUND = "源文档不存在";
     public static final String WIKI_DRAFT_FAILED = "起草失败，模型未返回有效内容";
+    public static final String WIKI_LINK_RESOLVE_FAILED = "页面已保存，但正文中的关联未能建立，图谱与关联检索会缺少这些边。可稍后点击「重建关联」重试。";
 }

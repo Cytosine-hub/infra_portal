@@ -21,7 +21,9 @@ import com.middleware.manager.wiki.repository.WikiAuditLogMapper;
 import com.middleware.manager.wiki.repository.WikiLinkMapper;
 import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
+import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.wiki.service.LinkResolver;
+import com.middleware.manager.wiki.web.dto.WikiPageSaveResponse;
 import com.middleware.manager.wiki.service.LintAgent;
 import com.middleware.manager.wiki.service.PageDraftService;
 import com.middleware.manager.wiki.entity.WikiPagePermission;
@@ -196,7 +198,7 @@ public class WikiController {
      * 一律先落为草稿，发布需另走 updatePage 并通过审核权限校验。
      */
     @PostMapping("/pages")
-    public ResponseEntity<WikiPage> createPage(@RequestBody WikiPage page,
+    public ResponseEntity<WikiPageSaveResponse> createPage(@RequestBody WikiPage page,
                                                Authentication authentication, HttpServletRequest request) {
         if (!wikiPermissionService.isAdmin(authentication)
                 && wikiPermissionService.getManagedCategory(authentication) == null) {
@@ -214,7 +216,7 @@ public class WikiController {
         page.setCreatedAt(LocalDateTime.now());
         page.setUpdatedAt(LocalDateTime.now());
         pageMapper.insert(page);
-        resolveLinks(page);
+        WikiPageSaveResponse result = resolveLinks(page);
 
         Long actorId = resolveActorId(authentication);
         try {
@@ -224,7 +226,7 @@ public class WikiController {
         } catch (Exception e) {
             log.warn("Audit log write failed: {}", e.getMessage());
         }
-        return ResponseEntity.ok(page);
+        return ResponseEntity.ok(result);
     }
 
     /**
@@ -232,19 +234,21 @@ public class WikiController {
      * <p>建边失败不应影响页面保存本身——边可以稍后由 Lint 或下次编辑补上，
      * 但页面内容丢失是不可接受的。
      */
-    private void resolveLinks(WikiPage page) {
+    private WikiPageSaveResponse resolveLinks(WikiPage page) {
         try {
             int created = linkResolver.resolveLinks(List.of(page));
-            if (created > 0) {
-                log.debug("页面 {} 解析出 {} 条关联", page.getId(), created);
-            }
+            log.debug("页面 {} 解析出 {} 条关联", page.getId(), created);
+            return WikiPageSaveResponse.ok(page, created);
         } catch (Exception e) {
-            log.warn("页面 {} 的 wikilink 解析失败，不影响本次保存: {}", page.getId(), e.getMessage());
+            // 保存本身已成功，页面内容不能因为建边失败而丢失；但失败必须让用户看见，
+            // 并可通过 POST /pages/{id}/relink 重试，而不是只留一行日志。
+            log.warn("页面 {} 的 wikilink 解析失败: {}", page.getId(), e.getMessage());
+            return WikiPageSaveResponse.withWarning(page, ErrorMessages.WIKI_LINK_RESOLVE_FAILED);
         }
     }
 
     @PutMapping("/pages/{id}")
-    public ResponseEntity<WikiPage> updatePage(@PathVariable Long id, @RequestBody WikiPage page,
+    public ResponseEntity<WikiPageSaveResponse> updatePage(@PathVariable Long id, @RequestBody WikiPage page,
                                                 Authentication authentication, HttpServletRequest request) {
         WikiPage existing = pageMapper.findById(id);
         if (existing == null) return ResponseEntity.notFound().build();
@@ -282,7 +286,7 @@ public class WikiController {
 
         existing.setUpdatedAt(LocalDateTime.now());
         pageMapper.update(existing);
-        resolveLinks(existing);
+        WikiPageSaveResponse result = resolveLinks(existing);
 
         // Audit log for status changes
         if (newStatus != null && !newStatus.equals(oldStatus)) {
@@ -302,7 +306,27 @@ public class WikiController {
             }
         }
 
-        return ResponseEntity.ok(existing);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 重建该页的关联（补救入口）。
+     * <p>保存时建边失败后，用户可据响应里的 linkWarning 手动重试，不必靠重新编辑
+     * 正文来触发。
+     */
+    @PostMapping("/pages/{id}/relink")
+    public ResponseEntity<WikiPageSaveResponse> relinkPage(@PathVariable Long id,
+                                                           Authentication authentication,
+                                                           HttpServletRequest request) {
+        if (!wikiPermissionService.isAdmin(authentication)
+                && wikiPermissionService.getManagedCategory(authentication) == null) {
+            return ResponseEntity.status(403).build();
+        }
+        WikiPage page = pageMapper.findById(id);
+        if (page == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(resolveLinks(page));
     }
 
     @DeleteMapping("/pages/{id}")

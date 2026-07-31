@@ -74,4 +74,5 @@ public final class ErrorCode {
     // 知识库源文档与起草
     public static final String WIKI_SOURCE_NOT_FOUND = "WIKI_SOURCE_NOT_FOUND";
     public static final String WIKI_DRAFT_FAILED = "WIKI_DRAFT_FAILED";
+    public static final String WIKI_LINK_RESOLVE_FAILED = "WIKI_LINK_RESOLVE_FAILED";
 }

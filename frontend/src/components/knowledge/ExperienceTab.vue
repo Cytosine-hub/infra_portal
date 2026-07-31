@@ -10,6 +10,13 @@
       </template>
     </Toolbar>
 
+    <div v-if="linkWarning" class="link-warning">
+      <span>{{ linkWarning.message }}</span>
+      <BaseButton size="sm" variant="primary" :loading="relinking" @click="retryRelink">
+        重建关联
+      </BaseButton>
+    </div>
+
     <div class="layout">
       <div class="list">
         <DataTable
@@ -138,6 +145,8 @@ const draftContent = ref('')
 const drafting = ref(false)
 const editorOpen = ref(false)
 const saving = ref(false)
+const linkWarning = ref(null)
+const relinking = ref(false)
 const editing = ref(emptyPage())
 
 function emptyPage() {
@@ -165,12 +174,18 @@ async function savePage() {
   saving.value = true
   try {
     const payload = { ...editing.value }
-    if (payload.id) {
-      await request(`/api/knowledge/pages/${payload.id}`, { method: 'PUT', body: payload })
+    const result = payload.id
+      ? await request(`/api/knowledge/pages/${payload.id}`, { method: 'PUT', body: payload })
+      : await request('/api/knowledge/pages', { method: 'POST', body: payload })
+
+    // 建边失败不影响保存，但必须让用户看见，并记下页面 id 以便重试
+    if (result?.linkWarning) {
+      linkWarning.value = { message: result.linkWarning, pageId: result.page?.id }
+      props.notify(result.linkWarning, 'error')
     } else {
-      await request('/api/knowledge/pages', { method: 'POST', body: payload })
+      linkWarning.value = null
+      props.notify('已保存为草稿', 'success')
     }
-    props.notify('已保存为草稿', 'success')
     editorOpen.value = false
     await load()
   } catch (error) {
@@ -218,6 +233,25 @@ async function runDraft() {
     props.notify(error.message, 'error')
   } finally {
     drafting.value = false
+  }
+}
+
+async function retryRelink() {
+  if (!linkWarning.value?.pageId) return
+  relinking.value = true
+  try {
+    const result = await request(
+      `/api/knowledge/pages/${linkWarning.value.pageId}/relink`, { method: 'POST' })
+    if (result?.linkWarning) {
+      props.notify(result.linkWarning, 'error')
+    } else {
+      linkWarning.value = null
+      props.notify(`关联已重建，共 ${result.linksCreated} 条`, 'success')
+    }
+  } catch (error) {
+    props.notify(error.message, 'error')
+  } finally {
+    relinking.value = false
   }
 }
 
@@ -271,6 +305,20 @@ onMounted(load)
   gap: var(--space-md);
 }
 
+.link-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-light);
+  color: var(--color-text);
+  font-size: 0.875rem;
+}
+
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -278,7 +326,21 @@ onMounted(load)
 }
 
 @media (min-width: 1100px) {
-  .layout {
+  .link-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-md);
+  background: var(--color-danger-light);
+  color: var(--color-text);
+  font-size: 0.875rem;
+}
+
+.layout {
     grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   }
 }
