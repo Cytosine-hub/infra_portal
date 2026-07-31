@@ -1,12 +1,16 @@
 package com.middleware.manager.knowledge.service;
 
 import com.middleware.manager.domain.ParameterStandard;
+import com.middleware.manager.domain.SoftwareType;
+import com.middleware.manager.exception.BusinessException;
 import com.middleware.manager.repository.ParameterStandardIndexMapper;
+import com.middleware.manager.service.SoftwareTypeLookup;
 import com.middleware.manager.repository.StandardParameterLookupMapper;
+import com.middleware.manager.wiki.entity.WikiPage;
 import com.middleware.manager.wiki.entity.WikiSource;
 import com.middleware.manager.knowledge.store.VectorStore;
+import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
-import org.springframework.beans.factory.annotation.Value;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -43,23 +48,21 @@ public class CorpusHealthService {
     private final StandardParameterLookupMapper parameterMapper;
     private final WikiSourceMapper sourceMapper;
     private final VectorStore vectorStore;
-    /**
-     * 业务维护的目标软件清单，形如 {@code 数据库:MySQL}。
-     * <p>覆盖率分母必须独立于「现有已发布标准」——从现有标准反推的话，整套语料空白时
-     * 分母也是 0，覆盖率显示 0/0，反而看不出问题。清单内容由业务配置，代码不臆造。
-     */
-    private final List<String> targetCatalog;
+    private final SoftwareTypeLookup softwareTypeLookup;
+    private final WikiPageMapper pageMapper;
 
     public CorpusHealthService(ParameterStandardIndexMapper standardMapper,
                                StandardParameterLookupMapper parameterMapper,
                                WikiSourceMapper sourceMapper,
                                VectorStore vectorStore,
-                               @Value("${app.corpus.target-catalog:}") List<String> targetCatalog) {
+                               SoftwareTypeLookup softwareTypeLookup,
+                               WikiPageMapper pageMapper) {
         this.standardMapper = standardMapper;
         this.parameterMapper = parameterMapper;
         this.sourceMapper = sourceMapper;
         this.vectorStore = vectorStore;
-        this.targetCatalog = targetCatalog == null ? List.of() : targetCatalog;
+        this.softwareTypeLookup = softwareTypeLookup;
+        this.pageMapper = pageMapper;
     }
 
     public CorpusHealthReport report() {
@@ -74,9 +77,33 @@ public class CorpusHealthService {
     private void fillCoverage(CorpusHealthReport report) {
         List<ParameterStandard> published = safeList(standardMapper.findPublished());
 
-        Set<String> softwares = new LinkedHashSet<>();
         Set<String> covered = new LinkedHashSet<>();
-        Map<String, List<String>> byCategory = new TreeMap<>();
+        Map<String, LinkedHashSet<String>> softwareSetsByCategory = new TreeMap<>();
+        Map<String, String> catalogScopeByNormalized = new LinkedHashMap<>();
+        Set<String> denominator = new LinkedHashSet<>();
+
+        List<SoftwareType> catalogTypes;
+        try {
+            catalogTypes = safeList(softwareTypeLookup.findActive());
+        } catch (BusinessException exception) {
+            log.warn("查询后台软件分类失败，本次覆盖率仅按已录标准统计 reason={}", exception.getMessage());
+            catalogTypes = List.of();
+            report.catalogStatusReliable = false;
+        }
+
+        for (SoftwareType type : catalogTypes) {
+            String software = blankToNull(type.getName());
+            if (software == null) {
+                continue;
+            }
+            String category = categoryOrDefault(type.getCategory());
+            String scoped = scope(category, software);
+            String normalized = normalizeScope(scoped);
+            if (catalogScopeByNormalized.putIfAbsent(normalized, scoped) == null) {
+                denominator.add(scoped);
+                softwareSetsByCategory.computeIfAbsent(category, key -> new LinkedHashSet<>()).add(software);
+            }
+        }
 
         List<String> unclassified = new ArrayList<>();
         for (ParameterStandard s : published) {
@@ -85,8 +112,11 @@ public class CorpusHealthService {
                 continue;
             }
             // 格子键带上分类：中间件:Nginx 与 应用:Nginx 是两套标准，不能塌缩成一格
-            String scoped = (s.getCategory() == null ? "未分类" : s.getCategory()) + ":" + software;
-            softwares.add(scoped);
+            String category = categoryOrDefault(s.getCategory());
+            String rawScope = scope(category, software);
+            String scoped = catalogScopeByNormalized.getOrDefault(normalizeScope(rawScope), rawScope);
+            denominator.add(scoped);
+            addScopeToCategory(softwareSetsByCategory, scoped);
             String type = inferType(s.getTitle());
             if (type != null) {
                 covered.add(scoped + " / " + type);
@@ -95,23 +125,10 @@ public class CorpusHealthService {
                 // 低估覆盖率。单列出来，让人知道是「归类不了」而不是「没写」。
                 unclassified.add(scoped + " -> " + s.getTitle());
             }
-            byCategory.computeIfAbsent(
-                    s.getCategory() == null ? "未分类" : s.getCategory(), k -> new ArrayList<>()).add(software);
         }
 
-        // 分母 = 业务目标清单 ∪ 已录入标准的软件。
+        // 分母 = 后台启用的软件类型 ∪ 已录入标准的软件。
         // 取并集而非只用清单：清单外但确实录了标准的软件也应计入，否则会漏掉真实语料。
-        Set<String> denominator = new LinkedHashSet<>();
-        Set<String> catalogSoftwares = new LinkedHashSet<>();
-        for (String entry : targetCatalog) {
-            String software = parseCatalogSoftware(entry);
-            if (software != null) {
-                catalogSoftwares.add(software);
-            }
-        }
-        denominator.addAll(catalogSoftwares);
-        denominator.addAll(softwares);
-
         List<String> missing = new ArrayList<>();
         for (String software : denominator) {
             for (String type : STANDARD_TYPES) {
@@ -127,15 +144,18 @@ public class CorpusHealthService {
         report.totalCells = totalCells;
         report.coverage = totalCells == 0 ? 0.0 : (double) covered.size() / totalCells;
         report.missingCells = missing;
-        report.softwareByCategory = byCategory;
+        Map<String, List<String>> softwareByCategory = new TreeMap<>();
+        softwareSetsByCategory.forEach((category, softwares) ->
+                softwareByCategory.put(category, new ArrayList<>(softwares)));
+        report.softwareByCategory = softwareByCategory;
         report.unclassifiedStandards = unclassified;
-        // 以解析出的有效条目判定，而非原始列表长度：Spring 把空配置转成 List 时
-        // 可能给出 [""]，用 isEmpty() 会把「没配」误判成「已配」
-        report.targetCatalogConfigured = !catalogSoftwares.isEmpty();
-        report.coverageHint = catalogSoftwares.isEmpty()
-                ? "未配置目标清单（app.corpus.target-catalog），当前分母仅来自已录入标准的软件，"
-                        + "无法反映整套语料空白。配置后可发现「某软件一份标准都没有」的缺口。"
-                : "分母来自目标清单与已录入标准的并集。";
+        report.catalogSoftwareCount = catalogScopeByNormalized.size();
+        report.targetCatalogConfigured = !catalogScopeByNormalized.isEmpty();
+        report.coverageHint = !report.catalogStatusReliable
+                ? "后台软件分类查询失败，本次分母仅来自已录入标准的软件，覆盖率结论不完整。"
+                : catalogScopeByNormalized.isEmpty()
+                ? "后台管理未配置启用的软件类型，当前分母仅来自已录入标准的软件，无法反映整套语料空白。"
+                : "分母来自后台管理中已启用的软件类型与已录入标准的并集。";
     }
 
     /** 标题里带「参数 / 部署 / 监控 / 应急」即归入对应类型，识别不出的不计入覆盖。 */
@@ -186,9 +206,38 @@ public class CorpusHealthService {
      */
     private void fillSources(CorpusHealthReport report) {
         List<WikiSource> sources = safeList(sourceMapper.findAll());
+        List<WikiPage> pages = safeList(pageMapper.findAllExcludingContent());
         List<String> unindexed = new ArrayList<>();
         long indexedChunks = 0L;
         boolean reliable = true;
+        int uploadedDocuments = 0;
+        int standardDocuments = 0;
+        int otherDocuments = 0;
+
+        for (WikiSource source : sources) {
+            if ("UPLOAD".equalsIgnoreCase(source.getSourceType())) {
+                uploadedDocuments++;
+            } else if ("STANDARD_DOC".equalsIgnoreCase(source.getSourceType())) {
+                standardDocuments++;
+            } else {
+                otherDocuments++;
+            }
+        }
+
+        int experiencePages = 0;
+        int activeExperiencePages = 0;
+        int draftExperiencePages = 0;
+        for (WikiPage page : pages) {
+            if (!"EXPERIENCE".equalsIgnoreCase(page.getPageType())) {
+                continue;
+            }
+            experiencePages++;
+            if ("ACTIVE".equalsIgnoreCase(page.getStatus())) {
+                activeExperiencePages++;
+            } else if ("DRAFT".equalsIgnoreCase(page.getStatus())) {
+                draftExperiencePages++;
+            }
+        }
 
         for (WikiSource s : sources) {
             try {
@@ -209,6 +258,13 @@ public class CorpusHealthService {
         }
 
         report.totalSources = sources.size();
+        report.uploadedDocuments = uploadedDocuments;
+        report.standardDocuments = standardDocuments;
+        report.otherDocuments = otherDocuments;
+        report.experiencePages = experiencePages;
+        report.activeExperiencePages = activeExperiencePages;
+        report.draftExperiencePages = draftExperiencePages;
+        report.totalKnowledgeItems = sources.size() + experiencePages;
         // 判定不可信时连切片总数也不输出，避免局部数字被当成完整结论
         report.indexedChunks = reliable ? indexedChunks : 0L;
         report.indexStatusReliable = reliable;
@@ -216,27 +272,24 @@ public class CorpusHealthService {
         report.unindexedSources = reliable ? unindexed : List.of();
     }
 
-    /**
-     * 目标清单条目形如 {@code 分类:软件}，归一化为「分类:软件」作为格子键。
-     * <p>保留分类而非只取软件名：同名软件可能分属不同分类（中间件:Nginx 与
-     * 应用:Nginx），塌缩成一格会让两套标准互相「顶格」，覆盖率虚高。
-     * 缺少分隔符时归入未分类。
-     */
-    private String parseCatalogSoftware(String entry) {
-        if (entry == null || entry.isBlank()) {
-            return null;
-        }
-        String trimmed = entry.trim();
-        int idx = trimmed.indexOf(':');
-        if (idx < 0) {
-            return "未分类:" + trimmed;
-        }
-        String category = trimmed.substring(0, idx).trim();
-        String software = trimmed.substring(idx + 1).trim();
-        if (software.isEmpty()) {
-            return null;
-        }
-        return (category.isEmpty() ? "未分类" : category) + ":" + software;
+    private void addScopeToCategory(Map<String, LinkedHashSet<String>> byCategory, String scoped) {
+        int separator = scoped.indexOf(':');
+        String category = scoped.substring(0, separator);
+        String software = scoped.substring(separator + 1);
+        byCategory.computeIfAbsent(category, key -> new LinkedHashSet<>()).add(software);
+    }
+
+    private String scope(String category, String software) {
+        return category + ":" + software.trim();
+    }
+
+    private String normalizeScope(String scoped) {
+        return scoped.toLowerCase(Locale.ROOT);
+    }
+
+    private String categoryOrDefault(String category) {
+        String value = blankToNull(category);
+        return value == null ? "未分类" : value.trim();
     }
 
     private <T> List<T> safeList(List<T> list) {
@@ -256,9 +309,18 @@ public class CorpusHealthService {
         private List<String> parameterConflicts = List.of();
         private int totalParameters;
         private int totalSources;
+        private int totalKnowledgeItems;
+        private int catalogSoftwareCount;
+        private int uploadedDocuments;
+        private int standardDocuments;
+        private int otherDocuments;
+        private int experiencePages;
+        private int activeExperiencePages;
+        private int draftExperiencePages;
         private List<String> unindexedSources = List.of();
         private long indexedChunks;
         private boolean indexStatusReliable = true;
+        private boolean catalogStatusReliable = true;
         private boolean targetCatalogConfigured;
         private String coverageHint = "";
         private List<String> unclassifiedStandards = List.of();
@@ -271,9 +333,18 @@ public class CorpusHealthService {
         public List<String> getParameterConflicts() { return parameterConflicts; }
         public int getTotalParameters() { return totalParameters; }
         public int getTotalSources() { return totalSources; }
+        public int getTotalKnowledgeItems() { return totalKnowledgeItems; }
+        public int getCatalogSoftwareCount() { return catalogSoftwareCount; }
+        public int getUploadedDocuments() { return uploadedDocuments; }
+        public int getStandardDocuments() { return standardDocuments; }
+        public int getOtherDocuments() { return otherDocuments; }
+        public int getExperiencePages() { return experiencePages; }
+        public int getActiveExperiencePages() { return activeExperiencePages; }
+        public int getDraftExperiencePages() { return draftExperiencePages; }
         public List<String> getUnindexedSources() { return unindexedSources; }
         public long getIndexedChunks() { return indexedChunks; }
         public boolean isIndexStatusReliable() { return indexStatusReliable; }
+        public boolean isCatalogStatusReliable() { return catalogStatusReliable; }
         public boolean isTargetCatalogConfigured() { return targetCatalogConfigured; }
         public String getCoverageHint() { return coverageHint; }
         public List<String> getUnclassifiedStandards() { return unclassifiedStandards; }

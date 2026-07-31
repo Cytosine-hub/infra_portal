@@ -1,11 +1,14 @@
 package com.middleware.manager.knowledge.service;
 
 import com.middleware.manager.domain.ParameterStandard;
+import com.middleware.manager.domain.SoftwareType;
 import com.middleware.manager.knowledge.service.CorpusHealthService.CorpusHealthReport;
 import com.middleware.manager.knowledge.store.VectorStore;
 import com.middleware.manager.repository.ParameterStandardIndexMapper;
 import com.middleware.manager.repository.StandardParameterLookupMapper;
+import com.middleware.manager.service.SoftwareTypeLookup;
 import com.middleware.manager.wiki.entity.WikiSource;
+import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +40,8 @@ class CorpusHealthAccuracyTest {
     @Mock private StandardParameterLookupMapper parameterMapper;
     @Mock private WikiSourceMapper sourceMapper;
     @Mock private VectorStore vectorStore;
+    @Mock private SoftwareTypeLookup softwareTypeLookup;
+    @Mock private WikiPageMapper pageMapper;
 
     private String runId;
     private final List<Object> fixtures = new ArrayList<>();
@@ -49,6 +54,8 @@ class CorpusHealthAccuracyTest {
         when(standardMapper.findPublished()).thenReturn(List.of());
         when(parameterMapper.search(any(), any(), anyInt())).thenReturn(List.of());
         when(sourceMapper.findAll()).thenReturn(List.of());
+        when(softwareTypeLookup.findActive()).thenReturn(List.of());
+        when(pageMapper.findAllExcludingContent()).thenReturn(List.of());
         when(vectorStore.existsBySource(anyString(), anyLong())).thenReturn(false);
     }
 
@@ -59,8 +66,22 @@ class CorpusHealthAccuracyTest {
     }
 
     private CorpusHealthService service(List<String> targetCatalog) {
+        List<SoftwareType> softwareTypes = targetCatalog.stream()
+                .filter(entry -> entry != null && !entry.isBlank())
+                .map(this::softwareType)
+                .toList();
+        when(softwareTypeLookup.findActive()).thenReturn(softwareTypes);
         return new CorpusHealthService(standardMapper, parameterMapper, sourceMapper,
-                vectorStore, targetCatalog);
+                vectorStore, softwareTypeLookup, pageMapper);
+    }
+
+    private SoftwareType softwareType(String entry) {
+        int separator = entry.indexOf(':');
+        SoftwareType type = new SoftwareType();
+        type.setCategory(separator < 0 ? "未分类" : entry.substring(0, separator).trim());
+        type.setName(separator < 0 ? entry.trim() : entry.substring(separator + 1).trim());
+        type.setActive(true);
+        return type;
     }
 
     private WikiSource source(Long id, String suffix, boolean ingestedFlag) {
@@ -189,9 +210,9 @@ class CorpusHealthAccuracyTest {
     class CoverageDenominator {
 
         @Test
-        @DisplayName("TC-HEALTH-009 配置目标清单后，未录入任何标准的软件也应计入分母并列为空缺")
+        @DisplayName("TC-HEALTH-009 后台启用软件后，未录入任何标准的软件也应计入分母并列为空缺")
         void targetCatalogDrivesDenominator() {
-            // 分母来自业务配置的目标清单，不从现有标准反推——否则整套语料空白时
+            // 分母来自后台启用的软件类型，不从现有标准反推——否则整套语料空白时
             // 分母也是 0，覆盖率显示 0/0，反而看不出问题
             CorpusHealthReport report =
                     service(List.of("数据库:MySQL", "中间件:Nginx")).report();
@@ -222,16 +243,16 @@ class CorpusHealthAccuracyTest {
         }
 
         @Test
-        @DisplayName("TC-HEALTH-011 未配置目标清单时应显式标注，不得用 0/0 掩盖")
+        @DisplayName("TC-HEALTH-011 后台未配置启用软件时应显式标注，不得用 0/0 掩盖")
         void unconfiguredCatalogIsExplicit() {
             CorpusHealthReport report = service(List.of()).report();
 
             assertThat(report.isTargetCatalogConfigured()).isFalse();
-            assertThat(report.getCoverageHint()).contains("目标清单");
+            assertThat(report.getCoverageHint()).contains("后台管理");
         }
 
         @Test
-        @DisplayName("TC-HEALTH-012 目标清单外但已录入标准的软件也应计入，避免遗漏真实语料")
+        @DisplayName("TC-HEALTH-012 后台清单外但已录入标准的软件也应计入，避免遗漏真实语料")
         void standardsOutsideCatalogStillCounted() {
             ParameterStandard s = new ParameterStandard();
             s.setCategory("主机");

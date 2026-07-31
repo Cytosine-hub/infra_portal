@@ -15,6 +15,7 @@ import com.middleware.manager.web.api.dto.SoftwareTypeResolveRequest;
 import com.middleware.manager.web.api.dto.SoftwareTypeResponse;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
@@ -29,6 +30,17 @@ public class RemoteSoftwareTypeLookup implements SoftwareTypeLookup {
                                     GatewaySignatureService signatureService) {
         this.restClient = restClient;
         this.signatureService = signatureService;
+    }
+
+    @Override
+    public List<SoftwareType> findActive() {
+        SoftwareTypeResponse[] response = post(
+                CatalogSoftwareTypeProtocol.ACTIVE_PATH,
+                CatalogSoftwareTypeProtocol.ACTIVE_OPERATION,
+                "",
+                Map.of(),
+                SoftwareTypeResponse[].class);
+        return response == null ? List.of() : Arrays.stream(response).map(this::toDomain).toList();
     }
 
     @Override

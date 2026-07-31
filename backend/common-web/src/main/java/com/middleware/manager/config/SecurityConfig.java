@@ -77,6 +77,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 CatalogSoftwareTypeProtocol.BASE_PATH + CatalogSoftwareTypeProtocol.BY_IDS_PATH,
                                 CatalogSoftwareTypeProtocol.BASE_PATH + CatalogSoftwareTypeProtocol.BY_CATEGORY_PATH,
+                                CatalogSoftwareTypeProtocol.BASE_PATH + CatalogSoftwareTypeProtocol.ACTIVE_PATH,
                                 CatalogSoftwareTypeProtocol.BASE_PATH + CatalogSoftwareTypeProtocol.RESOLVE_PATH)
                         .permitAll()
                         // 其他 auth 接口需认证

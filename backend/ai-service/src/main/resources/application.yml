@@ -41,6 +41,9 @@ spring:
       max-request-size: 2048MB
 
 app:
+  catalog:
+    base-url: "${CORE_SERVICE_URL:http://127.0.0.1:8084}"
+    load-balanced: false
   storage:
     location: ./storage
   security:
@@ -51,11 +54,6 @@ app:
   llm:
     max-concurrent: ${LLM_MAX_CONCURRENT:5}
     timeout-seconds: ${LLM_TIMEOUT_SECONDS:600}
-  corpus:
-    # 覆盖率分母的目标软件清单，形如 分类:软件，逗号分隔。
-    # 留空时分母只能从已录入标准反推——整套语料空白时会显示 0/0，反而看不出问题。
-    # 内容由业务维护，代码不臆造；配置后可发现「某软件一份标准都没有」的缺口。
-    target-catalog: ${CORPUS_TARGET_CATALOG:}
   embedding:
     max-tokens: ${EMBEDDING_MAX_TOKENS:512}
   ai:

@@ -1,10 +1,13 @@
 package com.middleware.manager.knowledge.service;
 
+import com.middleware.manager.domain.SoftwareType;
 import com.middleware.manager.knowledge.service.CorpusHealthService.CorpusHealthReport;
 import com.middleware.manager.knowledge.store.VectorStore;
 import com.middleware.manager.repository.ParameterStandardIndexMapper;
 import com.middleware.manager.repository.StandardParameterLookupMapper;
+import com.middleware.manager.service.SoftwareTypeLookup;
 import com.middleware.manager.wiki.entity.WikiSource;
+import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +38,8 @@ class CorpusHealthRobustnessTest {
     @Mock private StandardParameterLookupMapper parameterMapper;
     @Mock private WikiSourceMapper sourceMapper;
     @Mock private VectorStore vectorStore;
+    @Mock private SoftwareTypeLookup softwareTypeLookup;
+    @Mock private WikiPageMapper pageMapper;
 
     private String runId;
 
@@ -45,29 +50,43 @@ class CorpusHealthRobustnessTest {
         when(standardMapper.findPublished()).thenReturn(List.of());
         when(parameterMapper.search(any(), any(), anyInt())).thenReturn(List.of());
         when(sourceMapper.findAll()).thenReturn(List.of());
+        when(softwareTypeLookup.findActive()).thenReturn(List.of());
+        when(pageMapper.findAllExcludingContent()).thenReturn(List.of());
         when(vectorStore.existsBySource(anyString(), anyLong())).thenReturn(false);
         when(vectorStore.count()).thenReturn(0L);
     }
 
     private CorpusHealthService service(List<String> catalog) {
+        List<SoftwareType> softwareTypes = catalog.stream()
+                .filter(entry -> entry != null && !entry.isBlank())
+                .map(this::softwareType)
+                .toList();
+        when(softwareTypeLookup.findActive()).thenReturn(softwareTypes);
         return new CorpusHealthService(standardMapper, parameterMapper, sourceMapper,
-                vectorStore, catalog);
+                vectorStore, softwareTypeLookup, pageMapper);
+    }
+
+    private SoftwareType softwareType(String entry) {
+        int separator = entry.indexOf(':');
+        SoftwareType type = new SoftwareType();
+        type.setCategory(separator < 0 ? "未分类" : entry.substring(0, separator).trim());
+        type.setName(separator < 0 ? entry.trim() : entry.substring(separator + 1).trim());
+        type.setActive(true);
+        return type;
     }
 
     @Test
-    @DisplayName("TC-HEALTH-013 空白配置项不得被当成已配置目标清单")
+    @DisplayName("TC-HEALTH-013 后台空白软件类型不得被当成有效清单")
     void blankCatalogEntriesAreNotConfigured() {
-        // Spring 将 ${app.corpus.target-catalog:} 转 List 时可能给出 [""]，
-        // 直接用 isEmpty() 判定会把「没配」误判成「已配」
         CorpusHealthReport report = service(Arrays.asList("", "   ")).report();
 
         assertThat(report.isTargetCatalogConfigured()).isFalse();
-        assertThat(report.getCoverageHint()).contains("目标清单");
+        assertThat(report.getCoverageHint()).contains("后台管理");
         assertThat(report.getTotalCells()).isZero();
     }
 
     @Test
-    @DisplayName("TC-HEALTH-014 配置项混有空白时应只取有效条目")
+    @DisplayName("TC-HEALTH-014 后台软件类型混有空白时应只取有效条目")
     void ignoresBlankEntriesAmongValidOnes() {
         CorpusHealthReport report = service(Arrays.asList("数据库:MySQL", "", "  ")).report();
 

@@ -4,8 +4,10 @@ import com.middleware.manager.domain.ParameterStandard;
 import com.middleware.manager.knowledge.service.CorpusHealthService.CorpusHealthReport;
 import com.middleware.manager.repository.ParameterStandardIndexMapper;
 import com.middleware.manager.repository.StandardParameterLookupMapper;
+import com.middleware.manager.service.SoftwareTypeLookup;
 import com.middleware.manager.wiki.entity.WikiSource;
 import com.middleware.manager.knowledge.store.VectorStore;
+import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +34,8 @@ class CorpusHealthServiceTest {
     @Mock private StandardParameterLookupMapper parameterMapper;
     @Mock private WikiSourceMapper sourceMapper;
     @Mock private VectorStore vectorStore;
+    @Mock private SoftwareTypeLookup softwareTypeLookup;
+    @Mock private WikiPageMapper pageMapper;
 
     private CorpusHealthService service;
 
@@ -39,10 +43,12 @@ class CorpusHealthServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         service = new CorpusHealthService(standardMapper, parameterMapper, sourceMapper,
-                vectorStore, List.of());
+                vectorStore, softwareTypeLookup, pageMapper);
         when(standardMapper.findPublished()).thenReturn(List.of());
         when(parameterMapper.search(any(), any(), anyInt())).thenReturn(List.of());
         when(sourceMapper.findAll()).thenReturn(List.of());
+        when(softwareTypeLookup.findActive()).thenReturn(List.of());
+        when(pageMapper.findAllExcludingContent()).thenReturn(List.of());
         when(vectorStore.existsBySource(any(), any())).thenReturn(false);
     }
 

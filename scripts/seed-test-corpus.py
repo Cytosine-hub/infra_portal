@@ -7,8 +7,8 @@
 评测集问的内容根本不在库里，测出来的是语料覆盖率而非检索质量。
 
 但测试阶段常常语料不全：某些软件一份标准都没有，某些标准类型缺失。这时不能
-凑合着测（结论无效），也不该等内容团队补完（阻塞验证）。本工具按目标清单造出
-结构完整的测试标准与参数，让检索链路可以被完整验证。
+凑合着测（结论无效），也不该等内容团队补完（阻塞验证）。本工具默认按后台管理中
+启用的软件类型造出结构完整的测试标准与参数，让检索链路可以被完整验证。
 
 造出来的都是**明确标记的测试数据**，标题统一带 `[TEST]` 前缀与 runId，
 `--cleanup` 可一键清除，不会污染真实语料。
@@ -20,7 +20,8 @@
     # 看当前缺什么（不写任何数据）
     python3 scripts/seed-test-corpus.py --dry-run
 
-    # 按缺口造数据
+    # 默认按后台启用的软件类型造数据；也可只测指定子集
+    python3 scripts/seed-test-corpus.py
     python3 scripts/seed-test-corpus.py --catalog "数据库:MySQL,数据库:Redis,中间件:Nginx"
 
     # 测完清理
@@ -138,6 +139,13 @@ def corpus_snapshot(base_url, token):
     return api(base_url, token, "/api/knowledge/corpus-health")
 
 
+def catalog_from_health(health):
+    entries = []
+    for category, softwares in (health.get("softwareByCategory") or {}).items():
+        entries.extend((category, software) for software in softwares)
+    return entries
+
+
 def latin_prefix(software):
     ascii_part = "".join(ch for ch in software if ch.isascii() and ch.isalnum())
     return (ascii_part or "svc").lower()
@@ -146,8 +154,8 @@ def latin_prefix(software):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-url", default=DEFAULT_BASE)
-    ap.add_argument("--catalog", default=os.environ.get("CORPUS_TARGET_CATALOG", ""),
-                    help="目标清单，形如 数据库:MySQL,中间件:Nginx")
+    ap.add_argument("--catalog",
+                    help="可选测试子集，形如 数据库:MySQL,中间件:Nginx；默认读取后台启用类型")
     ap.add_argument("--dry-run", action="store_true", help="只报告缺口，不写数据")
     ap.add_argument("--cleanup", action="store_true", help="清除本工具造过的全部测试数据")
     args = ap.parse_args()
@@ -160,12 +168,11 @@ def main():
         cleanup(args.base_url, token)
         return
 
-    entries = parse_catalog(args.catalog)
-    if not entries:
-        sys.exit("请通过 --catalog 或 CORPUS_TARGET_CATALOG 指定目标清单，"
-                 "格式：数据库:MySQL,中间件:Nginx")
-
     health = corpus_snapshot(args.base_url, token)
+    entries = parse_catalog(args.catalog) if args.catalog else catalog_from_health(health)
+    if not entries:
+        sys.exit("后台没有启用的软件类型；请先在后台维护，或通过 --catalog 指定测试子集")
+
     print(f"当前语料：覆盖 {health.get('coveredCells')}/{health.get('totalCells')} 格"
           f"（{health.get('coverage', 0) * 100:.1f}%），"
           f"文档 {health.get('totalSources')} 份，参数 {health.get('totalParameters')} 条")

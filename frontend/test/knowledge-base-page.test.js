@@ -254,7 +254,25 @@ describe('健康度标签', () => {
       if (path.endsWith('/lint/results')) {
         return [{ id: 1, lintType: 'BROKEN_LINK', severity: 'HIGH', description: '指向不存在的页面' }]
       }
-      if (path.endsWith('/stats')) return { total_pages: 12, total_sources: 5, uningested_sources: 1 }
+      if (path.endsWith('/corpus-health')) {
+        return {
+          totalKnowledgeItems: 17,
+          experiencePages: 12,
+          uploadedDocuments: 5,
+          standardDocuments: 0,
+          catalogSoftwareCount: 0,
+          coverage: 0,
+          coveredCells: 0,
+          totalCells: 0,
+          totalParameters: 0,
+          targetCatalogConfigured: false,
+          indexStatusReliable: true,
+          unindexedSources: [],
+          missingCells: [],
+          parameterConflicts: [],
+          unclassifiedStandards: []
+        }
+      }
       return []
     })
 
@@ -265,5 +283,52 @@ describe('健康度标签', () => {
     expect(text).toContain('断链')
     expect(text).toContain('指向不存在的页面')
     expect(text).toContain('12')
+  })
+
+  test('TC-KB-016 应展示动态软件标准覆盖与完整知识内容构成，不再读取旧索引统计', async () => {
+    const request = vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path.endsWith('/lint/results')) return []
+      if (path.endsWith('/corpus-health')) {
+        return {
+          coverage: 0.25,
+          coveredCells: 4,
+          totalCells: 16,
+          totalParameters: 8,
+          totalSources: 4,
+          totalKnowledgeItems: 7,
+          catalogSoftwareCount: 4,
+          uploadedDocuments: 2,
+          standardDocuments: 1,
+          otherDocuments: 1,
+          experiencePages: 3,
+          activeExperiencePages: 2,
+          draftExperiencePages: 1,
+          targetCatalogConfigured: true,
+          indexStatusReliable: true,
+          unindexedSources: [],
+          missingCells: [],
+          parameterConflicts: [],
+          unclassifiedStandards: []
+        }
+      }
+      return null
+    })
+
+    const wrapper = mountTab(HealthTab)
+    await flushPromises()
+
+    const text = wrapper.text()
+    expect(text).toContain('标准覆盖度')
+    expect(text).toContain('后台软件')
+    expect(text).toContain('4')
+    expect(text).toContain('知识内容')
+    expect(text).toContain('7')
+    expect(text).toContain('经验沉淀')
+    expect(text).toContain('3')
+    expect(text).toContain('上传文档')
+    expect(text).toContain('标准文档')
+    expect(text).toContain('未索引文档')
+    expect(text).not.toContain('· ·')
+    expect(request.mock.calls.map(([path]) => path)).not.toContain('/api/knowledge/stats')
   })
 })

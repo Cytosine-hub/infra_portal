@@ -5,15 +5,19 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 import com.middleware.manager.config.ApiAuditLogger;
 import com.middleware.manager.domain.RoleEntity;
+import com.middleware.manager.domain.SoftwareType;
 import com.middleware.manager.security.gateway.GatewayIdentityHeaders;
 import com.middleware.manager.security.gateway.GatewaySignatureService;
 import com.middleware.manager.security.gateway.IdentityHeaderCodec;
 import com.middleware.manager.service.AdminAccountService;
 import com.middleware.manager.service.RoleService;
 import com.middleware.manager.service.SystemSettingService;
+import com.middleware.manager.service.SoftwareTypeService;
+import com.middleware.manager.service.CatalogSoftwareTypeProtocol;
 import com.middleware.manager.service.TokenService;
 import com.middleware.manager.web.api.AdminAccountApiController;
 import com.middleware.manager.web.api.AdminParameterStandardController;
@@ -105,6 +109,9 @@ class CoreServiceApplicationTests {
     @MockitoBean
     private ApiAuditLogger apiAuditLogger;
 
+    @MockitoBean
+    private SoftwareTypeService softwareTypeService;
+
     @Test
     @DisplayName("TC-CORE-001 默认 profile 独立加载平台核心且关闭 Nacos")
     void defaultProfileLoadsCoreWithNacosDisabled() {
@@ -185,6 +192,25 @@ class CoreServiceApplicationTests {
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                         .content("{\"ids\":[1]}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("TC-CORE-010 catalog 内部接口返回后台全部启用软件类型")
+    void internalActiveSoftwareTypesReturnsCatalogData() throws Exception {
+        SoftwareType mysql = new SoftwareType();
+        mysql.setId(13L);
+        mysql.setCategory("数据库");
+        mysql.setName("MySQL");
+        mysql.setActive(true);
+        when(softwareTypeService.findActive()).thenReturn(List.of(mysql));
+        String signature = SIGNATURE_SERVICE.signInternalRequest(
+                CatalogSoftwareTypeProtocol.ACTIVE_OPERATION, "");
+
+        mockMvc.perform(post("/api/internal/catalog/software-types/active")
+                        .header(GatewayIdentityHeaders.SIGNATURE, signature))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].category").value("数据库"))
+                .andExpect(jsonPath("$[0].name").value("MySQL"));
     }
 
     @Test

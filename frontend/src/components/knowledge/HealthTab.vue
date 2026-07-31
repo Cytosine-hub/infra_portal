@@ -7,7 +7,7 @@
       </template>
     </Toolbar>
 
-    <div v-if="stats" class="stat-row">
+    <div v-if="corpus" class="stat-row">
       <div v-for="s in statCards" :key="s.label" class="stat">
         <span class="stat-value">{{ s.value }}</span>
         <span class="stat-label">{{ s.label }}</span>
@@ -15,15 +15,21 @@
     </div>
 
     <section v-if="corpus" class="corpus">
-      <h3>语料健康度</h3>
+      <h3>标准覆盖度</h3>
       <p class="corpus-line">
+        后台软件 {{ corpus.catalogSoftwareCount }} 类 ·
         覆盖率
         <strong>{{ (corpus.coverage * 100).toFixed(1) }}%</strong>
         （{{ corpus.coveredCells }} / {{ corpus.totalCells }} 个格子）·
-        参数 {{ corpus.totalParameters }} 条 · 文档 {{ corpus.totalSources }} 份 ·
-        <template v-if="corpus.indexStatusReliable">· 已索引切片 {{ corpus.indexedChunks }}</template>
+        参数 {{ corpus.totalParameters }} 条
       </p>
-      <p v-if="!corpus.targetCatalogConfigured" class="corpus-hint">{{ corpus.coverageHint }}</p>
+      <p
+        v-if="!corpus.targetCatalogConfigured"
+        class="corpus-hint"
+        :class="{ danger: corpus.catalogStatusReliable === false }"
+      >
+        {{ corpus.coverageHint }}
+      </p>
       <p v-if="!corpus.indexStatusReliable" class="corpus-hint danger">
         向量库查询失败，本次不判定索引状态（避免把「查不到」误读成「没索引」）
       </p>
@@ -88,7 +94,6 @@ const columns = [
 ]
 
 const rawResults = ref([])
-const stats = ref(null)
 const corpus = ref(null)
 const loading = ref(false)
 const running = ref(false)
@@ -99,11 +104,16 @@ const results = computed(() => rawResults.value.map(r => ({
 })))
 
 const statCards = computed(() => {
-  if (!stats.value) return []
+  if (!corpus.value) return []
   return [
-    { label: '经验页面', value: stats.value.total_pages ?? 0 },
-    { label: '原始文档', value: stats.value.total_sources ?? 0 },
-    { label: '待索引文档', value: stats.value.uningested_sources ?? 0 },
+    { label: '知识内容', value: corpus.value.totalKnowledgeItems ?? 0 },
+    { label: '经验沉淀', value: corpus.value.experiencePages ?? 0 },
+    { label: '上传文档', value: corpus.value.uploadedDocuments ?? 0 },
+    { label: '标准文档', value: corpus.value.standardDocuments ?? 0 },
+    {
+      label: '未索引文档',
+      value: corpus.value.indexStatusReliable ? (corpus.value.unindexedSources?.length ?? 0) : '--'
+    },
     { label: '待处理问题', value: rawResults.value.length }
   ]
 })
@@ -111,13 +121,11 @@ const statCards = computed(() => {
 async function load() {
   loading.value = true
   try {
-    const [lint, stat, health] = await Promise.all([
+    const [lint, health] = await Promise.all([
       request('/api/knowledge/lint/results').catch(() => []),
-      request('/api/knowledge/stats').catch(() => null),
       request('/api/knowledge/corpus-health').catch(() => null)
     ])
     rawResults.value = lint || []
-    stats.value = stat
     corpus.value = health
   } catch (error) {
     props.notify(error.message, 'error')

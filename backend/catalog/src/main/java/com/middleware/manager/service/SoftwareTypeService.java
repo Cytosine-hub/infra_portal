@@ -73,6 +73,11 @@ public class SoftwareTypeService implements SoftwareTypeLookup {
                 : softwareTypeMapper.findAllByOrderByCategoryAscNameAsc();
     }
 
+    @Override
+    public List<SoftwareType> findActive() {
+        return softwareTypeMapper.findByActiveTrueOrderByCategoryAscNameAsc();
+    }
+
     public List<String> listCategories() {
         Set<String> names = new LinkedHashSet<>();
         softwareCategoryMapper.findAllByOrderByNameAsc().forEach(category -> names.add(category.getName()));
