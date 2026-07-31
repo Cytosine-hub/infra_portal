@@ -90,6 +90,19 @@ public class InMemoryVectorStore implements VectorStore {
     }
 
     @Override
+    public synchronized boolean existsBySource(String sourceType, Long sourceId) {
+        if (sourceType == null || sourceId == null) {
+            return false;
+        }
+        // 必须真实判断：本类是 matchIfMissing=true 的默认实现，沿用接口默认的 false
+        // 会让语料健康度把全部文档误判为未索引，且因不抛异常而显示为「结论可信」
+        String sourceIdValue = String.valueOf(sourceId);
+        return metadataStore.values().stream()
+                .anyMatch(meta -> sourceType.equals(meta.get("sourceType"))
+                        && sourceIdValue.equals(meta.get("sourceId")));
+    }
+
+    @Override
     public void deleteBySource(String sourceType, Long sourceId) {
         deleteBySourceExcept(sourceType, sourceId, Set.of());
     }

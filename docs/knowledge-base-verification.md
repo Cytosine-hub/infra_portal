@@ -669,7 +669,23 @@ python3 scripts/eval-retrieval.py --k 5 --json .scratch/baseline-bgem3.json
 追加用例 TC-HEALTH-013~016：空白配置不算已配置 / 混有空白只取有效项 /
 索引判定只用存在性 / 切片总数取集合总量。
 
-后端全量 258 个用例、前端 61 个用例、`npm run build` 均通过。
+#### 代码审查后的追加修复
+
+审查提出 3 项 🔴、4 项 🟡，其中 🔴-1（全量计数被截断）已在自查中修掉，其余处置如下：
+
+| 项 | 问题 | 处置 |
+|---|---|---|
+| 🔴-2 | `InMemoryVectorStore` 未覆写存在性判断，而它是 `matchIfMissing=true` 的默认实现。沿用接口默认的 `false` 且不抛异常，会把全部文档判为未索引却显示「结论可信」——KBV-013 的同类误报换了个触发场景 | 按 `metadataStore` 的 `sourceType/sourceId` 真实判断 |
+| 🔴-3 | `resolveLinks` 先删后插却无 `@Transactional`，插入失败会让该页出边被清空且无补偿。改造前只做幂等插入，失败是无害的——这是随清理逻辑新引入的破坏性路径 | 加 `@Transactional`；补 `InOrder` 校验删除先于插入、异常向上传播 |
+| 🟡-4 | `deleteOutgoingReferences` 注释称「限定 REFERENCES 避免误删导入边」，但 `WikiImportService` 默认写入的正是 REFERENCES，注释与事实相反 | 改为如实说明：导入产生、正文无对应 `[[…]]` 的边会被清除，这是「正文即出边唯一真相源」的必然结果；要保留需给导入边单独的 `link_type` |
+| 🟡-5 | 覆盖率格子键只取软件名，`中间件:Nginx` 与 `应用:Nginx` 塌缩成一格，两套标准互相顶格 | 格子键改为 `分类:软件` |
+| 🟡-6 | 判定不可信时仍输出局部累加的 `indexedChunks`，前端无条件展示 | 不可信时不输出该数字，前端也不渲染 |
+| 🟡-6b | 标题识别不出类型的标准不计入 `covered`、其软件却进分母，系统性低估覆盖率 | 新增 `unclassifiedStandards` 单列，前端提示「是归类不了不是没写」 |
+| 🟡-7 | `TC-LINK-008` 只断言测试夹具自身、未触达被测代码，属空测试 | 删除；隔离性由其余用例的行为断言体现 |
+
+追加用例 TC-LINK-009~011、TC-VECTOR-003~006、TC-HEALTH-017~020。
+
+后端全量 268 个用例、前端 61 个用例、`npm run build` 均通过。
 
 ---
 

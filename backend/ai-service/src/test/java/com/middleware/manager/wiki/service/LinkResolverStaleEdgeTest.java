@@ -119,13 +119,4 @@ class LinkResolverStaleEdgeTest {
 
         verify(linkMapper, never()).deleteOutgoingReferences(any());
     }
-
-    @Test
-    @DisplayName("TC-LINK-008 夹具使用唯一 runId，不与既有语料标题冲突")
-    void fixturesAreIsolatedByRunId() {
-        WikiPage p = page(9L, "隔离校验", "正文");
-
-        assertThat(p.getTitle()).startsWith("KBV012-");
-        assertThat(createdFixtures).allSatisfy(f -> assertThat(f.getTitle()).contains(runId));
-    }
 }

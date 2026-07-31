@@ -21,7 +21,7 @@
         <strong>{{ (corpus.coverage * 100).toFixed(1) }}%</strong>
         （{{ corpus.coveredCells }} / {{ corpus.totalCells }} 个格子）·
         参数 {{ corpus.totalParameters }} 条 · 文档 {{ corpus.totalSources }} 份 ·
-        已索引切片 {{ corpus.indexedChunks }}
+        <template v-if="corpus.indexStatusReliable">· 已索引切片 {{ corpus.indexedChunks }}</template>
       </p>
       <p v-if="!corpus.targetCatalogConfigured" class="corpus-hint">{{ corpus.coverageHint }}</p>
       <p v-if="!corpus.indexStatusReliable" class="corpus-hint danger">
@@ -31,6 +31,11 @@
       <div v-if="corpus.missingCells?.length" class="corpus-block">
         <h4>待补的标准（{{ corpus.missingCells.length }}）—— 可直接当内容待办</h4>
         <ul><li v-for="c in corpus.missingCells" :key="c">{{ c }}</li></ul>
+      </div>
+
+      <div v-if="corpus.unclassifiedStandards?.length" class="corpus-block">
+        <h4>标题无法归类的标准（{{ corpus.unclassifiedStandards.length }}）—— 不计入覆盖率，是「归类不了」不是「没写」</h4>
+        <ul><li v-for="c in corpus.unclassifiedStandards" :key="c">{{ c }}</li></ul>
       </div>
 
       <div v-if="corpus.parameterConflicts?.length" class="corpus-block danger">

@@ -121,6 +121,70 @@ class CorpusHealthAccuracyTest {
     }
 
     @Nested
+    @DisplayName("审查补充：多来源与边界")
+    class ReviewGaps {
+
+        @Test
+        @DisplayName("TC-HEALTH-017 部分来源查询失败时整体判定不可信，且不输出局部数字")
+        void partialFailureDoesNotLeakPartialNumbers() {
+            WikiSource ok = source(1L, "正常.pdf", false);
+            WikiSource bad = source(2L, "查询失败.pdf", false);
+            when(sourceMapper.findAll()).thenReturn(List.of(ok, bad));
+            when(vectorStore.existsBySource("UPLOAD", 1L)).thenReturn(true);
+            when(vectorStore.existsBySource("UPLOAD", 2L))
+                    .thenThrow(new RuntimeException("Milvus 不可达"));
+            when(vectorStore.count()).thenReturn(100L);
+
+            CorpusHealthReport report = service(List.of()).report();
+
+            assertThat(report.isIndexStatusReliable()).isFalse();
+            assertThat(report.getUnindexedSources()).isEmpty();
+            assertThat(report.getIndexedChunks()).isZero();
+        }
+
+        @Test
+        @DisplayName("TC-HEALTH-018 来源缺少 sourceType 时不应崩溃")
+        void nullSourceTypeIsSafe() {
+            WikiSource broken = new WikiSource();
+            broken.setId(9L);
+            broken.setTitle(runId + "-缺类型");
+            broken.setSourceType(null);
+            when(sourceMapper.findAll()).thenReturn(List.of(broken));
+            when(vectorStore.existsBySource(null, 9L)).thenReturn(false);
+
+            CorpusHealthReport report = service(List.of()).report();
+
+            assertThat(report.getUnindexedSources()).containsExactly(broken.getTitle());
+        }
+
+        @Test
+        @DisplayName("TC-HEALTH-019 同名软件分属不同分类时应各占独立格子")
+        void sameSoftwareInDifferentCategories() {
+            CorpusHealthReport report =
+                    service(List.of("中间件:Nginx", "应用:Nginx")).report();
+
+            // 两个分类各 4 格，不得塌缩成 4
+            assertThat(report.getTotalCells()).isEqualTo(8);
+        }
+
+        @Test
+        @DisplayName("TC-HEALTH-020 标题无法归类的标准应单列，避免被当成未写")
+        void unclassifiedStandardIsListed() {
+            ParameterStandard s = new ParameterStandard();
+            s.setCategory("数据库");
+            s.setSoftware("MySQL");
+            s.setTitle(runId + " 一份没有类型关键词的文档");
+            s.setContent("正文");
+            when(standardMapper.findPublished()).thenReturn(List.of(s));
+
+            CorpusHealthReport report = service(List.of()).report();
+
+            assertThat(report.getUnclassifiedStandards()).hasSize(1);
+            assertThat(report.getUnclassifiedStandards().get(0)).contains("MySQL");
+        }
+    }
+
+    @Nested
     @DisplayName("KBV-014 覆盖率分母应独立于现有标准")
     class CoverageDenominator {
 

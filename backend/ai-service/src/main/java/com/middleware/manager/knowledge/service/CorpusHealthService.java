@@ -78,15 +78,22 @@ public class CorpusHealthService {
         Set<String> covered = new LinkedHashSet<>();
         Map<String, List<String>> byCategory = new TreeMap<>();
 
+        List<String> unclassified = new ArrayList<>();
         for (ParameterStandard s : published) {
             String software = blankToNull(s.getSoftware());
             if (software == null) {
                 continue;
             }
-            softwares.add(software);
+            // 格子键带上分类：中间件:Nginx 与 应用:Nginx 是两套标准，不能塌缩成一格
+            String scoped = (s.getCategory() == null ? "未分类" : s.getCategory()) + ":" + software;
+            softwares.add(scoped);
             String type = inferType(s.getTitle());
             if (type != null) {
-                covered.add(software + " / " + type);
+                covered.add(scoped + " / " + type);
+            } else {
+                // 标题识别不出类型的标准既不计入 covered、其软件又进分母，会系统性
+                // 低估覆盖率。单列出来，让人知道是「归类不了」而不是「没写」。
+                unclassified.add(scoped + " -> " + s.getTitle());
             }
             byCategory.computeIfAbsent(
                     s.getCategory() == null ? "未分类" : s.getCategory(), k -> new ArrayList<>()).add(software);
@@ -121,6 +128,7 @@ public class CorpusHealthService {
         report.coverage = totalCells == 0 ? 0.0 : (double) covered.size() / totalCells;
         report.missingCells = missing;
         report.softwareByCategory = byCategory;
+        report.unclassifiedStandards = unclassified;
         // 以解析出的有效条目判定，而非原始列表长度：Spring 把空配置转成 List 时
         // 可能给出 [""]，用 isEmpty() 会把「没配」误判成「已配」
         report.targetCatalogConfigured = !catalogSoftwares.isEmpty();
@@ -201,21 +209,34 @@ public class CorpusHealthService {
         }
 
         report.totalSources = sources.size();
-        report.indexedChunks = indexedChunks;
+        // 判定不可信时连切片总数也不输出，避免局部数字被当成完整结论
+        report.indexedChunks = reliable ? indexedChunks : 0L;
         report.indexStatusReliable = reliable;
         // 判定不可信时不输出清单，避免把「查不到」误读成「没索引」
         report.unindexedSources = reliable ? unindexed : List.of();
     }
 
-    /** 目标清单条目形如 {@code 分类:软件}，只取软件名；缺少分隔符时整条视为软件名。 */
+    /**
+     * 目标清单条目形如 {@code 分类:软件}，归一化为「分类:软件」作为格子键。
+     * <p>保留分类而非只取软件名：同名软件可能分属不同分类（中间件:Nginx 与
+     * 应用:Nginx），塌缩成一格会让两套标准互相「顶格」，覆盖率虚高。
+     * 缺少分隔符时归入未分类。
+     */
     private String parseCatalogSoftware(String entry) {
         if (entry == null || entry.isBlank()) {
             return null;
         }
         String trimmed = entry.trim();
         int idx = trimmed.indexOf(':');
-        String software = idx >= 0 ? trimmed.substring(idx + 1).trim() : trimmed;
-        return software.isEmpty() ? null : software;
+        if (idx < 0) {
+            return "未分类:" + trimmed;
+        }
+        String category = trimmed.substring(0, idx).trim();
+        String software = trimmed.substring(idx + 1).trim();
+        if (software.isEmpty()) {
+            return null;
+        }
+        return (category.isEmpty() ? "未分类" : category) + ":" + software;
     }
 
     private <T> List<T> safeList(List<T> list) {
@@ -240,6 +261,7 @@ public class CorpusHealthService {
         private boolean indexStatusReliable = true;
         private boolean targetCatalogConfigured;
         private String coverageHint = "";
+        private List<String> unclassifiedStandards = List.of();
 
         public int getCoveredCells() { return coveredCells; }
         public int getTotalCells() { return totalCells; }
@@ -254,5 +276,6 @@ public class CorpusHealthService {
         public boolean isIndexStatusReliable() { return indexStatusReliable; }
         public boolean isTargetCatalogConfigured() { return targetCatalogConfigured; }
         public String getCoverageHint() { return coverageHint; }
+        public List<String> getUnclassifiedStandards() { return unclassifiedStandards; }
     }
 }
