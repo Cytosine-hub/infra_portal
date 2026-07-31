@@ -1,104 +1,409 @@
 {
   "_comment": [
-    "检索质量回归集（golden set）。",
-    "",
-    "重要：下面是【种子模板】，不是真实评测集。真实条目必须从团队的工单、",
-    "群聊记录和实际排查场景里捞，目标 50~100 条。种子只用来固定文件格式、",
-    "分桶维度和跑通评测脚本，本身不构成任何质量结论。",
-    "",
-    "字段说明：",
-    "  id            唯一编号",
-    "  query         用户实际会输入的问题原文（不要改写成书面语）",
-    "  query_type    exact_param | error_code | command | semantic | cross_doc",
-    "                前三类是精确匹配场景，稠密向量召回最弱，是混合检索的主要收益来源",
-    "  source_format pdf | docx | doc | xlsx | md | standards | wiki",
-    "                用于量化各格式解析质量差异，是解析层改造的验收依据",
-    "  expected      期望命中的文档标识。任一命中即算召回：",
-    "                  source_title  原始文档标题（精确匹配）",
-    "                  section_path  期望命中的章节路径（前缀匹配即可）",
-    "                  keywords      切片正文必须包含的关键词（全部包含才算命中）",
-    "  note          备注，说明这条为什么重要"
+    "bge-m3 远端验证集，2026-07-31 从实际入库语料生成候选后人工筛选。",
+    "共 50 条：精确参数、命令和自然语言语义查询；已删除文件名、版本号和模板化噪声题。",
+    "本集用于当前语料的检索回归，不替代来自真实工单和群聊的生产评测集。"
   ],
   "cases": [
     {
-      "id": "GS-001",
-      "query": "innodb_buffer_pool_size 设置多大",
+      "id": "BGEM3-001",
+      "query": "MySQL 缓冲池一般配物理内存的多少",
       "query_type": "exact_param",
       "source_format": "xlsx",
       "expected": { "keywords": ["innodb_buffer_pool_size"] },
-      "note": "参数名精确匹配。若 Excel 台账未做结构化解析，参数名与取值会落在不同切片，此条必挂"
+      "note": "验证参数名、建议值和场景在同一表格切片"
     },
     {
-      "id": "GS-002",
-      "query": "ORA-01555 怎么处理",
-      "query_type": "error_code",
-      "source_format": "pdf",
-      "expected": { "keywords": ["ORA-01555"] },
-      "note": "错误码是稀有 token，稠密向量会抹平，纯向量检索大概率召不回"
-    },
-    {
-      "id": "GS-003",
-      "query": "MySQL 主从延迟怎么排查",
-      "query_type": "semantic",
-      "source_format": "standards",
-      "expected": { "section_path": "MySQL / 应急处理" },
-      "note": "语义查询，向量检索的强项。用来确认混合检索没有把语义能力搞坏"
-    },
-    {
-      "id": "GS-004",
-      "query": "Redis maxmemory-policy 用哪个",
+      "id": "BGEM3-002",
+      "query": "复制延迟时并行工作线程建议开几个",
       "query_type": "exact_param",
       "source_format": "xlsx",
-      "expected": { "keywords": ["maxmemory-policy"] },
-      "note": "参数取值类问题。理想情况应由 standard_parameters 精确查询直接回答，而非 RAG"
+      "expected": { "keywords": ["replica_parallel_workers"] },
+      "note": "自然语言问法召回精确参数"
     },
     {
-      "id": "GS-005",
-      "query": "Kafka 分区副本数标准是多少",
+      "id": "BGEM3-003",
+      "query": "MySQL 最大连接数建议值是多少",
       "query_type": "exact_param",
-      "source_format": "docx",
-      "expected": { "keywords": ["副本"] },
-      "note": "docx 解析质量最好，此条应作为各格式对比的基准线"
+      "source_format": "xlsx",
+      "expected": { "keywords": ["max_connections"] },
+      "note": "参数精确召回"
     },
     {
-      "id": "GS-006",
-      "query": "wal_keep_segments 默认值",
+      "id": "BGEM3-004",
+      "query": "慢查询采集阈值通常设几秒",
+      "query_type": "exact_param",
+      "source_format": "xlsx",
+      "expected": { "keywords": ["long_query_time"] },
+      "note": "参数语义召回"
+    },
+    {
+      "id": "BGEM3-005",
+      "query": "InnoDB 日志文件建议配多大",
+      "query_type": "exact_param",
+      "source_format": "xlsx",
+      "expected": { "keywords": ["innodb_log_file_size"] },
+      "note": "参数语义召回"
+    },
+    {
+      "id": "BGEM3-006",
+      "query": "事务提交时刷盘参数怎么设置",
+      "query_type": "exact_param",
+      "source_format": "xlsx",
+      "expected": { "keywords": ["innodb_flush_log_at_trx_commit"] },
+      "note": "长技术标识召回"
+    },
+    {
+      "id": "BGEM3-007",
+      "query": "binlog 每次提交都同步落盘要配哪个参数",
+      "query_type": "exact_param",
+      "source_format": "xlsx",
+      "expected": { "keywords": ["sync_binlog"] },
+      "note": "自然语言映射配置项"
+    },
+    {
+      "id": "BGEM3-008",
+      "query": "表缓存数量建议设置多少",
+      "query_type": "exact_param",
+      "source_format": "xlsx",
+      "expected": { "keywords": ["table_open_cache"] },
+      "note": "表格后半段参数仍应召回"
+    },
+    {
+      "id": "BGEM3-009",
+      "query": "短连接高并发场景线程缓存怎么配",
+      "query_type": "exact_param",
+      "source_format": "xlsx",
+      "expected": { "keywords": ["thread_cache_size"] },
+      "note": "表格末尾参数仍应召回"
+    },
+    {
+      "id": "BGEM3-010",
+      "query": "怎么开启 MySQL 慢查询日志",
+      "query_type": "exact_param",
+      "source_format": "xlsx",
+      "expected": { "keywords": ["slow_query_log"] },
+      "note": "表格末行参数仍应召回"
+    },
+    {
+      "id": "BGEM3-011",
+      "query": "TongWeb 宕机自动拉起的 JVM 参数是什么",
       "query_type": "exact_param",
       "source_format": "pdf",
-      "expected": { "keywords": ["wal_keep_segments"] },
-      "note": "PDF 来源的参数查询。与 GS-005 对比可量化 PDF 解析的召回差距"
+      "expected": { "keywords": ["Dauto.restart.tongweb"] },
+      "note": "PDF 中的 JVM 参数"
     },
     {
-      "id": "GS-007",
-      "query": "怎么看 TongWeb 集群节点状态",
+      "id": "BGEM3-012",
+      "query": "节点代理后台运行需要加哪个参数",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["Dnodeagent.background"] },
+      "note": "PDF 中的 JVM 参数"
+    },
+    {
+      "id": "BGEM3-013",
+      "query": "TongWeb 快照每小时数量由哪个参数控制",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["Dtongweb.snapshotinhour"] },
+      "note": "PDF 中的快照参数"
+    },
+    {
+      "id": "BGEM3-014",
+      "query": "安装 TongWeb 前 Java 路径环境变量叫什么",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["JAVA_HOME"] },
+      "note": "环境变量精确召回"
+    },
+    {
+      "id": "BGEM3-015",
+      "query": "HTTP 通道禁用 Nagle 算法对应哪个参数",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["TCP_NODELAY"] },
+      "note": "网络参数精确召回"
+    },
+    {
+      "id": "BGEM3-016",
+      "query": "TDG 异步备份数量参数是什么",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["async-backup-count"] },
+      "note": "XML 参数精确召回"
+    },
+    {
+      "id": "BGEM3-017",
+      "query": "TDG 同步备份份数怎么配置",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["backup-count"] },
+      "note": "XML 参数精确召回"
+    },
+    {
+      "id": "BGEM3-018",
+      "query": "session 最大空闲时间对应哪个 TDG 参数",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["max-idle-seconds"] },
+      "note": "XML 参数精确召回"
+    },
+    {
+      "id": "BGEM3-019",
+      "query": "TDG 缓存淘汰策略参数叫什么",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["eviction-policy"] },
+      "note": "XML 参数精确召回"
+    },
+    {
+      "id": "BGEM3-020",
+      "query": "组播端口在 TDG 里用哪个配置项",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["multicast-port"] },
+      "note": "网络配置精确召回"
+    },
+    {
+      "id": "BGEM3-021",
+      "query": "组播等待其他节点响应的超时参数是什么",
+      "query_type": "exact_param",
+      "source_format": "pdf",
+      "expected": { "keywords": ["multicast-timeout-seconds"] },
+      "note": "网络配置精确召回"
+    },
+    {
+      "id": "BGEM3-022",
+      "query": "TongWeb 后台启动用哪个脚本",
       "query_type": "command",
       "source_format": "pdf",
-      "expected": { "section_path": "集群管理" },
-      "note": "命令类查询，依赖 PDF 书签标题回填后的 sectionPath"
+      "expected": { "keywords": ["nohupstartserver.sh"] },
+      "note": "命令类 BM25 召回"
     },
     {
-      "id": "GS-008",
-      "query": "数据库连接池满了怎么办",
-      "query_type": "semantic",
-      "source_format": "wiki",
-      "expected": { "keywords": ["连接池"] },
-      "note": "经验沉淀页命中。wiki_pages 清空后此条会挂，属预期，等团队写入经验后恢复"
+      "id": "BGEM3-023",
+      "query": "TongWeb 强制停止服务器的脚本叫什么",
+      "query_type": "command",
+      "source_format": "pdf",
+      "expected": { "keywords": ["forcestopserver.sh"] },
+      "note": "命令类 BM25 召回"
     },
     {
-      "id": "GS-009",
-      "query": "主机磁盘告警阈值定的多少",
+      "id": "BGEM3-024",
+      "query": "TDG 组密码加密 token 用什么命令生成",
+      "query_type": "command",
+      "source_format": "pdf",
+      "expected": { "keywords": ["generate-tdg-token"] },
+      "note": "命令类 BM25 召回"
+    },
+    {
+      "id": "BGEM3-025",
+      "query": "TongWeb JVM 参数配置文件叫什么",
       "query_type": "exact_param",
-      "source_format": "standards",
-      "expected": { "keywords": ["磁盘"] },
-      "note": "跨岗位查询（主机域）。用于验证权限过滤没有过度隔离导致跨域排查失效"
+      "source_format": "pdf",
+      "expected": { "keywords": ["external.vmoptions"] },
+      "note": "配置文件名精确召回"
     },
     {
-      "id": "GS-010",
-      "query": "Nginx 和 F5 的健康检查配置差异",
-      "query_type": "cross_doc",
-      "source_format": "md",
-      "expected": { "keywords": ["健康检查"] },
-      "note": "跨文档综合，需要 topK 内同时召回两个来源，考察召回多样性"
+      "id": "BGEM3-026",
+      "query": "安装 TongWeb 需要什么系统和 JDK 条件",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第2章　 安装 / 2.1　 安装要求" },
+      "note": "快速手册语义召回"
+    },
+    {
+      "id": "BGEM3-027",
+      "query": "Linux 上怎么启动和停止 TongWeb",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第2章　 安装 / 2.8　 启动和停止" },
+      "note": "快速手册语义召回"
+    },
+    {
+      "id": "BGEM3-028",
+      "query": "管理控制台里怎么创建 JDBC 数据源",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第3章　 应用部署 / 3.2　 创建数据源" },
+      "note": "快速手册语义召回"
+    },
+    {
+      "id": "BGEM3-029",
+      "query": "TongWeb 控制台部署 war 包的步骤",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第3章　 应用部署 / 3.3　 部署应用" },
+      "note": "快速手册语义召回"
+    },
+    {
+      "id": "BGEM3-030",
+      "query": "应用部署完后怎么验证访问",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第3章　 应用部署 / 3.4　 测试并访问应用" },
+      "note": "快速手册语义召回"
+    },
+    {
+      "id": "BGEM3-031",
+      "query": "怎么修改 TongWeb 应用访问端口",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第4章　 常用Web主要参数调整 / 4.2　 修改应用访问端口" },
+      "note": "快速手册语义召回"
+    },
+    {
+      "id": "BGEM3-032",
+      "query": "TongWeb 日志轮转策略在哪里设置",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第4章　 常用Web主要参数调整 / 4.3　 设置日志" },
+      "note": "快速手册语义召回"
+    },
+    {
+      "id": "BGEM3-033",
+      "query": "怎么开启和配置 TongWeb 访问日志",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第4章　 常用Web主要参数调整 / 4.4　 设置访问日志" },
+      "note": "快速手册语义召回"
+    },
+    {
+      "id": "BGEM3-034",
+      "query": "HTTP 通道的长连接和缓存参数怎么调",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第4章　 常用Web主要参数调整 / 4.6　 修改HTTP通道" },
+      "note": "快速手册语义召回"
+    },
+    {
+      "id": "BGEM3-035",
+      "query": "部署应用时如何开启 JSP 预编译",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第4章　 常用Web主要参数调整 / 4.8　 JSP预编译" },
+      "note": "快速手册语义召回"
+    },
+    {
+      "id": "BGEM3-036",
+      "query": "搭建 TongWeb 集群前要准备哪些机器和软件",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第2章　 搭建运行环境 / 2.1　 集群搭建准备" },
+      "note": "集群指南语义召回"
+    },
+    {
+      "id": "BGEM3-037",
+      "query": "在集中管理工具里如何新建集群",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第3章　 创建并验证集群 / 3.1　 创建集群" },
+      "note": "集群指南语义召回"
+    },
+    {
+      "id": "BGEM3-038",
+      "query": "TongWeb 集群怎样开启 session 复制",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第3章　 创建并验证集群 / 3.2　 (可选)开启session复制" },
+      "note": "集群指南语义召回"
+    },
+    {
+      "id": "BGEM3-039",
+      "query": "集群怎么启用负载均衡器",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第3章　 创建并验证集群 / 3.3　 (可选)开启负载均衡器" },
+      "note": "集群指南语义召回"
+    },
+    {
+      "id": "BGEM3-040",
+      "query": "怎样验证 TongWeb 集群的 session 亲和",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第3章　 创建并验证集群 / 3.5　 验证集群功能 / 3.5.1　 验证集群Session亲和" },
+      "note": "集群指南语义召回"
+    },
+    {
+      "id": "BGEM3-041",
+      "query": "节点 CPU 和内存超负荷阈值在哪里设置",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第4章　 集群管理 / 4.2　 节点管理 / 4.2.2　 阈值设定" },
+      "note": "集群指南语义召回"
+    },
+    {
+      "id": "BGEM3-042",
+      "query": "TongWeb 出现 Hung 线程怎么查看",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第4章　 集群管理 / 4.12　 监视 / 4.12.6　 Hung线程" },
+      "note": "集群指南语义召回"
+    },
+    {
+      "id": "BGEM3-043",
+      "query": "集中管理控制台怎么查看服务器系统日志",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第4章　 集群管理 / 4.14　 诊断 / 4.14.1　 系统日志" },
+      "note": "集群指南语义召回"
+    },
+    {
+      "id": "BGEM3-044",
+      "query": "TongWeb 集群补丁从哪里上传",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第4章　 集群管理 / 4.16　 补丁管理 / 4.16.1　 上传补丁" },
+      "note": "集群指南语义召回"
+    },
+    {
+      "id": "BGEM3-045",
+      "query": "集中管理里如何添加 JDBC 连接池",
+      "query_type": "semantic",
+      "source_format": "pdf",
+      "expected": { "section_path": "第4章　 集群管理 / 4.6　 JDBC配置 / 4.6.1　 添加/删除JDBC连接池" },
+      "note": "集群指南语义召回"
+    },
+    {
+      "id": "BGEM3-046",
+      "query": "DataWorks 调 getqualityEntity 接口时报了什么错",
+      "query_type": "semantic",
+      "source_format": "docx",
+      "expected": { "section_path": "变更背景 / 现象" },
+      "note": "真实变更方案中的故障现象"
+    },
+    {
+      "id": "BGEM3-047",
+      "query": "DataWorks 数据质量接口报错的根因是什么",
+      "query_type": "semantic",
+      "source_format": "docx",
+      "expected": { "section_path": "变更背景 / 原因" },
+      "note": "真实变更方案中的故障原因"
+    },
+    {
+      "id": "BGEM3-048",
+      "query": "缺失的 project 信息应该怎样补录",
+      "query_type": "semantic",
+      "source_format": "docx",
+      "expected": { "section_path": "操作步骤 / 插入目标project数据" },
+      "note": "真实变更方案中的操作步骤"
+    },
+    {
+      "id": "BGEM3-049",
+      "query": "DataWorks 变更失败后怎么清理新增数据",
+      "query_type": "semantic",
+      "source_format": "docx",
+      "expected": { "section_path": "回滚方案 / 清理添加的数据" },
+      "note": "真实变更方案中的回滚步骤"
+    },
+    {
+      "id": "BGEM3-050",
+      "query": "执行 DataWorks 修复前如何确认待插入的 project 清单",
+      "query_type": "semantic",
+      "source_format": "docx",
+      "expected": { "section_path": "环境检查 / 确认待插入的project清单" },
+      "note": "真实变更方案中的环境检查"
     }
   ]
 }

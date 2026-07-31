@@ -32,6 +32,23 @@ CREATE TABLE `agent_tool_invocations` (
   KEY `idx_created_by` (`created_by`),
   KEY `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Agent工具调用审计';
+DROP TABLE IF EXISTS `api_audit_log`;
+CREATE TABLE `api_audit_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `username` varchar(60) NOT NULL COMMENT '用户账号',
+  `method` varchar(10) NOT NULL COMMENT 'HTTP方法',
+  `path` varchar(500) NOT NULL COMMENT '请求路径',
+  `query_string` varchar(500) DEFAULT NULL COMMENT '查询参数',
+  `status_code` int DEFAULT NULL COMMENT '响应状态码',
+  `ip_address` varchar(50) DEFAULT NULL COMMENT '客户端IP',
+  `user_agent` varchar(500) DEFAULT NULL COMMENT '用户代理',
+  `duration_ms` bigint DEFAULT NULL COMMENT '请求耗时(毫秒)',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_username` (`username`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_path` (`path`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='API操作审计日志';
 DROP TABLE IF EXISTS `chat_messages`;
 CREATE TABLE `chat_messages` (
   `id` bigint NOT NULL AUTO_INCREMENT,

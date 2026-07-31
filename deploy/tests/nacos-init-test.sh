@@ -85,10 +85,17 @@ case "$url" in
             fi
             printf 'true\n'
         elif [ "$get_with_data" = true ]; then
-            [ -z "$output_file" ] || : > "$output_file"
             if [ "${MOCK_CONFIG_STATE:-missing}" = existing ]; then
+                if [ -n "$output_file" ]; then
+                    if [ "${MOCK_CONFIG_CONTENT:-same}" = same ]; then
+                        printf 'logging.level.root=INFO\n' > "$output_file"
+                    else
+                        printf 'logging.level.root=WARN\n' > "$output_file"
+                    fi
+                fi
                 printf '200'
             else
+                [ -z "$output_file" ] || : > "$output_file"
                 printf '404'
             fi
         fi
@@ -137,6 +144,15 @@ config_posts=$(grep -c '^POST http://nacos:8848/nacos/v1/cs/configs$' "$TMP_ROOT
 skip_count=$(grep -c 'SKIP dataId=' "$TMP_ROOT/existing.out" || true)
 [ "$skip_count" -eq 9 ] || fail 'TC-DOCKER-015 existing Data IDs did not log SKIP'
 pass 'TC-DOCKER-015'
+
+: > "$TMP_ROOT/curl.log"
+run_initializer "$TMP_ROOT/changed.out" \
+    MOCK_NAMESPACE_STATE=existing MOCK_CONFIG_STATE=existing MOCK_CONFIG_CONTENT=changed
+config_posts=$(grep -c '^POST http://nacos:8848/nacos/v1/cs/configs$' "$TMP_ROOT/curl.log" || true)
+[ "$config_posts" -eq 9 ] || fail 'TC-DOCKER-032 changed Data IDs were not all updated'
+update_count=$(grep -c 'Updated dataId=' "$TMP_ROOT/changed.out" || true)
+[ "$update_count" -eq 9 ] || fail 'TC-DOCKER-032 changed Data IDs did not log updates'
+pass 'TC-DOCKER-032'
 
 if run_initializer "$TMP_ROOT/failure.out" \
     MOCK_NAMESPACE_STATE=existing MOCK_CONFIG_STATE=missing MOCK_PUBLISH_FAILURE=true; then

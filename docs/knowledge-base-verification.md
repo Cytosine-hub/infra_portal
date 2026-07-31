@@ -325,7 +325,7 @@ python3 scripts/eval-retrieval.py --k 5 --json .scratch/baseline.json
 | `wiki_pages` 语料不足 | 本地评分时只有 2 页（1 ACTIVE、1 DRAFT），Wiki 召回与图谱质量不能据此下结论 |
 | 智能排查 Agent | **未重构**，仍是 YAML Skill 编排，`query_metrics` / `search_logs` 是空桩 |
 | `.doc` 老版 Word 解析 | 用真实 DOCX 转换出的 OLE2 `.doc` 上传成功并生成 4 个切片，但 POI 输出大量 PAPX 修复 WARN；仍需补一份原生历史 `.doc` 样本 |
-| 中文 PDF 解析 | 7 页真实中文 PDF 上传成功并生成 34 个切片；32 页 TongWeb 手册因 embedding 上下文超限失败，见 KBV-001/KBV-002 |
+| 中文 PDF 解析 | 7 页真实中文 PDF 生成 34 个切片；2026-07-31 使用 bge-m3 复测后，32 页 TongWeb 手册生成 30 个切片、158 页集群手册生成 144 个切片，均无 embedding 上下文超限，见 11.7 |
 | Milvus 混合检索 | 已在 Milvus 2.6.13 验证稠密向量 + BM25、`chinese` analyzer 和 RRF 检索；2.5.10 镜像因 Docker Hub 超时未完成同版本验证 |
 | 三个 UI 未补回 | 富预览、批量改分类、页面权限——后端能力都在，界面够不着 |
 | Wiki 导入 UI | 后端 `POST /pages/import` 在，前端只有导出没有导入 |
@@ -519,6 +519,68 @@ python3 scripts/eval-retrieval.py --k 5 --json .scratch/eval-current-20260730.js
 最终自动化回归：后端 26 模块共 229 个测试，0 failure / 0 error / 0 skipped；前端 61 个测试全部通过，`npm run build` 成功。构建仍有既存的 `vendor-pdf` 超过 900 kB 告警，本轮未改 PDF 前端依赖加载方式。
 
 运行态复测边界：为加载 CORS 改动已停止旧 core-service；新进程因当前终端没有 `APP_DB_PASSWORD`，启动期连接本地 MySQL 被拒绝。运行环境不允许从其他进程提取凭据，因此没有绕过限制；恢复 core-service 后仍需补一次 `127.0.0.1:5173` 的真实浏览器登录验收。
+
+### 11.7 远端 bge-m3 复测（2026-07-31）
+
+本轮在 `192.168.126.1:/app/infra-portal` 复测。应用镜像为 `0d0ea0a-bgem3`，前端、网关、8 个业务服务、MySQL、Nacos、Milvus、MinIO、etcd 均为 healthy。Milvus 为 `2.6.13`；embedding 由本机 Ollama 提供，经 SSH 反向通道供远端调用，模型为 `bge-m3`、向量维度 1024、模型上限 8192 token。切片实用预算按模型上限推导为 1600 字符。
+
+升级前备份位于远端 `/app/infra-portal/backups/pre-bgem3-20260730T225151`，包含 MySQL dump、配置和旧 Milvus 数据树。
+
+#### 11.7.1 语料与结构验证
+
+| 文档 | 格式 | 页数/结构 | 切片数 | 结果 |
+|---|---|---:|---:|---|
+| `mysql-parameter-ledger.xlsx` | XLSX | 10 行参数表 | 1 | 表头和 10 行完整保留在同一切片 |
+| `dataworks-recovery-plan.docx` | DOCX | 标题层级、表格 | 19 | 上传、分段、检索通过 |
+| `dataworks-recovery-plan-legacy.doc` | DOC | 历史 Word | 4 | 上传成功；仍有 POI PAPX 修复 WARN |
+| `dataworks-recovery-plan.pdf` | PDF | 7 页 | 34 | 结构化导入通过 |
+| `TongWeb-V7-quick-start.pdf` | PDF | 32 页 | 30 | 长 PDF 通过，无 embedding 上下文超限 |
+| `100_TongWeb_V7.0-cluster-guide.pdf` | PDF | 158 页 | 144 | 长 PDF 通过，无 embedding 上下文超限 |
+| **合计** | 4 种格式 | 6 份文档 | **232** | 全部导入成功 |
+
+`innodb_buffer_pool_size` 精确查询将 XLSX 排在第 1；`主从延迟` 也将 XLSX 排在第 1，但其余 4 条结果均为无关 TongWeb 内容，说明首条精确命中有效、长尾精确率仍有优化空间。TongWeb 集群状态、JDBC 资源池等自然语言查询能召回对应手册章节，结果的 `sectionPath` 非空。
+
+#### 11.7.2 50 条检索基线
+
+评测集为 50 条人工筛选并改写的实际文档绑定问题，覆盖 22 条精确参数题、3 条命令题、25 条语义题。它已达到手册的最小样本数，但来源仍是本轮验证文档，不等同于生产工单分布，因此作为预发布基线使用。
+
+执行命令：
+
+```bash
+python3 scripts/eval-retrieval.py --k 5 --json .scratch/baseline-bgem3.json
+```
+
+总体 `Recall@5 = 94.0%`，`MRR = 0.751`，50 条请求均正常返回。
+
+| 查询类型 | Recall@5 | MRR | 命中 |
+|---|---:|---:|---:|
+| `command` | 100.0% | 0.389 | 3/3 |
+| `exact_param` | 95.5% | 0.744 | 21/22 |
+| `semantic` | 92.0% | 0.801 | 23/25 |
+
+| 来源格式 | Recall@5 | MRR | 命中 |
+|---|---:|---:|---:|
+| `pdf` | 97.1% | 0.820 | 34/35 |
+| `xlsx` | 100.0% | 0.653 | 10/10 |
+| `docx` | 60.0% | 0.467 | 3/5 |
+
+3 条未命中：
+
+- `BGEM3-012`：节点代理后台运行参数 `Dnodeagent.background` 未进入 Top-8，属于真实漏召回。
+- `BGEM3-048`：目标 DOCX 章节在第 8 位，未达到 Top-5。
+- `BGEM3-050`：相同内容的 legacy DOC 在第 2 位，但评测绑定的 DOCX 章节未进入 Top-5；这是跨格式重复语料下的格式定向失败。
+
+#### 11.7.3 配置、数据库与生成层边界
+
+| 编号 | 问题与处理 | 回归 | 状态 |
+|---|---|---|---|
+| KBV-007 | Nacos 初始化器原先对已存在 Data ID 一律跳过，导致配置更新不下发；改为内容相同才跳过、内容变化则更新 | `TC-DOCKER-032`，远端仅更新变化配置 | 已解决 |
+| KBV-008 | `application.yml` 仍使用废弃的 `EMBEDDING_MAX_CHARS=300`，覆盖了 Nacos 的 8192 token 配置；改为 `EMBEDDING_MAX_TOKENS=512` 兜底 | `TC-CI-014`；XLSX 从 3 个切片恢复为 1 个，长 PDF 通过 | 已解决 |
+| KBV-009 | AI 启动时仍出现 `Nacos Config ... ai-service.properties ... is empty`，监听稍后才建立；构造期配置不能只依赖 Nacos | 环境变量可确保本次 embedding/生成模型配置正确，但启动顺序问题仍在 | 待解决 |
+| KBV-010 | Docker 新库挂载的 `db/init.sql` 缺少 `api_audit_log`，API 审计写入持续失败；远端执行幂等 DDL，并把表加入初始化脚本 | 表内已成功写入 2 条记录，主键及 3 个业务索引齐全；`TC-DOCKER-033` | 已解决 |
+| KBV-011 | bge-m3 基线仍有 1 条 PDF 技术参数漏召回、2 条 DOCX 格式定向未命中，且精确命中后的 Top-2~5 存在无关结果 | 记录 `BGEM3-012/048/050` 及实际 Top-8，用作下一轮排序和切片优化基线 | 待优化 |
+
+生成模型已按授权配置为 Codex 网关和 `gpt-5.6-terra`，密钥未写入仓库。由于运行态 RAG 会把检索到的内部知识片段发送到该外部网关，本轮自动安全审批要求额外的显式数据外发授权；因此没有重复执行生成答案和 LLM-as-judge，不能用 11.4.2 的旧分数代表 bge-m3 本轮结果。无证据门禁与出口技术标识校验已有 `TC-RAG-001~006` 自动化回归，但本轮远端生成层仍标记为未完成。
 
 ---
 

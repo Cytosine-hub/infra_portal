@@ -43,6 +43,7 @@ assert_text deploy/docker-compose.yml '../db/init.sql:/docker-entrypoint-initdb.
 assert_text deploy/docker-compose.yml '../db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro' 'TC-DOCKER-009'
 assert_text db/init.sql '^SET NAMES utf8mb4;$' 'TC-DOCKER-031 init SQL character set'
 assert_text db/seed.sql '^SET NAMES utf8mb4;$' 'TC-DOCKER-031 seed SQL character set'
+assert_text db/init.sql '^CREATE TABLE `api_audit_log` \($' 'TC-DOCKER-033 API audit table'
 
 for service in api-gateway core-service ai-service community-service middleware-service \
     database-service host-service network-service security-service; do

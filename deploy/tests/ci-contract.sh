@@ -56,7 +56,8 @@ for key in APP_DB_PASSWORD NACOS_PASSWORD NACOS_AUTH_TOKEN \
     assert_nonempty_env "$TMP_ROOT/compose.test.env" "$key"
 done
 for key in GATEWAY_SIGNING_SECRET ADMIN_DEFAULT_PASSWORD AI_API_KEY \
-    EMBEDDING_API_KEY WIKI_EXPORT_SIGNATURE_SECRET ZABBIX_PASSWORD; do
+    EMBEDDING_API_KEY EMBEDDING_BASE_URL EMBEDDING_MODEL EMBEDDING_MAX_TOKENS \
+    WIKI_EXPORT_SIGNATURE_SECRET ZABBIX_PASSWORD; do
     assert_nonempty_env "$TMP_ROOT/services.test.env" "$key"
 done
 grep -Eq '^# .*测试' "$TMP_ROOT/compose.test.env" \
@@ -76,6 +77,28 @@ second_gateway_secret=$(env_value "$TMP_ROOT/services.test.second.env" GATEWAY_S
 [ "$gateway_secret" != "$second_gateway_secret" ] \
     || fail 'TC-CI-004 repeated generation returned the same gateway secret'
 pass 'TC-CI-004'
+
+assert_text deploy/services.env.example '^EMBEDDING_BASE_URL=' \
+    'TC-CI-013 embedding base URL env'
+assert_text deploy/services.env.example '^EMBEDDING_MODEL=' \
+    'TC-CI-013 embedding model env'
+assert_text deploy/services.env.example '^EMBEDDING_MAX_TOKENS=' \
+    'TC-CI-013 embedding token limit env'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^langchain4j\.open-ai\.embedding-model\.base-url=\$\{EMBEDDING_BASE_URL:' \
+    'TC-CI-013 Nacos embedding base URL override'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^langchain4j\.open-ai\.embedding-model\.model-name=\$\{EMBEDDING_MODEL:' \
+    'TC-CI-013 Nacos embedding model override'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^app\.embedding\.max-tokens=\$\{EMBEDDING_MAX_TOKENS:' \
+    'TC-CI-013 Nacos embedding token limit override'
+assert_text backend/ai-service/src/main/resources/application.yml \
+    '^    max-tokens: \$\{EMBEDDING_MAX_TOKENS:512\}$' \
+    'TC-CI-014 application embedding token limit fallback'
+assert_no_text backend/ai-service/src/main/resources/application.yml \
+    'EMBEDDING_MAX_CHARS' \
+    'TC-CI-014 no obsolete embedding character limit'
 
 assert_text .gitlab-ci.yml '^verify:deployment:' 'TC-CI-005 verify deployment job'
 assert_text .gitlab-ci.yml 'sh deploy/generate-test-env\.sh' 'TC-CI-005 test env generation'
