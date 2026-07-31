@@ -9,6 +9,7 @@ import com.middleware.manager.wiki.repository.WikiLinkMapper;
 import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiPagePermissionMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
+import com.middleware.manager.wiki.service.LinkResolver;
 import com.middleware.manager.wiki.service.LintAgent;
 import com.middleware.manager.wiki.service.PageDraftService;
 import com.middleware.manager.wiki.service.WikiExportService;
@@ -45,6 +46,7 @@ class WikiPageAuthoringTest {
     @Mock private WikiImportService importService;
     @Mock private WikiGraphService graphService;
     @Mock private PageDraftService pageDraftService;
+    @Mock private LinkResolver linkResolver;
     @Mock private AdminAccountMapper adminAccountMapper;
     @Mock private WikiAuditLogMapper auditLogMapper;
     @Mock private LintAgent lintAgent;
@@ -62,7 +64,7 @@ class WikiPageAuthoringTest {
         MockitoAnnotations.openMocks(this);
         controller = new WikiController(
                 pageMapper, linkMapper, sourceMapper,
-                exportService, importService, graphService, pageDraftService,
+                exportService, importService, graphService, pageDraftService, linkResolver,
                 Collections.emptyList(), adminAccountMapper, auditLogMapper,
                 lintAgent, lintResultMapper, wikiPermissionService, pagePermissionMapper,
                 vectorStore);

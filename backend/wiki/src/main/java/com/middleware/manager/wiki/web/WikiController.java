@@ -21,6 +21,7 @@ import com.middleware.manager.wiki.repository.WikiAuditLogMapper;
 import com.middleware.manager.wiki.repository.WikiLinkMapper;
 import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
+import com.middleware.manager.wiki.service.LinkResolver;
 import com.middleware.manager.wiki.service.LintAgent;
 import com.middleware.manager.wiki.service.PageDraftService;
 import com.middleware.manager.wiki.entity.WikiPagePermission;
@@ -53,6 +54,7 @@ public class WikiController {
     private final WikiImportService importService;
     private final WikiGraphService graphService;
     private final PageDraftService pageDraftService;
+    private final LinkResolver linkResolver;
     private final List<DocumentLoader> documentLoaders;
     private final AdminAccountMapper adminAccountMapper;
     private final WikiAuditLogMapper auditLogMapper;
@@ -73,6 +75,7 @@ public class WikiController {
                           WikiImportService importService,
                           WikiGraphService graphService,
                           PageDraftService pageDraftService,
+                          LinkResolver linkResolver,
                           List<DocumentLoader> documentLoaders,
                           AdminAccountMapper adminAccountMapper,
                           WikiAuditLogMapper auditLogMapper,
@@ -88,6 +91,7 @@ public class WikiController {
         this.importService = importService;
         this.graphService = graphService;
         this.pageDraftService = pageDraftService;
+        this.linkResolver = linkResolver;
         this.documentLoaders = documentLoaders;
         this.adminAccountMapper = adminAccountMapper;
         this.auditLogMapper = auditLogMapper;
@@ -210,6 +214,7 @@ public class WikiController {
         page.setCreatedAt(LocalDateTime.now());
         page.setUpdatedAt(LocalDateTime.now());
         pageMapper.insert(page);
+        resolveLinks(page);
 
         Long actorId = resolveActorId(authentication);
         try {
@@ -220,6 +225,22 @@ public class WikiController {
             log.warn("Audit log write failed: {}", e.getMessage());
         }
         return ResponseEntity.ok(page);
+    }
+
+    /**
+     * 解析正文中的 [[页面标题]] 建边。图谱与检索的图扩展都依赖这一步。
+     * <p>建边失败不应影响页面保存本身——边可以稍后由 Lint 或下次编辑补上，
+     * 但页面内容丢失是不可接受的。
+     */
+    private void resolveLinks(WikiPage page) {
+        try {
+            int created = linkResolver.resolveLinks(List.of(page));
+            if (created > 0) {
+                log.debug("页面 {} 解析出 {} 条关联", page.getId(), created);
+            }
+        } catch (Exception e) {
+            log.warn("页面 {} 的 wikilink 解析失败，不影响本次保存: {}", page.getId(), e.getMessage());
+        }
     }
 
     @PutMapping("/pages/{id}")
@@ -261,6 +282,7 @@ public class WikiController {
 
         existing.setUpdatedAt(LocalDateTime.now());
         pageMapper.update(existing);
+        resolveLinks(existing);
 
         // Audit log for status changes
         if (newStatus != null && !newStatus.equals(oldStatus)) {

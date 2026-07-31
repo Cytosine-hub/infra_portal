@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.middleware.manager.knowledge.service.KnowledgeService;
+import com.middleware.manager.knowledge.service.CorpusHealthService;
 import com.middleware.manager.knowledge.service.ParameterLookupService;
 import com.middleware.manager.knowledge.service.StandardIndexSyncService;
 import com.middleware.manager.security.PermissionService;
@@ -35,13 +36,17 @@ class KnowledgeControllerTest {
     @Mock
     private ParameterLookupService parameterLookupService;
 
+    @Mock
+    private CorpusHealthService corpusHealthService;
+
     private KnowledgeController controller;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
         controller = new KnowledgeController(knowledgeService, storageService,
-                standardIndexSyncService, permissionService, parameterLookupService);
+                standardIndexSyncService, permissionService, parameterLookupService,
+                corpusHealthService);
     }
 
     @Test

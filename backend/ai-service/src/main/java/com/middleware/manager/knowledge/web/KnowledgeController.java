@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.middleware.manager.knowledge.service.CorpusHealthService;
 import com.middleware.manager.knowledge.service.ParameterLookupService;
 import com.middleware.manager.knowledge.service.StandardIndexSyncService;
 import com.middleware.manager.security.PermissionService;
@@ -45,17 +46,20 @@ public class KnowledgeController {
     private final StandardIndexSyncService standardIndexSyncService;
     private final PermissionService permissionService;
     private final ParameterLookupService parameterLookupService;
+    private final CorpusHealthService corpusHealthService;
 
     public KnowledgeController(KnowledgeService knowledgeService,
                                StorageService storageService,
                                StandardIndexSyncService standardIndexSyncService,
                                PermissionService permissionService,
-                               ParameterLookupService parameterLookupService) {
+                               ParameterLookupService parameterLookupService,
+                               CorpusHealthService corpusHealthService) {
         this.knowledgeService = knowledgeService;
         this.storageService = storageService;
         this.standardIndexSyncService = standardIndexSyncService;
         this.permissionService = permissionService;
         this.parameterLookupService = parameterLookupService;
+        this.corpusHealthService = corpusHealthService;
     }
 
     /**
@@ -101,6 +105,16 @@ public class KnowledgeController {
             @RequestParam(required = false) String name,
             @RequestParam(defaultValue = "20") int limit) {
         return ResponseEntity.ok(parameterLookupService.lookup(software, name, limit));
+    }
+
+    /**
+     * 语料健康度。检索层与生成层的分数只说明「现有语料检索得好不好」，
+     * 说明不了「该写的内容写了没有」，而后者才是当前真正的瓶颈（首次实测覆盖率 2.5%）。
+     * 其中空缺格子列表可直接当作内容待办清单。
+     */
+    @GetMapping("/corpus-health")
+    public ResponseEntity<CorpusHealthService.CorpusHealthReport> corpusHealth() {
+        return ResponseEntity.ok(corpusHealthService.report());
     }
 
     @GetMapping("/search")

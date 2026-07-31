@@ -14,6 +14,31 @@
       </div>
     </div>
 
+    <section v-if="corpus" class="corpus">
+      <h3>语料健康度</h3>
+      <p class="corpus-line">
+        覆盖率
+        <strong>{{ (corpus.coverage * 100).toFixed(1) }}%</strong>
+        （{{ corpus.coveredCells }} / {{ corpus.totalCells }} 个格子）·
+        参数 {{ corpus.totalParameters }} 条 · 文档 {{ corpus.totalSources }} 份
+      </p>
+
+      <div v-if="corpus.missingCells?.length" class="corpus-block">
+        <h4>待补的标准（{{ corpus.missingCells.length }}）—— 可直接当内容待办</h4>
+        <ul><li v-for="c in corpus.missingCells" :key="c">{{ c }}</li></ul>
+      </div>
+
+      <div v-if="corpus.parameterConflicts?.length" class="corpus-block danger">
+        <h4>参数取值矛盾（{{ corpus.parameterConflicts.length }}）—— 两份标准都生效，按哪个做都有依据</h4>
+        <ul><li v-for="c in corpus.parameterConflicts" :key="c">{{ c }}</li></ul>
+      </div>
+
+      <div v-if="corpus.unindexedSources?.length" class="corpus-block">
+        <h4>未索引的文档（{{ corpus.unindexedSources.length }}）—— 列表里看得到，检索命中不了</h4>
+        <ul><li v-for="c in corpus.unindexedSources" :key="c">{{ c }}</li></ul>
+      </div>
+    </section>
+
     <DataTable
       :columns="columns"
       :data="results"
@@ -54,6 +79,7 @@ const columns = [
 
 const rawResults = ref([])
 const stats = ref(null)
+const corpus = ref(null)
 const loading = ref(false)
 const running = ref(false)
 
@@ -75,12 +101,14 @@ const statCards = computed(() => {
 async function load() {
   loading.value = true
   try {
-    const [lint, stat] = await Promise.all([
+    const [lint, stat, health] = await Promise.all([
       request('/api/knowledge/lint/results').catch(() => []),
-      request('/api/knowledge/stats').catch(() => null)
+      request('/api/knowledge/stats').catch(() => null),
+      request('/api/knowledge/corpus-health').catch(() => null)
     ])
     rawResults.value = lint || []
     stats.value = stat
+    corpus.value = health
   } catch (error) {
     props.notify(error.message, 'error')
   } finally {
@@ -121,6 +149,46 @@ onMounted(load)
 }
 
 .hint {
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.corpus {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  background: var(--color-bg);
+}
+
+.corpus h3 {
+  margin: 0 0 var(--space-xs);
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+.corpus-line {
+  margin: 0 0 var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+}
+
+.corpus-block {
+  margin-top: var(--space-sm);
+}
+
+.corpus-block h4 {
+  margin: 0 0 4px;
+  font-size: 0.8125rem;
+  color: var(--color-text);
+}
+
+.corpus-block.danger h4 {
+  color: var(--color-danger);
+}
+
+.corpus-block ul {
+  margin: 0;
+  padding-left: 1.25rem;
   color: var(--color-text-secondary);
   font-size: 0.8125rem;
 }
