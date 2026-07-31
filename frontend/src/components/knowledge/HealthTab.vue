@@ -121,14 +121,18 @@ const statCards = computed(() => {
 async function load() {
   loading.value = true
   try {
-    const [lint, health] = await Promise.all([
-      request('/api/knowledge/lint/results').catch(() => []),
-      request('/api/knowledge/corpus-health').catch(() => null)
+    const [lintResult, healthResult] = await Promise.allSettled([
+      request('/api/knowledge/lint/results'),
+      request('/api/knowledge/corpus-health')
     ])
-    rawResults.value = lint || []
-    corpus.value = health
+    rawResults.value = lintResult.status === 'fulfilled' ? (lintResult.value || []) : []
+    corpus.value = healthResult.status === 'fulfilled' ? healthResult.value : null
+    const failure = [lintResult, healthResult].find(result => result.status === 'rejected')
+    if (failure) {
+      props.notify(failure.reason?.message || '健康度加载失败', 'error')
+    }
   } catch (error) {
-    props.notify(error.message, 'error')
+    props.notify(error.message || '健康度加载失败', 'error')
   } finally {
     loading.value = false
   }

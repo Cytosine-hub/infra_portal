@@ -3,12 +3,11 @@ package com.middleware.manager.knowledge.service;
 import com.middleware.manager.domain.ParameterStandard;
 import com.middleware.manager.domain.SoftwareType;
 import com.middleware.manager.exception.BusinessException;
-import com.middleware.manager.repository.ParameterStandardIndexMapper;
-import com.middleware.manager.service.SoftwareTypeLookup;
-import com.middleware.manager.repository.StandardParameterLookupMapper;
-import com.middleware.manager.wiki.entity.WikiPage;
-import com.middleware.manager.wiki.entity.WikiSource;
 import com.middleware.manager.knowledge.store.VectorStore;
+import com.middleware.manager.repository.ParameterStandardIndexMapper;
+import com.middleware.manager.repository.StandardParameterLookupMapper;
+import com.middleware.manager.service.SoftwareTypeLookup;
+import com.middleware.manager.wiki.entity.WikiSource;
 import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +42,11 @@ public class CorpusHealthService {
 
     /** 每类软件应当具备的标准类型。空缺即内容待办。 */
     private static final List<String> STANDARD_TYPES = List.of("参数", "部署", "监控", "应急");
+    private static final String SOURCE_TYPE_UPLOAD = "UPLOAD";
+    private static final String SOURCE_TYPE_STANDARD_DOCUMENT = "STANDARD_DOC";
+    private static final String PAGE_TYPE_EXPERIENCE = "EXPERIENCE";
+    private static final String PAGE_STATUS_ACTIVE = "ACTIVE";
+    private static final String PAGE_STATUS_DRAFT = "DRAFT";
 
     private final ParameterStandardIndexMapper standardMapper;
     private final StandardParameterLookupMapper parameterMapper;
@@ -75,22 +79,23 @@ public class CorpusHealthService {
 
     /** 覆盖率矩阵：已发布标准落在哪些「软件 × 标准类型」格子里。 */
     private void fillCoverage(CorpusHealthReport report) {
-        List<ParameterStandard> published = safeList(standardMapper.findPublished());
+        CoverageState state = new CoverageState();
+        addCatalogSoftwareTypes(loadCatalogTypes(report), state);
+        addPublishedStandards(safeList(standardMapper.findPublished()), state);
+        applyCoverage(report, state);
+    }
 
-        Set<String> covered = new LinkedHashSet<>();
-        Map<String, LinkedHashSet<String>> softwareSetsByCategory = new TreeMap<>();
-        Map<String, String> catalogScopeByNormalized = new LinkedHashMap<>();
-        Set<String> denominator = new LinkedHashSet<>();
-
-        List<SoftwareType> catalogTypes;
+    private List<SoftwareType> loadCatalogTypes(CorpusHealthReport report) {
         try {
-            catalogTypes = safeList(softwareTypeLookup.findActive());
+            return safeList(softwareTypeLookup.findActive());
         } catch (BusinessException exception) {
             log.warn("查询后台软件分类失败，本次覆盖率仅按已录标准统计 reason={}", exception.getMessage());
-            catalogTypes = List.of();
             report.catalogStatusReliable = false;
+            return List.of();
         }
+    }
 
+    private void addCatalogSoftwareTypes(List<SoftwareType> catalogTypes, CoverageState state) {
         for (SoftwareType type : catalogTypes) {
             String software = blankToNull(type.getName());
             if (software == null) {
@@ -99,13 +104,15 @@ public class CorpusHealthService {
             String category = categoryOrDefault(type.getCategory());
             String scoped = scope(category, software);
             String normalized = normalizeScope(scoped);
-            if (catalogScopeByNormalized.putIfAbsent(normalized, scoped) == null) {
-                denominator.add(scoped);
-                softwareSetsByCategory.computeIfAbsent(category, key -> new LinkedHashSet<>()).add(software);
+            if (state.catalogScopeByNormalized.putIfAbsent(normalized, scoped) == null) {
+                state.denominator.add(scoped);
+                state.softwareSetsByCategory
+                        .computeIfAbsent(category, key -> new LinkedHashSet<>()).add(software);
             }
         }
+    }
 
-        List<String> unclassified = new ArrayList<>();
+    private void addPublishedStandards(List<ParameterStandard> published, CoverageState state) {
         for (ParameterStandard s : published) {
             String software = blankToNull(s.getSoftware());
             if (software == null) {
@@ -114,46 +121,48 @@ public class CorpusHealthService {
             // 格子键带上分类：中间件:Nginx 与 应用:Nginx 是两套标准，不能塌缩成一格
             String category = categoryOrDefault(s.getCategory());
             String rawScope = scope(category, software);
-            String scoped = catalogScopeByNormalized.getOrDefault(normalizeScope(rawScope), rawScope);
-            denominator.add(scoped);
-            addScopeToCategory(softwareSetsByCategory, scoped);
+            String scoped = state.catalogScopeByNormalized.getOrDefault(normalizeScope(rawScope), rawScope);
+            state.denominator.add(scoped);
+            addScopeToCategory(state.softwareSetsByCategory, scoped);
             String type = inferType(s.getTitle());
             if (type != null) {
-                covered.add(scoped + " / " + type);
+                state.covered.add(scoped + " / " + type);
             } else {
                 // 标题识别不出类型的标准既不计入 covered、其软件又进分母，会系统性
                 // 低估覆盖率。单列出来，让人知道是「归类不了」而不是「没写」。
-                unclassified.add(scoped + " -> " + s.getTitle());
+                state.unclassified.add(scoped + " -> " + s.getTitle());
             }
         }
+    }
 
+    private void applyCoverage(CorpusHealthReport report, CoverageState state) {
         // 分母 = 后台启用的软件类型 ∪ 已录入标准的软件。
         // 取并集而非只用清单：清单外但确实录了标准的软件也应计入，否则会漏掉真实语料。
         List<String> missing = new ArrayList<>();
-        for (String software : denominator) {
+        for (String software : state.denominator) {
             for (String type : STANDARD_TYPES) {
                 String cell = software + " / " + type;
-                if (!covered.contains(cell)) {
+                if (!state.covered.contains(cell)) {
                     missing.add(cell);
                 }
             }
         }
 
-        int totalCells = denominator.size() * STANDARD_TYPES.size();
-        report.coveredCells = covered.size();
+        int totalCells = state.denominator.size() * STANDARD_TYPES.size();
+        report.coveredCells = state.covered.size();
         report.totalCells = totalCells;
-        report.coverage = totalCells == 0 ? 0.0 : (double) covered.size() / totalCells;
+        report.coverage = totalCells == 0 ? 0.0 : (double) state.covered.size() / totalCells;
         report.missingCells = missing;
         Map<String, List<String>> softwareByCategory = new TreeMap<>();
-        softwareSetsByCategory.forEach((category, softwares) ->
+        state.softwareSetsByCategory.forEach((category, softwares) ->
                 softwareByCategory.put(category, new ArrayList<>(softwares)));
         report.softwareByCategory = softwareByCategory;
-        report.unclassifiedStandards = unclassified;
-        report.catalogSoftwareCount = catalogScopeByNormalized.size();
-        report.targetCatalogConfigured = !catalogScopeByNormalized.isEmpty();
+        report.unclassifiedStandards = state.unclassified;
+        report.catalogSoftwareCount = state.catalogScopeByNormalized.size();
+        report.targetCatalogConfigured = !state.catalogScopeByNormalized.isEmpty();
         report.coverageHint = !report.catalogStatusReliable
                 ? "后台软件分类查询失败，本次分母仅来自已录入标准的软件，覆盖率结论不完整。"
-                : catalogScopeByNormalized.isEmpty()
+                : state.catalogScopeByNormalized.isEmpty()
                 ? "后台管理未配置启用的软件类型，当前分母仅来自已录入标准的软件，无法反映整套语料空白。"
                 : "分母来自后台管理中已启用的软件类型与已录入标准的并集。";
     }
@@ -206,39 +215,43 @@ public class CorpusHealthService {
      */
     private void fillSources(CorpusHealthReport report) {
         List<WikiSource> sources = safeList(sourceMapper.findAll());
-        List<WikiPage> pages = safeList(pageMapper.findAllExcludingContent());
-        List<String> unindexed = new ArrayList<>();
-        long indexedChunks = 0L;
-        boolean reliable = true;
+        fillDocumentComposition(report, sources);
+        fillExperienceComposition(report);
+        fillIndexStatus(report, sources);
+        report.totalKnowledgeItems = report.totalSources + report.experiencePages;
+    }
+
+    private void fillDocumentComposition(CorpusHealthReport report, List<WikiSource> sources) {
         int uploadedDocuments = 0;
         int standardDocuments = 0;
         int otherDocuments = 0;
 
         for (WikiSource source : sources) {
-            if ("UPLOAD".equalsIgnoreCase(source.getSourceType())) {
+            if (SOURCE_TYPE_UPLOAD.equalsIgnoreCase(source.getSourceType())) {
                 uploadedDocuments++;
-            } else if ("STANDARD_DOC".equalsIgnoreCase(source.getSourceType())) {
+            } else if (SOURCE_TYPE_STANDARD_DOCUMENT.equalsIgnoreCase(source.getSourceType())) {
                 standardDocuments++;
             } else {
                 otherDocuments++;
             }
         }
+        report.totalSources = sources.size();
+        report.uploadedDocuments = uploadedDocuments;
+        report.standardDocuments = standardDocuments;
+        report.otherDocuments = otherDocuments;
+    }
 
-        int experiencePages = 0;
-        int activeExperiencePages = 0;
-        int draftExperiencePages = 0;
-        for (WikiPage page : pages) {
-            if (!"EXPERIENCE".equalsIgnoreCase(page.getPageType())) {
-                continue;
-            }
-            experiencePages++;
-            if ("ACTIVE".equalsIgnoreCase(page.getStatus())) {
-                activeExperiencePages++;
-            } else if ("DRAFT".equalsIgnoreCase(page.getStatus())) {
-                draftExperiencePages++;
-            }
-        }
+    private void fillExperienceComposition(CorpusHealthReport report) {
+        report.experiencePages = pageMapper.countByPageType(PAGE_TYPE_EXPERIENCE);
+        report.activeExperiencePages =
+                pageMapper.countByPageTypeAndStatus(PAGE_TYPE_EXPERIENCE, PAGE_STATUS_ACTIVE);
+        report.draftExperiencePages =
+                pageMapper.countByPageTypeAndStatus(PAGE_TYPE_EXPERIENCE, PAGE_STATUS_DRAFT);
+    }
 
+    private void fillIndexStatus(CorpusHealthReport report, List<WikiSource> sources) {
+        List<String> unindexed = new ArrayList<>();
+        boolean reliable = true;
         for (WikiSource s : sources) {
             try {
                 if (!vectorStore.existsBySource(s.getSourceType(), s.getId())) {
@@ -249,6 +262,7 @@ public class CorpusHealthService {
                 reliable = false;
             }
         }
+        long indexedChunks = 0L;
         try {
             // 切片总量取集合总数：逐源累加既受条数上限截断，也没有额外信息量
             indexedChunks = vectorStore.count();
@@ -257,14 +271,6 @@ public class CorpusHealthService {
             reliable = false;
         }
 
-        report.totalSources = sources.size();
-        report.uploadedDocuments = uploadedDocuments;
-        report.standardDocuments = standardDocuments;
-        report.otherDocuments = otherDocuments;
-        report.experiencePages = experiencePages;
-        report.activeExperiencePages = activeExperiencePages;
-        report.draftExperiencePages = draftExperiencePages;
-        report.totalKnowledgeItems = sources.size() + experiencePages;
         // 判定不可信时连切片总数也不输出，避免局部数字被当成完整结论
         report.indexedChunks = reliable ? indexedChunks : 0L;
         report.indexStatusReliable = reliable;
@@ -298,6 +304,14 @@ public class CorpusHealthService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
+    }
+
+    private static class CoverageState {
+        private final Set<String> covered = new LinkedHashSet<>();
+        private final Map<String, LinkedHashSet<String>> softwareSetsByCategory = new TreeMap<>();
+        private final Map<String, String> catalogScopeByNormalized = new LinkedHashMap<>();
+        private final Set<String> denominator = new LinkedHashSet<>();
+        private final List<String> unclassified = new ArrayList<>();
     }
 
     public static class CorpusHealthReport {

@@ -96,6 +96,14 @@
         SELECT COUNT(*) FROM wiki_pages WHERE status = #{status}
     </select>
 
+    <select id="countByPageType" resultType="int">
+        SELECT COUNT(*) FROM wiki_pages WHERE page_type = #{pageType}
+    </select>
+
+    <select id="countByPageTypeAndStatus" resultType="int">
+        SELECT COUNT(*) FROM wiki_pages WHERE page_type = #{pageType} AND status = #{status}
+    </select>
+
     <select id="countAll" resultType="int">
         SELECT COUNT(*) FROM wiki_pages
     </select>

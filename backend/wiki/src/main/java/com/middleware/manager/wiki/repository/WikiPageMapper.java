@@ -44,6 +44,11 @@ public interface WikiPageMapper {
 
     int countByStatus(@Param("status") String status);
 
+    int countByPageType(@Param("pageType") String pageType);
+
+    int countByPageTypeAndStatus(@Param("pageType") String pageType,
+                                 @Param("status") String status);
+
     int countAll();
 
     int insert(WikiPage page);

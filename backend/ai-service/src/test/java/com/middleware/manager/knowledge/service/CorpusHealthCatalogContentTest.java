@@ -10,7 +10,6 @@ import com.middleware.manager.knowledge.store.VectorStore;
 import com.middleware.manager.repository.ParameterStandardIndexMapper;
 import com.middleware.manager.repository.StandardParameterLookupMapper;
 import com.middleware.manager.service.SoftwareTypeLookup;
-import com.middleware.manager.wiki.entity.WikiPage;
 import com.middleware.manager.wiki.entity.WikiSource;
 import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
@@ -45,7 +44,9 @@ class CorpusHealthCatalogContentTest {
         when(parameterMapper.search(any(), any(), anyInt())).thenReturn(List.of());
         when(sourceMapper.findAll()).thenReturn(List.of());
         when(softwareTypeLookup.findActive()).thenReturn(List.of());
-        when(pageMapper.findAllExcludingContent()).thenReturn(List.of());
+        when(pageMapper.countByPageType("EXPERIENCE")).thenReturn(0);
+        when(pageMapper.countByPageTypeAndStatus("EXPERIENCE", "ACTIVE")).thenReturn(0);
+        when(pageMapper.countByPageTypeAndStatus("EXPERIENCE", "DRAFT")).thenReturn(0);
         when(vectorStore.count()).thenReturn(0L);
         service = new CorpusHealthService(standardMapper, parameterMapper, sourceMapper,
                 vectorStore, softwareTypeLookup, pageMapper);
@@ -102,11 +103,9 @@ class CorpusHealthCatalogContentTest {
                 source(1L, "UPLOAD"), source(2L, "UPLOAD"),
                 source(3L, "STANDARD_DOC"), source(4L, "WEB")));
         when(vectorStore.existsBySource(any(), any())).thenReturn(true);
-        when(pageMapper.findAllExcludingContent()).thenReturn(List.of(
-                page("经验一", "EXPERIENCE", "ACTIVE"),
-                page("经验二", "EXPERIENCE", "ACTIVE"),
-                page("经验草稿", "EXPERIENCE", "DRAFT"),
-                page("概览", "OVERVIEW", "ACTIVE")));
+        when(pageMapper.countByPageType("EXPERIENCE")).thenReturn(3);
+        when(pageMapper.countByPageTypeAndStatus("EXPERIENCE", "ACTIVE")).thenReturn(2);
+        when(pageMapper.countByPageTypeAndStatus("EXPERIENCE", "DRAFT")).thenReturn(1);
 
         CorpusHealthReport report = service.report();
 
@@ -148,11 +147,4 @@ class CorpusHealthCatalogContentTest {
         return source;
     }
 
-    private WikiPage page(String title, String pageType, String status) {
-        WikiPage page = new WikiPage();
-        page.setTitle(title);
-        page.setPageType(pageType);
-        page.setStatus(status);
-        return page;
-    }
 }

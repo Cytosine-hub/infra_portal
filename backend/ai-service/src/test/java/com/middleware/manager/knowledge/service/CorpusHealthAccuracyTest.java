@@ -55,7 +55,8 @@ class CorpusHealthAccuracyTest {
         when(parameterMapper.search(any(), any(), anyInt())).thenReturn(List.of());
         when(sourceMapper.findAll()).thenReturn(List.of());
         when(softwareTypeLookup.findActive()).thenReturn(List.of());
-        when(pageMapper.findAllExcludingContent()).thenReturn(List.of());
+        when(pageMapper.countByPageType(anyString())).thenReturn(0);
+        when(pageMapper.countByPageTypeAndStatus(anyString(), anyString())).thenReturn(0);
         when(vectorStore.existsBySource(anyString(), anyLong())).thenReturn(false);
     }
 

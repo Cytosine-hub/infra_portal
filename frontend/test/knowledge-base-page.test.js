@@ -331,4 +331,20 @@ describe('健康度标签', () => {
     expect(text).not.toContain('· ·')
     expect(request.mock.calls.map(([path]) => path)).not.toContain('/api/knowledge/stats')
   })
+
+  test('TC-KB-017 健康度接口部分失败时应保留可用结果并提示错误', async () => {
+    vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path.endsWith('/lint/results')) {
+        return [{ id: 1, lintType: 'BROKEN_LINK', severity: 'HIGH', description: '仍可展示的问题' }]
+      }
+      throw new Error('健康度统计暂不可用')
+    })
+    const notify = vi.fn()
+
+    const wrapper = mountTab(HealthTab, { notify })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('仍可展示的问题')
+    expect(notify).toHaveBeenCalledWith('健康度统计暂不可用', 'error')
+  })
 })

@@ -48,7 +48,8 @@ class CorpusHealthServiceTest {
         when(parameterMapper.search(any(), any(), anyInt())).thenReturn(List.of());
         when(sourceMapper.findAll()).thenReturn(List.of());
         when(softwareTypeLookup.findActive()).thenReturn(List.of());
-        when(pageMapper.findAllExcludingContent()).thenReturn(List.of());
+        when(pageMapper.countByPageType(any())).thenReturn(0);
+        when(pageMapper.countByPageTypeAndStatus(any(), any())).thenReturn(0);
         when(vectorStore.existsBySource(any(), any())).thenReturn(false);
     }
 
