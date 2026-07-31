@@ -16,6 +16,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.env.Environment;
+import org.springframework.cloud.client.loadbalancer.LoadBalancerClient;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -77,6 +78,12 @@ class AiServiceApplicationTests {
 
         assertThat(sqlSessionFactory.getConfiguration().hasStatement(statementId)).isTrue();
         assertThat(applicationContext.getBean(ApiAuditLogMapper.class)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("TC-AI-005 AI 服务提供阻塞式负载均衡客户端供 catalog 调用")
+    void catalogClientHasLoadBalancerSupport() {
+        assertThat(applicationContext.getBeansOfType(LoadBalancerClient.class)).isNotEmpty();
     }
 
     private void assertUnauthorized(String path) throws Exception {
