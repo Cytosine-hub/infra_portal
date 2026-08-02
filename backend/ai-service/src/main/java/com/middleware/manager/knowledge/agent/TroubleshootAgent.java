@@ -37,21 +37,19 @@ import lombok.extern.slf4j.Slf4j;
 public class TroubleshootAgent {
 
     private static final String SYSTEM_PROMPT =
-            "你是企业内部中间件知识库问答助手。你会收到用户问题以及系统检索到的 Wiki 和向量/关键词知识库内容。\n" +
+            "你是企业运维智能排查与知识问答助手。你会收到用户问题，以及可能为空的内部 Wiki 和知识库检索内容。\n" +
             "必须遵守：\n" +
             "1. 优先基于提供的内部知识库内容回答，不要编造内部标准、参数、流程或版本信息。\n" +
-            "2. 如果上下文来自 Wiki，引用时标注【Wiki：页面标题】；如果上下文来自知识库文档，引用时标注【知识库：来源标题】。\n" +
-            "3. 如果知识库中完全没有相关信息，明确告知用户：'知识库中未找到足够相关的内容，无法给出基于内部知识库的结论。'\n" +
+            "2. 只有实际使用了提供的 Wiki 或知识库内容时才标注来源：Wiki 使用【Wiki：页面标题】，知识库文档使用【知识库：来源标题】。\n" +
+            "3. 如果没有提供内部知识库内容，仍要基于通用专业知识直接给出可执行的回答；简要说明未引用内部资料，不得虚构来源或出处。\n" +
             "4. 只有用户问题明显是故障、告警或线上异常排查时，才使用'问题诊断、排查步骤、解决方案'结构。\n" +
-            "5. 对介绍、说明、是什么、有哪些、如何配置、使用场景等知识问答类问题，按'概述、关键能力/配置要点、适用场景、参考来源'组织，不要输出问题诊断。\n" +
-            "6. 如果确需补充通用知识，只能放在'通用补充'中，并明确不是内部知识库依据。";
+            "5. 对介绍、说明、是什么、有哪些、如何配置、使用场景等知识问答类问题，按'概述、关键能力/配置要点、适用场景'组织；仅在有内部资料时增加'参考来源'。\n" +
+            "6. 有内部资料时如果还需补充通用知识，只能放在'通用补充'中，并明确不是内部知识库依据。";
 
     private static final int MAX_HISTORY_MESSAGES = 10;
     private static final int DEFAULT_SEARCH_TOP_K = 5;
     private static final int MAX_RETRIES = 5;
     private static final int MAX_CONTEXT_CHARS = 6000;
-    private static final String NO_RELIABLE_CONTEXT_ANSWER =
-            "知识库中未找到足够相关的内容，无法给出基于内部知识库的结论。";
     private static final Pattern TROUBLESHOOTING_INTENT = Pattern.compile(
             ".*(故障|报错|错误|异常|失败|超时|无法|不能|卡顿|变慢|宕机|不可用|告警|报警|排查|诊断|根因|恢复|重启|连接池|CPU|cpu|内存|OOM|oom|磁盘|日志).*");
 
@@ -115,9 +113,6 @@ public class TroubleshootAgent {
     public AgentResponse chat(Long sessionId, String userMessage, Consumer<String> onRetry,
                               Authentication authentication) {
         ChatContext context = prepareChatContext(sessionId, userMessage, authentication);
-        if (!context.hasReliableEvidence()) {
-            return answerWithoutModel(sessionId, context, null);
-        }
 
         // 4. Call LLM (with retry)
         log.info("Calling LLM for session {}, message count: {}", sessionId, context.messages().size());
@@ -159,9 +154,6 @@ public class TroubleshootAgent {
     public AgentResponse chatStream(Long sessionId, String userMessage, Consumer<String> onRetry,
                                     Consumer<String> onDelta, Authentication authentication) {
         ChatContext context = prepareChatContext(sessionId, userMessage, authentication);
-        if (!context.hasReliableEvidence()) {
-            return answerWithoutModel(sessionId, context, onDelta);
-        }
         AtomicBoolean deltaSent = new AtomicBoolean(false);
         try {
             log.info("Calling streaming LLM for session {}, message count: {}", sessionId, context.messages().size());
@@ -235,6 +227,9 @@ public class TroubleshootAgent {
         if (answer == null || answer.isBlank()) {
             return answer;
         }
+        if (!context.hasReliableEvidence()) {
+            return answer;
+        }
         AnswerGroundingVerifier.GroundingResult result =
                 groundingVerifier.verify(context.userMessage(), answer, context.evidenceText());
         if (result.grounded()) {
@@ -253,14 +248,6 @@ public class TroubleshootAgent {
         assistantMsg.setContent(answer);
         assistantMsg.setReferencesText(gson.toJson(references));
         chatMessageMapper.insert(assistantMsg);
-    }
-
-    private AgentResponse answerWithoutModel(Long sessionId, ChatContext context, Consumer<String> onDelta) {
-        if (onDelta != null) {
-            onDelta.accept(NO_RELIABLE_CONTEXT_ANSWER);
-        }
-        saveAssistantMessage(sessionId, NO_RELIABLE_CONTEXT_ANSWER, context.references());
-        return new AgentResponse(NO_RELIABLE_CONTEXT_ANSWER, context.references());
     }
 
     /**
@@ -398,7 +385,8 @@ public class TroubleshootAgent {
             }
         }
         if (wikiResults.isEmpty() && knowledgeResults.isEmpty()) {
-            sb.append("知识库中未找到相关内容。\n");
+            sb.append("没有检索到可用的内部知识库内容。请基于通用专业知识直接回答，"
+                    + "简要说明未引用内部资料，并且不要生成 Wiki、知识库来源标记或参考来源章节。\n");
         }
         return sb.toString();
     }

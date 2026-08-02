@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.middleware.manager.agent.web.ExportController;
 import com.middleware.manager.knowledge.web.KnowledgeController;
 import com.middleware.manager.repository.ApiAuditLogMapper;
+import com.middleware.manager.repository.KnowledgeImportSourceMapper;
 import com.middleware.manager.wiki.web.WikiController;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -84,6 +85,19 @@ class AiServiceApplicationTests {
     @DisplayName("TC-AI-005 AI 服务提供阻塞式负载均衡客户端供 catalog 调用")
     void catalogClientHasLoadBalancerSupport() {
         assertThat(applicationContext.getBeansOfType(LoadBalancerClient.class)).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("TC-AI-006 业务知识导入 Mapper 查询语句已绑定")
+    void knowledgeImportSourceStatementsAreBound() {
+        String standardStatement = KnowledgeImportSourceMapper.class.getName()
+                + ".findPublishedStandardDocument";
+        String forumStatement = KnowledgeImportSourceMapper.class.getName()
+                + ".findPublishedForumPost";
+
+        assertThat(sqlSessionFactory.getConfiguration().hasStatement(standardStatement)).isTrue();
+        assertThat(sqlSessionFactory.getConfiguration().hasStatement(forumStatement)).isTrue();
+        assertThat(applicationContext.getBean(KnowledgeImportSourceMapper.class)).isNotNull();
     }
 
     private void assertUnauthorized(String path) throws Exception {

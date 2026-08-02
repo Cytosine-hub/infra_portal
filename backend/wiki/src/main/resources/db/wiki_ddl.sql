@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS wiki_links (
 CREATE TABLE IF NOT EXISTS wiki_sources (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     title VARCHAR(200) NOT NULL,
-    source_type ENUM('UPLOAD','STANDARD_DOC','EXPERIENCE','WEB','MANUAL') NOT NULL,
+    source_type VARCHAR(40) NOT NULL,
+    source_ref VARCHAR(100),
     file_path VARCHAR(500),
     content_hash VARCHAR(64),
     content LONGTEXT,
@@ -59,7 +60,8 @@ CREATE TABLE IF NOT EXISTS wiki_sources (
     created_by BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_ingested (ingested),
-    INDEX idx_content_hash (content_hash)
+    INDEX idx_content_hash (content_hash),
+    UNIQUE KEY uk_source_ref (source_type, source_ref)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Lint 检查结果

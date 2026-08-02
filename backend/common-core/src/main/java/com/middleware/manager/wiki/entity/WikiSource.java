@@ -13,6 +13,7 @@ public class WikiSource {
     private Long id;
     private String title;
     private String sourceType;
+    private String sourceRef;
     private String filePath;
     private String contentHash;
     private String content;

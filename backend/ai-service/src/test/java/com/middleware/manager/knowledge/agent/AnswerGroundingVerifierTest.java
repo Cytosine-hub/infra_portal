@@ -58,9 +58,9 @@ class AnswerGroundingVerifierTest {
     }
 
     @Test
-    @DisplayName("TC-GROUND-005 拒答文本不应被判定为幻觉")
-    void refusalTextIsGrounded() {
+    @DisplayName("TC-GROUND-005 通用知识说明不应被判定为幻觉")
+    void generalKnowledgeNoticeIsGrounded() {
         assertThat(verifier.verify("任意问题",
-                "知识库中未找到足够相关的内容，无法给出基于内部知识库的结论。", "").grounded()).isTrue();
+                "以下建议基于通用技术知识，未引用内部资料。", "").grounded()).isTrue();
     }
 }

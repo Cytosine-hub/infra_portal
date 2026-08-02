@@ -1,10 +1,13 @@
 package com.middleware.manager.knowledge.web;
 
+import com.middleware.manager.knowledge.service.KnowledgeContentImportService;
 import com.middleware.manager.knowledge.service.KnowledgeService;
 import com.middleware.manager.knowledge.service.KnowledgeService.ImportResult;
 import com.middleware.manager.knowledge.service.KnowledgeService.PreviewDocument;
 import com.middleware.manager.knowledge.service.KnowledgeSearchResult;
 import com.middleware.manager.knowledge.store.VectorSearchFilter;
+import com.middleware.manager.knowledge.web.dto.KnowledgeContentImportRequest;
+import jakarta.validation.Valid;
 import com.middleware.manager.service.StorageService;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -47,19 +51,22 @@ public class KnowledgeController {
     private final PermissionService permissionService;
     private final ParameterLookupService parameterLookupService;
     private final CorpusHealthService corpusHealthService;
+    private final KnowledgeContentImportService contentImportService;
 
     public KnowledgeController(KnowledgeService knowledgeService,
                                StorageService storageService,
                                StandardIndexSyncService standardIndexSyncService,
                                PermissionService permissionService,
                                ParameterLookupService parameterLookupService,
-                               CorpusHealthService corpusHealthService) {
+                               CorpusHealthService corpusHealthService,
+                               KnowledgeContentImportService contentImportService) {
         this.knowledgeService = knowledgeService;
         this.storageService = storageService;
         this.standardIndexSyncService = standardIndexSyncService;
         this.permissionService = permissionService;
         this.parameterLookupService = parameterLookupService;
         this.corpusHealthService = corpusHealthService;
+        this.contentImportService = contentImportService;
     }
 
     /**
@@ -96,6 +103,17 @@ public class KnowledgeController {
     }
 
     /**
+     * 导入标准文档、论坛文章等已有业务正文。参数标准使用 sync-standards 对账，避免静态副本过期。
+     */
+    @PostMapping("/import-content")
+    public ResponseEntity<ImportResult> importContent(
+            @Valid @RequestBody KnowledgeContentImportRequest request,
+            Authentication authentication) {
+        return ResponseEntity.ok(contentImportService.importContent(
+                request.getSourceType(), request.getSourceId(), authentication));
+    }
+
+    /**
      * 参数标准精确查询。参数值必须 100% 准确且可追责，RAG 只能给语义相近的片段，
      * 因此这类问题直接查表并返回带标准版本号的确定答案，不走检索。
      */
@@ -107,11 +125,7 @@ public class KnowledgeController {
         return ResponseEntity.ok(parameterLookupService.lookup(software, name, limit));
     }
 
-    /**
-     * 语料健康度。检索层与生成层的分数只说明「现有语料检索得好不好」，
-     * 说明不了「该写的内容写了没有」，而后者才是当前真正的瓶颈（首次实测覆盖率 2.5%）。
-     * 其中空缺格子列表可直接当作内容待办清单。
-     */
+    /** 面向知识库全部来源与页面的确定性健康度检查。 */
     @GetMapping("/corpus-health")
     public ResponseEntity<CorpusHealthService.CorpusHealthReport> corpusHealth() {
         return ResponseEntity.ok(corpusHealthService.report());

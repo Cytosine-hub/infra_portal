@@ -107,6 +107,7 @@ mybatis:
     - classpath*:mapper/ChatMessageMapper.xml
     - classpath*:mapper/ChatSessionMapper.xml
     - classpath*:mapper/StandardDocumentMapper.xml
+    - classpath*:mapper/KnowledgeImportSourceMapper.xml
     - classpath*:mapper/WikiSourceMapper.xml
     - classpath*:mapper/ParameterStandardIndexMapper.xml
     - classpath*:mapper/StandardParameterLookupMapper.xml

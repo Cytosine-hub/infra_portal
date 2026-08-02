@@ -22,7 +22,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 
-@RestControllerAdvice(basePackages = "com.middleware.manager.web.api")
+@RestControllerAdvice(basePackages = {
+        "com.middleware.manager.web.api",
+        "com.middleware.manager.knowledge.web"
+})
 @Slf4j
 public class ApiExceptionHandler {
 

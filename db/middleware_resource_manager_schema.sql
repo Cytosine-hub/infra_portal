@@ -683,7 +683,8 @@ DROP TABLE IF EXISTS `wiki_sources`;
 CREATE TABLE `wiki_sources` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `title` varchar(200) NOT NULL,
-  `source_type` enum('UPLOAD','STANDARD_DOC','EXPERIENCE','WEB','MANUAL') NOT NULL,
+  `source_type` varchar(40) NOT NULL,
+  `source_ref` varchar(100) DEFAULT NULL,
   `file_path` varchar(500) DEFAULT NULL,
   `content_hash` varchar(64) DEFAULT NULL,
   `content` longtext,
@@ -695,7 +696,8 @@ CREATE TABLE `wiki_sources` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_ingested` (`ingested`),
-  KEY `idx_content_hash` (`content_hash`)
+  KEY `idx_content_hash` (`content_hash`),
+  UNIQUE KEY `uk_source_ref` (`source_type`,`source_ref`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;

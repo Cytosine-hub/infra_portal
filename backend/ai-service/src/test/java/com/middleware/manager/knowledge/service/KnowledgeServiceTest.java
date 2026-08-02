@@ -190,6 +190,91 @@ class KnowledgeServiceTest {
         verify(storageService, never()).deleteIfExists("knowledge/old.pdf");
     }
 
+    @Test
+    @DisplayName("TC-KNOWLEDGE-IMPORT-008 业务内容应按来源类型写入来源记录和向量")
+    void importsBusinessContent() {
+        when(sourceMapper.findByTitleAndType("Nginx 部署规范", "STANDARD_DOCUMENT"))
+                .thenReturn(null);
+        when(embeddingService.embedBatch(any())).thenReturn(List.of(new float[]{1F}));
+        doAnswer(invocation -> {
+            WikiSource source = invocation.getArgument(0);
+            source.setId(201L);
+            return 1;
+        }).when(sourceMapper).insert(any(WikiSource.class));
+
+        KnowledgeService.ImportResult result = service.importContent(
+                "Nginx 部署规范", "STANDARD_DOCUMENT", "# 部署\n完整正文",
+                "中间件", "Nginx", "11");
+
+        assertThat(result.getSourceId()).isEqualTo(201L);
+        assertThat(result.getChunkCount()).isEqualTo(1);
+        verify(sourceMapper).insert(org.mockito.ArgumentMatchers.argThat(source ->
+                "STANDARD_DOCUMENT".equals(source.getSourceType())
+                        && "11".equals(source.getSourceRef())
+                        && "中间件".equals(source.getCategory())
+                        && "Nginx".equals(source.getSoftware())));
+        verify(vectorStore).addAll(any());
+    }
+
+    @Test
+    @DisplayName("TC-KNOWLEDGE-IMPORT-009 不支持的业务来源类型必须被拒绝")
+    void rejectsUnsupportedBusinessSourceType() {
+        assertThatThrownBy(() -> service.importContent(
+                "未知内容", "ARBITRARY", "正文", null, null, "1"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getCode()).isEqualTo(ErrorCode.PARAM_INVALID));
+
+        verify(embeddingService, never()).embedBatch(any());
+        verify(sourceMapper, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("TC-KNOWLEDGE-IMPORT-010 空业务正文必须被拒绝")
+    void rejectsEmptyBusinessContent() {
+        assertThatThrownBy(() -> service.importContent(
+                "空论坛文章", "FORUM_POST", "# 只有标题", null, null, "21"))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        error -> assertThat(error.getCode())
+                                .isEqualTo(ErrorCode.KNOWLEDGE_CONTENT_EMPTY));
+    }
+
+    @Test
+    @DisplayName("TC-KNOWLEDGE-IMPORT-011 同一业务来源改名后应更新原知识来源")
+    void updatesExistingSourceByStableReference() {
+        WikiSource existing = new WikiSource();
+        existing.setId(301L);
+        existing.setTitle("旧标题");
+        existing.setSourceType("FORUM_POST");
+        existing.setSourceRef("21");
+        when(sourceMapper.findByTypeAndSourceRef("FORUM_POST", "21")).thenReturn(existing);
+        when(embeddingService.embedBatch(any())).thenReturn(List.of(new float[]{1F}));
+
+        service.importContent("新标题", "FORUM_POST", "更新后的正文", null, null, "21");
+
+        verify(sourceMapper).update(org.mockito.ArgumentMatchers.argThat(source ->
+                source.getId().equals(301L) && "新标题".equals(source.getTitle())));
+        verify(sourceMapper, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("TC-KNOWLEDGE-IMPORT-015 新业务来源向量写入失败时应清理外部向量")
+    void cleansVectorsWhenNewBusinessContentImportFails() {
+        when(sourceMapper.findByTypeAndSourceRef("FORUM_POST", "22")).thenReturn(null);
+        when(embeddingService.embedBatch(any())).thenReturn(List.of(new float[]{1F}));
+        doAnswer(invocation -> {
+            WikiSource source = invocation.getArgument(0);
+            source.setId(401L);
+            return 1;
+        }).when(sourceMapper).insert(any(WikiSource.class));
+        doThrow(new IllegalStateException("milvus failed")).when(vectorStore).addAll(any());
+
+        assertThatThrownBy(() -> service.importContent(
+                "新论坛文章", "FORUM_POST", "完整正文", null, null, "22"))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(vectorStore).deleteBySource("FORUM_POST", 401L);
+    }
+
     private MockMultipartFile file(String name) {
         return new MockMultipartFile("file", name, "application/octet-stream", "content".getBytes());
     }

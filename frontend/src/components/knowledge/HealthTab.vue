@@ -3,7 +3,7 @@
     <Toolbar>
       <template #filters>
         <BaseButton variant="primary" :loading="running" @click="runLint">运行体检</BaseButton>
-        <span class="hint">检查孤儿页、断链、过期内容与矛盾条目</span>
+        <span class="hint">检查全部知识来源与页面</span>
       </template>
     </Toolbar>
 
@@ -15,42 +15,33 @@
     </div>
 
     <section v-if="corpus" class="corpus">
-      <h3>标准覆盖度</h3>
+      <h3>知识库概况</h3>
       <p class="corpus-line">
-        后台软件 {{ corpus.catalogSoftwareCount }} 类 ·
-        覆盖率
-        <strong>{{ (corpus.coverage * 100).toFixed(1) }}%</strong>
-        （{{ corpus.coveredCells }} / {{ corpus.totalCells }} 个格子）·
-        参数 {{ corpus.totalParameters }} 条
-      </p>
-      <p
-        v-if="!corpus.targetCatalogConfigured"
-        class="corpus-hint"
-        :class="{ danger: corpus.catalogStatusReliable === false }"
-      >
-        {{ corpus.coverageHint }}
+        来源 {{ corpus.totalSources ?? 0 }} 项 · 页面 {{ corpus.totalPages ?? 0 }} 项 ·
+        已启用页面 {{ corpus.activePages ?? 0 }} 项 · 草稿 {{ corpus.draftPages ?? 0 }} 项
       </p>
       <p v-if="!corpus.indexStatusReliable" class="corpus-hint danger">
         向量库查询失败，本次不判定索引状态（避免把「查不到」误读成「没索引」）
       </p>
 
-      <div v-if="corpus.missingCells?.length" class="corpus-block">
-        <h4>待补的标准（{{ corpus.missingCells.length }}）—— 可直接当内容待办</h4>
-        <ul><li v-for="c in corpus.missingCells" :key="c">{{ c }}</li></ul>
+      <div v-if="sourceTypeEntries.length" class="source-types">
+        <span v-for="entry in sourceTypeEntries" :key="entry.type">
+          {{ entry.label }} <strong>{{ entry.count }}</strong>
+        </span>
       </div>
 
-      <div v-if="corpus.unclassifiedStandards?.length" class="corpus-block">
-        <h4>标题无法归类的标准（{{ corpus.unclassifiedStandards.length }}）—— 不计入覆盖率，是「归类不了」不是「没写」</h4>
-        <ul><li v-for="c in corpus.unclassifiedStandards" :key="c">{{ c }}</li></ul>
+      <div v-if="corpus.emptySources?.length" class="corpus-block danger">
+        <h4>空内容来源（{{ corpus.emptySources.length }}）</h4>
+        <ul><li v-for="c in corpus.emptySources" :key="c">{{ c }}</li></ul>
       </div>
 
-      <div v-if="corpus.parameterConflicts?.length" class="corpus-block danger">
-        <h4>参数取值矛盾（{{ corpus.parameterConflicts.length }}）—— 两份标准都生效，按哪个做都有依据</h4>
-        <ul><li v-for="c in corpus.parameterConflicts" :key="c">{{ c }}</li></ul>
+      <div v-if="corpus.duplicateContentGroups?.length" class="corpus-block">
+        <h4>重复正文（{{ corpus.duplicateContentGroups.length }} 组）</h4>
+        <ul><li v-for="c in corpus.duplicateContentGroups" :key="c">{{ c }}</li></ul>
       </div>
 
       <div v-if="corpus.indexStatusReliable && corpus.unindexedSources?.length" class="corpus-block">
-        <h4>未索引的文档（{{ corpus.unindexedSources.length }}）—— 列表里看得到，检索命中不了</h4>
+        <h4>未索引来源（{{ corpus.unindexedSources.length }}）</h4>
         <ul><li v-for="c in corpus.unindexedSources" :key="c">{{ c }}</li></ul>
       </div>
     </section>
@@ -86,6 +77,16 @@ const TYPE_LABEL = {
   ORPHAN: '孤儿页', STALE: '内容过期', BROKEN_LINK: '断链',
   CONTRADICTION: '内容矛盾', GAP: '知识缺口'
 }
+const SOURCE_TYPE_LABEL = {
+  UPLOAD: '上传文档',
+  STANDARD_DOC: '参数标准',
+  STANDARD_DOCUMENT: '标准文档',
+  FORUM_POST: '论坛文章',
+  EXPERIENCE: '经验来源',
+  MANUAL: '手工录入',
+  WEB: '网页',
+  UNKNOWN: '未分类来源'
+}
 
 const columns = [
   { key: 'typeLabel', label: '问题类型' },
@@ -103,16 +104,19 @@ const results = computed(() => rawResults.value.map(r => ({
   typeLabel: TYPE_LABEL[r.lintType] || r.lintType
 })))
 
+const sourceTypeEntries = computed(() => Object.entries(corpus.value?.sourceTypeCounts || {})
+  .map(([type, count]) => ({ type, count, label: SOURCE_TYPE_LABEL[type] || type })))
+
 const statCards = computed(() => {
   if (!corpus.value) return []
   return [
     { label: '知识内容', value: corpus.value.totalKnowledgeItems ?? 0 },
-    { label: '经验沉淀', value: corpus.value.experiencePages ?? 0 },
-    { label: '上传文档', value: corpus.value.uploadedDocuments ?? 0 },
-    { label: '标准文档', value: corpus.value.standardDocuments ?? 0 },
+    { label: '知识来源', value: corpus.value.totalSources ?? 0 },
+    { label: '知识页面', value: corpus.value.totalPages ?? 0 },
+    { label: '已启用页面', value: corpus.value.activePages ?? 0 },
     {
-      label: '未索引文档',
-      value: corpus.value.indexStatusReliable ? (corpus.value.unindexedSources?.length ?? 0) : '--'
+      label: '索引切片',
+      value: corpus.value.indexStatusReliable ? (corpus.value.indexedChunks ?? 0) : '--'
     },
     { label: '待处理问题', value: rawResults.value.length }
   ]
@@ -176,10 +180,9 @@ onMounted(load)
 }
 
 .corpus {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-md);
-  background: var(--color-bg);
+  padding: var(--space-md) 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .corpus h3 {
@@ -206,6 +209,21 @@ onMounted(load)
 
 .corpus-block {
   margin-top: var(--space-sm);
+}
+
+.source-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-lg);
+  padding: var(--space-sm) 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+}
+
+.source-types strong {
+  margin-left: 4px;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
 }
 
 .corpus-block h4 {

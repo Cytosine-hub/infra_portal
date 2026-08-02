@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
-import { getSavedAuth } from '../src/api.js'
+import { getSavedAuth, request } from '../src/api.js'
 
 const storage = new Map()
 const localStorageMock = {
@@ -46,5 +46,24 @@ describe('登录有效期解析', () => {
     expect(localStorageMock.getItem('mrm.token')).toBeNull()
     expect(localStorageMock.getItem('mrm.user')).toBeNull()
     expect(localStorageMock.getItem('mrm.expiresAt')).toBeNull()
+  })
+
+  test('TC-AUTH-006 接口返回英文 401 时应统一提示中文并广播过期原因', async () => {
+    localStorageMock.setItem('mrm.token', 'expired-token')
+    localStorageMock.setItem('mrm.user', JSON.stringify({ username: 'tester' }))
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(
+      JSON.stringify({ message: 'Unauthorized' }),
+      { status: 401, statusText: 'Unauthorized', headers: { 'Content-Type': 'application/json' } }
+    ))))
+    const logoutListener = vi.fn()
+    window.addEventListener('auth:logout', logoutListener, { once: true })
+
+    await expect(request('/api/protected')).rejects.toThrow('登录已过期，请重新登录')
+
+    expect(logoutListener).toHaveBeenCalledOnce()
+    expect(logoutListener.mock.calls[0][0].detail).toEqual({
+      reason: 'expired',
+      message: '登录已过期，请重新登录'
+    })
   })
 })

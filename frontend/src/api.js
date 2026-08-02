@@ -1,6 +1,18 @@
 const TOKEN_KEY = 'mrm.token'
 const USER_KEY = 'mrm.user'
 const EXPIRES_KEY = 'mrm.expiresAt'
+export const AUTH_EXPIRED_MESSAGE = '登录已过期，请重新登录'
+
+function parseExpiry(expiresAt) {
+  if (!expiresAt) return null
+  const hasTimeZone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(expiresAt)
+  const expiry = new Date(hasTimeZone ? expiresAt : `${expiresAt}Z`)
+  return Number.isNaN(expiry.getTime()) ? null : expiry
+}
+
+export function getSavedAuthExpiry() {
+  return parseExpiry(localStorage.getItem(EXPIRES_KEY))
+}
 
 export function getSavedAuth() {
   const token = localStorage.getItem(TOKEN_KEY)
@@ -10,10 +22,9 @@ export function getSavedAuth() {
   if (!token || !user) return null
 
   if (expiresAt) {
-    const hasTimeZone = /(?:Z|[+-]\d{2}:\d{2})$/i.test(expiresAt)
-    const expiry = new Date(hasTimeZone ? expiresAt : `${expiresAt}Z`)
-    if (!Number.isNaN(expiry.getTime()) && expiry <= new Date()) {
-      clearAuth()
+    const expiry = parseExpiry(expiresAt)
+    if (expiry && expiry <= new Date()) {
+      handleUnauthorized()
       return null
     }
   }
@@ -40,8 +51,13 @@ export function clearAuth() {
 }
 
 export function handleUnauthorized() {
+  const hadAuth = Boolean(localStorage.getItem(TOKEN_KEY))
   clearAuth()
-  window.dispatchEvent(new Event('auth:logout'))
+  if (hadAuth) {
+    window.dispatchEvent(new CustomEvent('auth:logout', {
+      detail: { reason: 'expired', message: AUTH_EXPIRED_MESSAGE }
+    }))
+  }
 }
 
 export async function request(path, options = {}) {
@@ -70,7 +86,8 @@ export async function request(path, options = {}) {
   const response = await fetch(path, fetchOptions)
 
   if (!response.ok) {
-    if (response.status === 401) {
+    const authenticationExpired = response.status === 401 && Boolean(token)
+    if (authenticationExpired) {
       handleUnauthorized()
     }
     let message = response.statusText || 'Request failed'
@@ -80,6 +97,9 @@ export async function request(path, options = {}) {
       message = fieldErrors.length ? fieldErrors.join('；') : (payload.message || payload.error || message)
     } catch {
       // Keep the HTTP status text when the backend did not return JSON.
+    }
+    if (authenticationExpired) {
+      message = AUTH_EXPIRED_MESSAGE
     }
     const error = new Error(message)
     error.status = response.status
@@ -105,6 +125,7 @@ export async function fetchBinary(path) {
   if (!response.ok) {
     if (response.status === 401) {
       handleUnauthorized()
+      throw new Error(AUTH_EXPIRED_MESSAGE)
     }
     throw new Error(`文件加载失败 (${response.status})`)
   }

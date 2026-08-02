@@ -270,7 +270,7 @@
 <script setup>
 import { computed, defineAsyncComponent, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
-import { request } from './api'
+import { AUTH_EXPIRED_MESSAGE, request } from './api'
 import { useAuth } from './composables/useAuth'
 import { useNotify } from './composables/useNotify'
 import { parseHashRoute, useRoute } from './composables/useRoute'
@@ -531,20 +531,29 @@ async function loadSiteConfig() {
 }
 
 function handleUnhandledRejection(event) {
+  if (event.reason?.status === 401) {
+    if (auth.token) {
+      handleAuthLogout({ detail: { message: AUTH_EXPIRED_MESSAGE } })
+    }
+    return
+  }
   notify(event.reason?.message || '请求失败', 'error')
-  if (event.reason?.status === 401) logout(false)
-  event.preventDefault()
 }
 function handleBeforeUnload(e) { if (uploading.value) { e.preventDefault(); e.returnValue = '' } }
-function handleAuthLogout() { auth.token = ''; auth.user = null; window.location.hash = '#/home' }
+function handleAuthLogout(event) {
+  void authLogout(false)
+  notify(event?.detail?.message || AUTH_EXPIRED_MESSAGE, 'error')
+  window.location.hash = '#/admin'
+  syncRoute()
+}
 
 onMounted(() => {
+  window.addEventListener('auth:logout', handleAuthLogout)
   loadSiteConfig()
   restoreAuth()
   syncRoute()
   window.addEventListener('hashchange', syncRoute)
   window.addEventListener('unhandledrejection', handleUnhandledRejection)
-  window.addEventListener('auth:logout', handleAuthLogout)
   window.addEventListener('beforeunload', handleBeforeUnload)
 })
 

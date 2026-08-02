@@ -15,6 +15,7 @@ import SearchTab from '../src/components/knowledge/SearchTab.vue'
 import DocumentsTab from '../src/components/knowledge/DocumentsTab.vue'
 import ExperienceTab from '../src/components/knowledge/ExperienceTab.vue'
 import HealthTab from '../src/components/knowledge/HealthTab.vue'
+import PageHeader from '../src/components/ui/PageHeader.vue'
 import * as api from '../src/api.js'
 
 const mounted = []
@@ -53,6 +54,13 @@ describe('页面骨架', () => {
 
     expect(wrapper.findComponent(SearchTab).exists()).toBe(true)
     expect(wrapper.findComponent(DocumentsTab).exists()).toBe(false)
+  })
+
+  test('TC-KB-002A 顶部导航已有知识库标题时不应重复渲染页内标题', () => {
+    vi.spyOn(api, 'request').mockResolvedValue([])
+    const wrapper = mountTab(KnowledgeBasePage)
+
+    expect(wrapper.findComponent(PageHeader).exists()).toBe(false)
   })
 })
 
@@ -169,6 +177,123 @@ describe('文档标签', () => {
     const deleteCall = request.mock.calls.find(([, opts]) => opts?.method === 'DELETE')
     expect(deleteCall[0]).toContain('/api/knowledge/docs?')
   })
+
+  test('TC-KB-010A 应提供参数标准、标准文档和论坛文章的统一导入入口', async () => {
+    vi.spyOn(api, 'request').mockResolvedValue(SOURCES)
+    const wrapper = mountTab(DocumentsTab)
+    await flushPromises()
+
+    await wrapper.findAll('button').find(b => b.text() === '从现有内容导入').trigger('click')
+    await flushPromises()
+
+    const text = document.body.textContent
+    expect(text).toContain('参数标准')
+    expect(text).toContain('标准文档')
+    expect(text).toContain('论坛文章')
+  })
+
+  test('TC-KB-010B 参数标准应调用对账同步，避免产生会过期的静态副本', async () => {
+    const request = vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path === '/api/knowledge/sync-standards') return { indexed: 2, skipped: 1, removed: 0, failed: 0 }
+      return SOURCES
+    })
+    const wrapper = mountTab(DocumentsTab)
+    await flushPromises()
+
+    await wrapper.findAll('button').find(b => b.text() === '从现有内容导入').trigger('click')
+    await flushPromises()
+    const sync = [...document.body.querySelectorAll('button')]
+      .find(b => b.textContent.trim() === '同步参数标准')
+    sync.click()
+    await flushPromises()
+
+    expect(request).toHaveBeenCalledWith('/api/knowledge/sync-standards', { method: 'POST' })
+  })
+
+  test('TC-KB-010C 选中的标准文档应只提交业务 ID，由后端读取权威正文', async () => {
+    const standardDocument = { id: 11, title: 'Nginx 部署规范', content: '部署正文', category: '中间件', software: 'Nginx' }
+    const request = vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path === '/api/public/standards/all') return [standardDocument]
+      return SOURCES
+    })
+    const wrapper = mountTab(DocumentsTab)
+    await flushPromises()
+
+    await wrapper.findAll('button').find(b => b.text() === '从现有内容导入').trigger('click')
+    await flushPromises()
+    ;[...document.body.querySelectorAll('button')]
+      .find(b => b.textContent.includes('标准文档')).click()
+    await flushPromises()
+    document.body.querySelector('.import-list input[type="checkbox"]').click()
+    await flushPromises()
+    ;[...document.body.querySelectorAll('button')]
+      .find(b => b.textContent.trim() === '导入选中内容').click()
+    await flushPromises()
+
+    const call = request.mock.calls.find(([path]) => path === '/api/knowledge/import-content')
+    expect(call[1].body).toMatchObject({
+      sourceId: 11, sourceType: 'STANDARD_DOCUMENT'
+    })
+    expect(call[1].body).not.toHaveProperty('content')
+  })
+
+  test('TC-KB-010D 论坛文章应只提交业务 ID，不经客户端转发正文', async () => {
+    const request = vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path.startsWith('/api/forum/posts?')) return { content: [{ id: 21, title: '连接池故障复盘', summary: '摘要' }] }
+      return SOURCES
+    })
+    const wrapper = mountTab(DocumentsTab)
+    await flushPromises()
+
+    await wrapper.findAll('button').find(b => b.text() === '从现有内容导入').trigger('click')
+    await flushPromises()
+    ;[...document.body.querySelectorAll('button')]
+      .find(b => b.textContent.includes('论坛文章')).click()
+    await flushPromises()
+    document.body.querySelector('.import-list input[type="checkbox"]').click()
+    await flushPromises()
+    ;[...document.body.querySelectorAll('button')]
+      .find(b => b.textContent.trim() === '导入选中内容').click()
+    await flushPromises()
+
+    const call = request.mock.calls.find(([path]) => path === '/api/knowledge/import-content')
+    expect(call[1].body).toMatchObject({
+      sourceId: 21, sourceType: 'FORUM_POST'
+    })
+    expect(call[1].body).not.toHaveProperty('content')
+  })
+
+  test('TC-KB-010E 论坛导入候选应读取全部分页，不遗漏较早文章', async () => {
+    const request = vi.spyOn(api, 'request').mockImplementation(async (path) => {
+      if (path === '/api/forum/posts?page=0&size=50') {
+        return {
+          content: [{ id: 21, title: '近期文章' }],
+          totalPages: 2,
+          last: false
+        }
+      }
+      if (path === '/api/forum/posts?page=1&size=50') {
+        return {
+          content: [{ id: 9, title: '较早文章' }],
+          totalPages: 2,
+          last: true
+        }
+      }
+      return SOURCES
+    })
+    const wrapper = mountTab(DocumentsTab)
+    await flushPromises()
+
+    await wrapper.findAll('button').find(b => b.text() === '从现有内容导入').trigger('click')
+    await flushPromises()
+    ;[...document.body.querySelectorAll('button')]
+      .find(b => b.textContent.includes('论坛文章')).click()
+    await flushPromises()
+
+    expect(request).toHaveBeenCalledWith('/api/forum/posts?page=1&size=50')
+    expect(document.body.textContent).toContain('近期文章')
+    expect(document.body.textContent).toContain('较早文章')
+  })
 })
 
 describe('经验沉淀标签', () => {
@@ -257,20 +382,15 @@ describe('健康度标签', () => {
       if (path.endsWith('/corpus-health')) {
         return {
           totalKnowledgeItems: 17,
-          experiencePages: 12,
-          uploadedDocuments: 5,
-          standardDocuments: 0,
-          catalogSoftwareCount: 0,
-          coverage: 0,
-          coveredCells: 0,
-          totalCells: 0,
-          totalParameters: 0,
-          targetCatalogConfigured: false,
+          totalSources: 5,
+          totalPages: 12,
+          activePages: 8,
+          draftPages: 4,
+          sourceTypeCounts: { UPLOAD: 2, STANDARD_DOC: 1, FORUM_POST: 2 },
           indexStatusReliable: true,
           unindexedSources: [],
-          missingCells: [],
-          parameterConflicts: [],
-          unclassifiedStandards: []
+          emptySources: [],
+          duplicateContentGroups: []
         }
       }
       return []
@@ -285,30 +405,21 @@ describe('健康度标签', () => {
     expect(text).toContain('12')
   })
 
-  test('TC-KB-016 应展示动态软件标准覆盖与完整知识内容构成，不再读取旧索引统计', async () => {
+  test('TC-KB-016 应检查知识库全部内容，不再展示固定软件标准覆盖矩阵', async () => {
     const request = vi.spyOn(api, 'request').mockImplementation(async (path) => {
       if (path.endsWith('/lint/results')) return []
       if (path.endsWith('/corpus-health')) {
         return {
-          coverage: 0.25,
-          coveredCells: 4,
-          totalCells: 16,
-          totalParameters: 8,
           totalSources: 4,
+          totalPages: 3,
           totalKnowledgeItems: 7,
-          catalogSoftwareCount: 4,
-          uploadedDocuments: 2,
-          standardDocuments: 1,
-          otherDocuments: 1,
-          experiencePages: 3,
-          activeExperiencePages: 2,
-          draftExperiencePages: 1,
-          targetCatalogConfigured: true,
+          activePages: 2,
+          draftPages: 1,
+          sourceTypeCounts: { UPLOAD: 1, STANDARD_DOC: 1, STANDARD_DOCUMENT: 1, FORUM_POST: 1 },
           indexStatusReliable: true,
-          unindexedSources: [],
-          missingCells: [],
-          parameterConflicts: [],
-          unclassifiedStandards: []
+          unindexedSources: ['未索引文章'],
+          emptySources: ['空白知识'],
+          duplicateContentGroups: ['重复手册 A、重复手册 B']
         }
       }
       return null
@@ -318,17 +429,21 @@ describe('健康度标签', () => {
     await flushPromises()
 
     const text = wrapper.text()
-    expect(text).toContain('标准覆盖度')
-    expect(text).toContain('后台软件')
+    expect(text).toContain('知识库概况')
+    expect(text).not.toContain('标准覆盖度')
+    expect(text).not.toContain('后台软件')
     expect(text).toContain('4')
     expect(text).toContain('知识内容')
     expect(text).toContain('7')
-    expect(text).toContain('经验沉淀')
+    expect(text).toContain('知识页面')
     expect(text).toContain('3')
     expect(text).toContain('上传文档')
+    expect(text).toContain('参数标准')
     expect(text).toContain('标准文档')
-    expect(text).toContain('未索引文档')
-    expect(text).not.toContain('· ·')
+    expect(text).toContain('论坛文章')
+    expect(text).toContain('空白知识')
+    expect(text).toContain('重复手册 A、重复手册 B')
+    expect(text).toContain('未索引文章')
     expect(request.mock.calls.map(([path]) => path)).not.toContain('/api/knowledge/stats')
   })
 

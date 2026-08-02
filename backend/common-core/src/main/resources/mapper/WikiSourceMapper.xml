@@ -6,6 +6,7 @@
         <id property="id" column="id"/>
         <result property="title" column="title"/>
         <result property="sourceType" column="source_type"/>
+        <result property="sourceRef" column="source_ref"/>
         <result property="filePath" column="file_path"/>
         <result property="contentHash" column="content_hash"/>
         <result property="content" column="content"/>
@@ -29,8 +30,21 @@
         SELECT * FROM wiki_sources WHERE title = #{title} AND source_type = #{sourceType} ORDER BY created_at DESC LIMIT 1
     </select>
 
+    <select id="findByTypeAndSourceRef" resultMap="wikiSourceResultMap">
+        SELECT * FROM wiki_sources
+        WHERE source_type = #{sourceType} AND source_ref = #{sourceRef}
+        LIMIT 1
+    </select>
+
     <select id="findAll" resultMap="wikiSourceResultMap">
         SELECT * FROM wiki_sources ORDER BY created_at DESC
+    </select>
+
+    <select id="findAllForHealth" resultMap="wikiSourceResultMap">
+        SELECT id, title, source_type, source_ref, file_path, content_hash,
+               CASE WHEN content IS NULL OR TRIM(content) = '' THEN NULL ELSE '1' END AS content
+        FROM wiki_sources
+        ORDER BY id
     </select>
 
     <select id="findByIngested" resultMap="wikiSourceResultMap">
@@ -38,13 +52,13 @@
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO wiki_sources (title, source_type, file_path, content_hash, content, category, software, created_by)
-        VALUES (#{title}, #{sourceType}, #{filePath}, #{contentHash}, #{content}, #{category}, #{software}, #{createdBy})
+        INSERT INTO wiki_sources (title, source_type, source_ref, file_path, content_hash, content, category, software, created_by)
+        VALUES (#{title}, #{sourceType}, #{sourceRef}, #{filePath}, #{contentHash}, #{content}, #{category}, #{software}, #{createdBy})
     </insert>
 
     <update id="update">
         UPDATE wiki_sources
-        SET title=#{title}, source_type=#{sourceType}, file_path=#{filePath}, content_hash=#{contentHash},
+        SET title=#{title}, source_type=#{sourceType}, source_ref=#{sourceRef}, file_path=#{filePath}, content_hash=#{contentHash},
             content=#{content}, category=#{category}, software=#{software}, ingested=#{ingested}, ingested_at=#{ingestedAt}
         WHERE id=#{id}
     </update>

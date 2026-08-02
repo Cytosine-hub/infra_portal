@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.middleware.manager.repository.KnowledgeImportSourceMapper">
+    <resultMap id="importSourceResultMap" type="KnowledgeImportSource">
+        <id property="sourceId" column="source_id"/>
+        <result property="title" column="title"/>
+        <result property="sourceType" column="source_type"/>
+        <result property="content" column="content"/>
+        <result property="category" column="category"/>
+        <result property="software" column="software"/>
+    </resultMap>
+
+    <select id="findPublishedStandardDocument" resultMap="importSourceResultMap">
+        SELECT id AS source_id,
+               title,
+               'STANDARD_DOCUMENT' AS source_type,
+               CASE
+                   WHEN status = 'MODIFYING' AND previous_content IS NOT NULL THEN previous_content
+                   ELSE content
+               END AS content,
+               category,
+               software
+        FROM standard_documents
+        WHERE id = #{id}
+          AND status IN ('PUBLISHED', 'MODIFYING')
+        LIMIT 1
+    </select>
+
+    <select id="findPublishedForumPost" resultMap="importSourceResultMap">
+        SELECT id AS source_id,
+               title,
+               'FORUM_POST' AS source_type,
+               content,
+               NULL AS category,
+               NULL AS software
+        FROM forum_posts
+        WHERE id = #{id}
+          AND status = 'PUBLISHED'
+        LIMIT 1
+    </select>
+</mapper>

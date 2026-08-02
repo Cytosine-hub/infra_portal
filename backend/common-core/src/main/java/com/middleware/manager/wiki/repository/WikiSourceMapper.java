@@ -18,7 +18,13 @@ public interface WikiSourceMapper {
 
     WikiSource findByTitleAndType(@Param("title") String title, @Param("sourceType") String sourceType);
 
+    WikiSource findByTypeAndSourceRef(@Param("sourceType") String sourceType,
+                                      @Param("sourceRef") String sourceRef);
+
     List<WikiSource> findAll();
+
+    /** 健康检查投影：content 只返回是否存在，避免传输 LONGTEXT。 */
+    List<WikiSource> findAllForHealth();
 
     List<WikiSource> findByIngested(@Param("ingested") boolean ingested);
 

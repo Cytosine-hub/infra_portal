@@ -91,4 +91,35 @@ describe('登录错误边界', () => {
 
     wrapper.unmount()
   })
+
+  test('TC-AUTH-005 Token 到期后应主动退出并提示重新登录', async () => {
+    vi.setSystemTime(new Date('2026-08-01T08:00:00Z'))
+    localStorageMock.setItem('mrm.token', 'short-lived-token')
+    localStorageMock.setItem('mrm.user', JSON.stringify({
+      username: 'sysadmin', displayName: '系统管理员', role: '系统管理员'
+    }))
+    localStorageMock.setItem('mrm.expiresAt', '2026-08-01T08:00:02Z')
+    window.location.hash = '#/home'
+    vi.stubGlobal('fetch', vi.fn((input) => {
+      const path = new URL(String(input), 'http://localhost').pathname
+      if (path === '/api/public/config') return response({ knowledgeEnabled: true, diagnosticsEnabled: true })
+      if (path === '/api/public/releases') return response({ content: [] })
+      return response([])
+    }))
+
+    const wrapper = mount(App)
+    await flushPromises()
+    expect(useAuth().auth.token).toBe('short-lived-token')
+
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+
+    expect(useAuth().auth.token).toBe('')
+    expect(localStorageMock.getItem('mrm.token')).toBeNull()
+    expect(window.location.hash).toBe('#/admin')
+    expect(wrapper.find('.login-page').exists()).toBe(true)
+    expect(wrapper.find('.toast-message').text()).toContain('登录已过期，请重新登录')
+
+    wrapper.unmount()
+  })
 })

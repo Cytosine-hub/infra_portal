@@ -1,7 +1,5 @@
 <template>
   <section class="knowledge-base">
-    <PageHeader eyebrow="基础设施知识库" title="知识库" />
-
     <TabNav v-model="currentTab" :tabs="tabs" aria-label="知识库功能" />
 
     <div class="tab-body">
@@ -16,7 +14,6 @@
 
 <script setup>
 import { defineAsyncComponent, ref } from 'vue'
-import PageHeader from './ui/PageHeader.vue'
 import TabNav from './ui/TabNav.vue'
 import SearchTab from './knowledge/SearchTab.vue'
 import DocumentsTab from './knowledge/DocumentsTab.vue'

@@ -27,6 +27,9 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class KnowledgeService implements KnowledgeSearchPort {
 
+    private static final Set<String> IMPORTABLE_CONTENT_TYPES = Set.of(
+            "STANDARD_DOCUMENT", "FORUM_POST");
+
     private final TextSplitter textSplitter;
     private final EmbeddingService embeddingService;
     private final VectorStore vectorStore;
@@ -63,7 +66,7 @@ public class KnowledgeService implements KnowledgeSearchPort {
         }
         List<float[]> vectors = embeddingService.embedBatch(chunkTexts(chunks));
         SourceUpsertResult upsert = upsertSource(sourceTitle, "STANDARD_DOC", null, content,
-                standard.getCategory(), standard.getSoftware(), null);
+                standard.getCategory(), standard.getSoftware(), null, null);
         return persistVectors(chunks, vectors, upsert.source().getId(), "STANDARD_DOC",
                 standard.getCategory(), standard.getSoftware(), null);
     }
@@ -101,7 +104,7 @@ public class KnowledgeService implements KnowledgeSearchPort {
             // Embedding 成功后再创建来源记录，避免模型失败留下悬空文档。
             List<float[]> vectors = embeddingService.embedBatch(chunkTexts(chunks));
             upsert = upsertSource(fileName, "UPLOAD", storedFile.storedFileName(), content,
-                    null, null, null);
+                    null, null, null, null);
             ImportResult result = persistVectors(chunks, vectors, upsert.source().getId(), "UPLOAD",
                     null, null, storedFile.storedFileName());
             deleteReplacedFileAfterCommit(upsert, storedFile.storedFileName());
@@ -109,6 +112,51 @@ public class KnowledgeService implements KnowledgeSearchPort {
         } catch (Exception e) {
             compensateFailedImport(storedFile, upsert);
             throw e;
+        }
+    }
+
+    /**
+     * 把其他业务模块中已经发布的正文导入知识库。相同业务来源 ID 和来源类型会更新原来源，
+     * 供前端的“从现有内容导入”入口重复执行而不会不断制造副本。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ImportResult importContent(String title, String sourceType, String content,
+                                      String category, String software, String sourceRef) {
+        String normalizedTitle = title == null ? "" : title.trim();
+        String normalizedType = sourceType == null
+                ? "" : sourceType.trim().toUpperCase(Locale.ROOT);
+        if (normalizedTitle.isEmpty() || sourceRef == null || sourceRef.isBlank()
+                || !IMPORTABLE_CONTENT_TYPES.contains(normalizedType)) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.PARAM_INVALID);
+        }
+
+        List<TextSplitter.TextChunk> chunks = textSplitter.split(content, normalizedTitle);
+        if (chunks.isEmpty()) {
+            throw new BusinessException(ErrorCode.KNOWLEDGE_CONTENT_EMPTY,
+                    ErrorMessages.KNOWLEDGE_CONTENT_EMPTY);
+        }
+
+        List<float[]> vectors = embeddingService.embedBatch(chunkTexts(chunks));
+        SourceUpsertResult upsert = upsertSource(normalizedTitle, normalizedType, null, content,
+                category, software, null, sourceRef.trim());
+        try {
+            return persistVectors(chunks, vectors, upsert.source().getId(), normalizedType,
+                    category, software, null);
+        } catch (RuntimeException exception) {
+            cleanupNewSourceVectors(upsert);
+            throw exception;
+        }
+    }
+
+    private void cleanupNewSourceVectors(SourceUpsertResult upsert) {
+        if (!upsert.created() || upsert.source().getId() == null) {
+            return;
+        }
+        try {
+            vectorStore.deleteBySource(upsert.source().getSourceType(), upsert.source().getId());
+        } catch (Exception cleanupError) {
+            log.warn("清理失败业务导入的向量失败 sourceId={}: {}",
+                    upsert.source().getId(), cleanupError.getMessage());
         }
     }
 
@@ -280,13 +328,17 @@ public class KnowledgeService implements KnowledgeSearchPort {
     }
 
     private SourceUpsertResult upsertSource(String title, String sourceType, String filePath, String content,
-                                            String category, String software, Long createdBy) {
+                                            String category, String software, Long createdBy,
+                                            String sourceRef) {
         String hash = TextUtil.sha256Hex(content == null ? "" : content);
-        WikiSource source = wikiSourceMapper.findByTitleAndType(title, sourceType);
+        WikiSource source = sourceRef == null
+                ? wikiSourceMapper.findByTitleAndType(title, sourceType)
+                : wikiSourceMapper.findByTypeAndSourceRef(sourceType, sourceRef);
         if (source == null) {
             source = new WikiSource();
             source.setTitle(title);
             source.setSourceType(sourceType);
+            source.setSourceRef(sourceRef);
             source.setFilePath(filePath);
             source.setContentHash(hash);
             source.setContent(content);
@@ -299,6 +351,7 @@ public class KnowledgeService implements KnowledgeSearchPort {
         String previousFilePath = source.getFilePath();
         source.setTitle(title);
         source.setSourceType(sourceType);
+        source.setSourceRef(sourceRef);
         if (filePath != null) source.setFilePath(filePath);
         source.setContentHash(hash);
         source.setContent(content);
