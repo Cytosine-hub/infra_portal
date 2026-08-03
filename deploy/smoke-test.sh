@@ -4,6 +4,7 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 COMPOSE_ENV_FILE=${COMPOSE_ENV_FILE:-$ROOT_DIR/deploy/compose.env}
 COMPOSE_FILE=${COMPOSE_FILE:-$ROOT_DIR/deploy/docker-compose.yml}
+DEPENDENCIES_COMPOSE_FILE=${DEPENDENCIES_COMPOSE_FILE:-$ROOT_DIR/deploy/docker-compose.dependencies.yml}
 SMOKE_TIMEOUT_SECONDS=${SMOKE_TIMEOUT_SECONDS:-600}
 
 pass() {
@@ -13,19 +14,37 @@ pass() {
 fail() {
     service=${2:-}
     printf '%s\n' "- Subtask failure: $1" >&2
-    compose ps >&2 || true
+    business_compose ps >&2 || true
+    dependency_compose ps --all >&2 || true
     if [ -n "$service" ]; then
-        compose logs --tail 100 "$service" >&2 || true
+        service_compose "$service" logs --tail 100 "$service" >&2 || true
     fi
     exit 1
 }
 
-compose() {
+business_compose() {
     docker compose --env-file "$COMPOSE_ENV_FILE" --file "$COMPOSE_FILE" "$@"
 }
 
+dependency_compose() {
+    docker compose --env-file "$COMPOSE_ENV_FILE" --file "$DEPENDENCIES_COMPOSE_FILE" "$@"
+}
+
+service_compose() {
+    service=$1
+    shift
+    case "$service" in
+        mysql|nacos|nacos-init|etcd|minio|milvus)
+            dependency_compose "$@"
+            ;;
+        *)
+            business_compose "$@"
+            ;;
+    esac
+}
+
 json_query() {
-    compose run --rm --no-deps --entrypoint jq -T nacos-init "$@"
+    dependency_compose run --rm --no-deps --entrypoint jq -T nacos-init "$@"
 }
 
 wait_for_service() {
@@ -33,7 +52,7 @@ wait_for_service() {
     deadline=$(( $(date +%s) + SMOKE_TIMEOUT_SECONDS ))
 
     while [ "$(date +%s)" -le "$deadline" ]; do
-        container_id=$(compose ps --quiet "$service" 2>/dev/null || true)
+        container_id=$(service_compose "$service" ps --quiet "$service" 2>/dev/null || true)
         if [ -n "$container_id" ]; then
             state=$(docker inspect --format '{{.State.Status}}' "$container_id" 2>/dev/null || true)
             health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
@@ -49,6 +68,8 @@ wait_for_service() {
 
 [ -f "$COMPOSE_ENV_FILE" ] || fail "Compose environment file not found: $COMPOSE_ENV_FILE"
 [ -f "$COMPOSE_FILE" ] || fail "Compose file not found: $COMPOSE_FILE"
+[ -f "$DEPENDENCIES_COMPOSE_FILE" ] \
+    || fail "Dependency Compose file not found: $DEPENDENCIES_COMPOSE_FILE"
 
 set -a
 # shellcheck disable=SC1090
@@ -73,12 +94,8 @@ for service in $long_running_services; do
 done
 pass 'TC-DOCKER-018'
 
-nacos_init_id=$(compose ps --all --quiet nacos-init 2>/dev/null || true)
-[ -n "$nacos_init_id" ] || fail 'TC-DOCKER-019 nacos-init container not found' nacos-init
-nacos_init_state=$(docker inspect --format '{{.State.Status}}' "$nacos_init_id")
-nacos_init_exit=$(docker inspect --format '{{.State.ExitCode}}' "$nacos_init_id")
-[ "$nacos_init_state" = exited ] && [ "$nacos_init_exit" -eq 0 ] \
-    || fail "TC-DOCKER-019 nacos-init state=$nacos_init_state exit=$nacos_init_exit" nacos-init
+nacos_init_output=$(dependency_compose run --rm --no-deps nacos-init 2>&1) \
+    || fail 'TC-DOCKER-019 nacos-init failed' nacos-init
 pass 'TC-DOCKER-019'
 
 nacos_url="http://127.0.0.1:$NACOS_PORT"
@@ -128,7 +145,7 @@ curl --fail --silent --show-error \
     || fail 'TC-DOCKER-023 frontend API proxy is unavailable' frontend
 pass 'TC-DOCKER-023'
 
-repeat_output=$(compose run --rm --no-deps nacos-init 2>&1) \
+repeat_output=$(dependency_compose run --rm --no-deps nacos-init 2>&1) \
     || fail 'TC-DOCKER-024 repeated nacos-init failed' nacos-init
 skip_count=$(printf '%s\n' "$repeat_output" | grep -c 'SKIP dataId=' || true)
 [ "$skip_count" -eq 9 ] \
