@@ -171,32 +171,34 @@ printf '%s\n' "$dependency_common" | grep -Eq 'DEPLOY_DEPENDENCIES_COMPOSE_ENV' 
     || fail 'TC-CI-020 dependency preparation must persist an independent env file'
 pass 'TC-CI-020 dependency-only preparation'
 
-verify_all_job=$(extract_job verify:all-services)
-printf '%s\n' "$verify_all_job" | grep -Eq '^  stage: build$' \
+verify_all_backend_job=$(extract_job verify:all-backend-services)
+printf '%s\n' "$verify_all_backend_job" | grep -Eq '^  stage: build$' \
     || fail 'TC-CI-021 all-service verification must remain in build stage'
-printf '%s\n' "$verify_all_job" | grep -Eq 'docker compose .* up ' \
+printf '%s\n' "$verify_all_backend_job" | grep -Eq 'docker compose .* up ' \
     && fail 'TC-CI-021 verification job must not deploy services'
 pass 'TC-CI-021 all-backend verification remains build-only'
+
+all_backend_services_job=$(extract_job deploy:all-backend-services)
+printf '%s\n' "$all_backend_services_job" | grep -Eq \
+    'api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service' \
+    || fail 'TC-CI-023 backend deployment must include all nine backend services'
+printf '%s\n' "$all_backend_services_job" | grep -Eq 'frontend' \
+    && fail 'TC-CI-023 backend deployment must not include frontend'
+printf '%s\n' "$all_backend_services_job" | grep -Eq '\$DEPLOY_COMPOSE_FILE' \
+    || fail 'TC-CI-023 backend deployment must use business compose'
+pass 'TC-CI-023 all-backend deployment mode'
 
 all_services_job=$(extract_job deploy:all-services)
 printf '%s\n' "$all_services_job" | grep -Eq \
     'api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service' \
-    || fail 'TC-CI-023 backend deployment must include all nine backend services'
-printf '%s\n' "$all_services_job" | grep -Eq 'frontend' \
-    && fail 'TC-CI-023 backend deployment must not include frontend'
-printf '%s\n' "$all_services_job" | grep -Eq '\$DEPLOY_COMPOSE_FILE' \
-    || fail 'TC-CI-023 backend deployment must use business compose'
-pass 'TC-CI-023 all-backend deployment mode'
-
-business_stack_job=$(extract_job deploy:business-stack)
-printf '%s\n' "$business_stack_job" | grep -Eq \
-    'api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service' \
     || fail 'TC-CI-024 business deployment must include all nine backend services'
-printf '%s\n' "$business_stack_job" | grep -Eq 'frontend' \
+printf '%s\n' "$all_services_job" | grep -Eq 'frontend' \
     || fail 'TC-CI-024 business deployment must include frontend'
-printf '%s\n' "$business_stack_job" | grep -Eq \
+printf '%s\n' "$all_services_job" | grep -Eq \
     'DEPLOY_DEPENDENCIES_COMPOSE_FILE|nacos-init|mysql|milvus|minio|etcd' \
     && fail 'TC-CI-024 business deployment must not manage dependencies'
+assert_no_text .gitlab-ci.yml '^deploy:business-stack:' \
+    'TC-CI-024 retired business-stack deployment name'
 pass 'TC-CI-024 frontend and backend business deployment mode'
 
 full_stack_job=$(extract_job deploy:full-stack)

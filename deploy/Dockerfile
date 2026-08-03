@@ -14,6 +14,12 @@ RUN test -n "$SERVICE" \
 
 FROM eclipse-temurin:17-jre
 
+ARG IMAGE_REVISION=unknown
+ARG IMAGE_VERSION=local
+
+LABEL org.opencontainers.image.revision="$IMAGE_REVISION" \
+      org.opencontainers.image.version="$IMAGE_VERSION"
+
 WORKDIR /app
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends curl \

@@ -16,11 +16,36 @@ fail() {
 
 printf '%s\n' '+ Task start: business image maintenance'
 
+grep -Eq '^ARG IMAGE_REVISION=unknown$' "$ROOT_DIR/deploy/Dockerfile" \
+    || fail 'TC-CI-031 backend image revision argument is missing'
+grep -Eq '^ARG IMAGE_VERSION=local$' "$ROOT_DIR/deploy/Dockerfile" \
+    || fail 'TC-CI-031 backend image version argument is missing'
+grep -Eq '^LABEL org\.opencontainers\.image\.revision="\$IMAGE_REVISION" \\$' \
+    "$ROOT_DIR/deploy/Dockerfile" \
+    || fail 'TC-CI-031 backend image revision label is missing'
+grep -Eq '^      org\.opencontainers\.image\.version="\$IMAGE_VERSION"$' \
+    "$ROOT_DIR/deploy/Dockerfile" \
+    || fail 'TC-CI-031 backend image version label is missing'
+
+backend_build_count=$(grep -c 'docker build --build-arg SERVICE=' \
+    "$ROOT_DIR/.gitlab-ci.yml")
+revision_arg_count=$(grep -c -- '--build-arg IMAGE_REVISION="\$CI_COMMIT_SHA"' \
+    "$ROOT_DIR/.gitlab-ci.yml")
+version_arg_count=$(grep -c -- '--build-arg IMAGE_VERSION="\$IMAGE_TAG"' \
+    "$ROOT_DIR/.gitlab-ci.yml")
+[ "$backend_build_count" -gt 0 ] \
+    || fail 'TC-CI-031 backend image build command is missing'
+[ "$revision_arg_count" -eq "$backend_build_count" ] \
+    || fail 'TC-CI-031 not every backend build passes the image revision'
+[ "$version_arg_count" -eq "$backend_build_count" ] \
+    || fail 'TC-CI-031 not every backend build passes the image version'
+pass 'TC-CI-031 unique backend image config metadata'
+
 actual_tag=$(sh "$ROOT_DIR/deploy/image-tag.sh" \
     0123456789abcdef0123456789abcdef01234567 2026-08-03T16:30:00Z)
-[ "$actual_tag" = "20260804-0123456" ] \
+[ "$actual_tag" = "20260804003000-0123456" ] \
     || fail "TC-CI-026 unexpected image tag: $actual_tag"
-pass 'TC-CI-026 Asia/Shanghai date and seven-character commit hash'
+pass 'TC-CI-026 Asia/Shanghai timestamp and seven-character commit hash'
 
 if sh "$ROOT_DIR/deploy/image-tag.sh" invalid-sha 2026-08-03T16:30:00Z \
     >/dev/null 2>&1; then
@@ -35,12 +60,12 @@ set -eu
 
 if [ "$1 $2" = "image ls" ]; then
     cat <<'IMAGES'
-2026-08-04 12:00:00 +0800 CST infra-portal/api-gateway:20260804-aaaaaaa
-2026-08-03 12:00:00 +0800 CST infra-portal/api-gateway:20260803-bbbbbbb
-2026-08-02 12:00:00 +0800 CST infra-portal/api-gateway:20260802-ccccccc
-2026-08-01 12:00:00 +0800 CST infra-portal/api-gateway:20260801-ddddddd
-2026-07-31 12:00:00 +0800 CST infra-portal/api-gateway:20260731-eeeeeee
-2026-07-30 12:00:00 +0800 CST infra-portal/api-gateway:20260730-fffffff
+2026-08-04 12:00:00 +0800 CST infra-portal/api-gateway:20260804120000-aaaaaaa
+2026-08-03 12:00:00 +0800 CST infra-portal/api-gateway:20260803120000-bbbbbbb
+2026-08-02 12:00:00 +0800 CST infra-portal/api-gateway:20260802120000-ccccccc
+2026-08-01 12:00:00 +0800 CST infra-portal/api-gateway:20260801120000-ddddddd
+2026-07-31 12:00:00 +0800 CST infra-portal/api-gateway:20260731120000-eeeeeee
+2026-07-30 12:00:00 +0800 CST infra-portal/api-gateway:20260730120000-fffffff
 2026-07-29 12:00:00 +0800 CST infra-portal/api-gateway:0123456789abcdef0123456789abcdef01234567
 2026-07-28 12:00:00 +0800 CST infra-portal/nacos-init:20260728-9999999
 IMAGES
@@ -49,7 +74,7 @@ fi
 
 if [ "$1 $2" = "container ls" ]; then
     case "$*" in
-        *infra-portal/api-gateway:20260801-ddddddd*)
+        *infra-portal/api-gateway:20260801120000-ddddddd*)
             printf '%s\n' running-container-id
             ;;
     esac
@@ -77,8 +102,8 @@ PATH="$TMP_ROOT/bin:$PATH" \
     sh "$ROOT_DIR/deploy/cleanup-business-images.sh"
 
 cat > "$TMP_ROOT/expected-rm.log" <<'EOF'
-infra-portal/api-gateway:20260731-eeeeeee
-infra-portal/api-gateway:20260730-fffffff
+infra-portal/api-gateway:20260731120000-eeeeeee
+infra-portal/api-gateway:20260730120000-fffffff
 EOF
 
 cmp -s "$TMP_ROOT/expected-rm.log" "$MOCK_DOCKER_LOG" \
@@ -97,7 +122,7 @@ if PATH="$TMP_ROOT/bin:$PATH" \
     IMAGE_NAMESPACE=infra-portal \
     BUSINESS_IMAGE_SERVICES=api-gateway \
     BUSINESS_IMAGE_KEEP_COUNT=3 \
-    MOCK_DOCKER_RM_FAIL=infra-portal/api-gateway:20260731-eeeeeee \
+    MOCK_DOCKER_RM_FAIL=infra-portal/api-gateway:20260731120000-eeeeeee \
     sh "$ROOT_DIR/deploy/cleanup-business-images.sh" >/dev/null 2>&1; then
     fail 'TC-CI-030 Docker image removal failures must fail the cleanup task'
 fi

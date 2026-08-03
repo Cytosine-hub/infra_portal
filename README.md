@@ -92,9 +92,9 @@ sh deploy/smoke-test.sh
 
 GitLab 的 `verify:deployment` 会执行部署脚本语法、CI/Compose/镜像维护契约测试，并自动生成临时测试配置完成 Compose 解析，不启动运行栈。Nacos 初始化单元测试依赖 `jq`，不在 `docker:27-cli` 门禁中执行；生产 `nacos-init` 镜像仍内置 `jq`。后端镜像首次构建运行完整 Maven 验证并通过 BuildKit 复用结果，前端镜像构建会执行 Vitest。实际部署使用 File 类型 CI/CD Variable：依赖部署只要求 `DEPLOY_COMPOSE_ENV_FILE`，业务部署还要求 `DEPLOY_SERVICES_ENV_FILE`。
 
-CI 构建镜像统一命名为 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-${commit:7}`，例如 `infra-portal/core-service:20260803153012-0123456`；时间取流水线创建时间并转换为 `Asia/Shanghai`，避免同一提交的不同流水线覆盖镜像。在 GitLab 为 `master` 创建时区为 `Asia/Shanghai`、Cron 为 `0 3 * * *` 的 Pipeline Schedule 后，`cleanup:business-images` 每日只运行镜像清理：9 个后端服务和前端各自保留按创建时间排序的最近 3 个新格式镜像，不清理 MySQL、Nacos、Milvus 等依赖镜像、`nacos-init` 和历史完整 SHA 标签。
+CI 构建镜像统一命名为 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-${commit:7}`，例如 `infra-portal/core-service:20260803153012-0123456`；时间取流水线创建时间并转换为 `Asia/Shanghai`，避免同一提交的不同流水线覆盖镜像。后端最终镜像同时写入 OCI `revision` 和 `version` 标签，使每条不可变标签对应独立的平台镜像配置；文件层仍由 BuildKit 复用，避免 Docker containerd 镜像存储把多个历史 image index 同时标记为使用中。在 GitLab 为 `master` 创建时区为 `Asia/Shanghai`、Cron 为 `0 3 * * *` 的 Pipeline Schedule 后，`cleanup:business-images` 每日只运行镜像清理：9 个后端服务和前端各自保留按创建时间排序的最近 3 个新格式镜像，不清理 MySQL、Nacos、Milvus 等依赖镜像、`nacos-init` 和历史完整 SHA 标签。
 
-CI 中 `verify:all-services` 只验证并构建 9 个后端镜像，不执行部署。手动部署入口按范围分为：`deploy:all-services` 部署全部后端服务，`deploy:business-stack` 部署前端和全部后端服务，`deploy:full-stack` 先初始化或更新 MySQL、Nacos、Milvus 等依赖，再部署完整业务栈。`deploy:dependencies` 仍可单独初始化或更新依赖栈，且仅要求 `DEPLOY_COMPOSE_ENV_FILE`。
+CI 中 `verify:all-backend-services` 只验证并构建 9 个后端镜像，不执行部署。手动部署入口按范围分为：`deploy:all-backend-services` 部署全部后端服务，`deploy:all-services` 部署前端和全部后端服务，`deploy:full-stack` 先初始化或更新 MySQL、Nacos、Milvus 等依赖，再部署完整业务栈。`deploy:dependencies` 仍可单独初始化或更新依赖栈，且仅要求 `DEPLOY_COMPOSE_ENV_FILE`。
 
 部署 job 会将两份运行清单持久化到 Runner 宿主机 `/app/infra-portal/deploy`。业务环境保存为 `compose.env` 和 `services.env`，依赖环境独立保存为 `dependencies.env`；MySQL 初始化脚本保存到 `/app/infra-portal/db`。Job 结束后可在宿主机分别管理：
 

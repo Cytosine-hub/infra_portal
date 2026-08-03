@@ -88,18 +88,18 @@ stages:
 .svc-verify:
   stage: build
   script:
-    - docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
+    - docker build --build-arg SERVICE="$SVC" --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
     - echo "== Runner 主机构建镜像：$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG =="
     - docker image inspect "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
 
 # 完整业务服务构建入口。单服务构建仍复用下方 verify:<service> job，
 # 可按路径自动触发，也可在 Web 流水线中逐项手动运行。
-verify:all-services:
+verify:all-backend-services:
   stage: build
   script:
     - |
       for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
-        docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
+        docker build --build-arg SERVICE="$SVC" --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
         docker image inspect "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
       done
   rules:
@@ -326,6 +326,8 @@ verify:security-service:
       if ! docker image inspect "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" >/dev/null 2>&1; then
         echo "Runner 缺少服务镜像，开始构建：$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG"
         docker build --build-arg SERVICE="$SVC" \
+          --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" \
+          --build-arg IMAGE_VERSION="$IMAGE_TAG" \
           --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" \
           --file deploy/Dockerfile .
       fi
@@ -356,16 +358,18 @@ deploy:dependencies:
     - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" ps --all mysql nacos nacos-init etcd minio milvus
 
 # 部署全部 9 个后端服务，不构建或重启前端，也不操作依赖组件。
-deploy:all-services:
+deploy:all-backend-services:
   extends: .deploy-common
   environment:
-    name: staging/all-services
+    name: staging/all-backend-services
   script:
     - |
       for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
         if ! docker image inspect "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" >/dev/null 2>&1; then
           echo "Runner 缺少服务镜像，开始构建：$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG"
           docker build --build-arg SERVICE="$SVC" \
+            --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" \
+            --build-arg IMAGE_VERSION="$IMAGE_TAG" \
             --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" \
             --file deploy/Dockerfile .
         fi
@@ -374,14 +378,14 @@ deploy:all-services:
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service
 
 # 部署完整业务栈：9 个后端服务加前端，不操作依赖组件。
-deploy:business-stack:
+deploy:all-services:
   extends: .deploy-common
   environment:
-    name: staging/business-stack
+    name: staging/all-services
   script:
     - |
       for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
-        docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
+        docker build --build-arg SERVICE="$SVC" --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
       done
     - docker build --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --file deploy/Dockerfile.frontend .
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never
@@ -416,7 +420,7 @@ deploy:full-stack:
     - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" run --rm --no-deps nacos-init
     - |
       for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
-        docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
+        docker build --build-arg SERVICE="$SVC" --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
       done
     - docker build --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --file deploy/Dockerfile.frontend .
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never
