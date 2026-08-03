@@ -26,20 +26,35 @@ grep -Eq '^LABEL org\.opencontainers\.image\.revision="\$IMAGE_REVISION" \\$' \
 grep -Eq '^      org\.opencontainers\.image\.version="\$IMAGE_VERSION"$' \
     "$ROOT_DIR/deploy/Dockerfile" \
     || fail 'TC-CI-031 backend image version label is missing'
+grep -Eq '^ARG IMAGE_REVISION=unknown$' "$ROOT_DIR/deploy/Dockerfile.frontend" \
+    || fail 'TC-CI-031 frontend image revision argument is missing'
+grep -Eq '^ARG IMAGE_VERSION=local$' "$ROOT_DIR/deploy/Dockerfile.frontend" \
+    || fail 'TC-CI-031 frontend image version argument is missing'
+grep -Eq '^LABEL org\.opencontainers\.image\.revision="\$IMAGE_REVISION" \\$' \
+    "$ROOT_DIR/deploy/Dockerfile.frontend" \
+    || fail 'TC-CI-031 frontend image revision label is missing'
+grep -Eq '^      org\.opencontainers\.image\.version="\$IMAGE_VERSION"$' \
+    "$ROOT_DIR/deploy/Dockerfile.frontend" \
+    || fail 'TC-CI-031 frontend image version label is missing'
 
 backend_build_count=$(grep -c 'docker build --build-arg SERVICE=' \
     "$ROOT_DIR/.gitlab-ci.yml")
+frontend_build_count=$(grep -c -- '--file deploy/Dockerfile.frontend' \
+    "$ROOT_DIR/.gitlab-ci.yml")
+application_build_count=$((backend_build_count + frontend_build_count))
 revision_arg_count=$(grep -c -- '--build-arg IMAGE_REVISION="\$CI_COMMIT_SHA"' \
     "$ROOT_DIR/.gitlab-ci.yml")
 version_arg_count=$(grep -c -- '--build-arg IMAGE_VERSION="\$IMAGE_TAG"' \
     "$ROOT_DIR/.gitlab-ci.yml")
 [ "$backend_build_count" -gt 0 ] \
     || fail 'TC-CI-031 backend image build command is missing'
-[ "$revision_arg_count" -eq "$backend_build_count" ] \
-    || fail 'TC-CI-031 not every backend build passes the image revision'
-[ "$version_arg_count" -eq "$backend_build_count" ] \
-    || fail 'TC-CI-031 not every backend build passes the image version'
-pass 'TC-CI-031 unique backend image config metadata'
+[ "$frontend_build_count" -gt 0 ] \
+    || fail 'TC-CI-031 frontend image build command is missing'
+[ "$revision_arg_count" -eq "$application_build_count" ] \
+    || fail 'TC-CI-031 not every application build passes the image revision'
+[ "$version_arg_count" -eq "$application_build_count" ] \
+    || fail 'TC-CI-031 not every application build passes the image version'
+pass 'TC-CI-031 unique application image config metadata'
 
 actual_tag=$(sh "$ROOT_DIR/deploy/image-tag.sh" \
     0123456789abcdef0123456789abcdef01234567 2026-08-03T16:30:00Z)

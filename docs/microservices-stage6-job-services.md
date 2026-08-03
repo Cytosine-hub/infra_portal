@@ -143,7 +143,7 @@ curl -i http://127.0.0.1:8080/api/middleware-commands/types
 mvn clean verify
 ```
 
-同一提交首次构建时运行全量后端测试和打包，后续服务镜像复用 BuildKit 层，只复制对应服务的可执行 JAR。后端最终镜像通过 OCI `revision` 和 `version` 标签区分每条不可变标签的平台镜像配置，同时继续共享实际文件层，避免 containerd 将多个历史 image index 同时标记为使用中。前端生产镜像在 `npm ci` 后依次执行 `npm test` 和 `npm run build`。应用镜像使用 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-${commit:7}` 不可变标签，不写入 `latest`；GitLab 定时清理任务按业务服务仓库分别保留最近 3 个新格式镜像。
+同一提交首次构建时运行全量后端测试和打包，后续服务镜像复用 BuildKit 层，只复制对应服务的可执行 JAR。后端与前端最终镜像均通过 OCI `revision` 和 `version` 标签区分每条不可变标签的平台镜像配置，同时继续共享实际文件层，避免 containerd 将多个历史 image index 同时标记为使用中。前端生产镜像在 `npm ci` 后依次执行 `npm test` 和 `npm run build`。应用镜像使用 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-${commit:7}` 不可变标签，不写入 `latest`；GitLab 定时清理任务按业务服务仓库分别保留最近 3 个新格式镜像。
 
 开放 MR 后，push 流水线会被抑制，只保留 MR 流水线；新提交可以取消尚未完成的旧验证/构建任务。部署任务不可中断，并且不使用跨阶段 `needs`，因此必须等待当前流水线全部 validate/build 作业成功，避免同一提交被部分发布。
 

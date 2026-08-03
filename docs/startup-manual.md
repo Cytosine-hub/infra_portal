@@ -107,7 +107,7 @@ docker compose --env-file compose.env --file docker-compose.yml start
 
 Runner 的 Docker Executor 应保持 `pull_policy = "if-not-present"`，并挂载宿主机 `/var/run/docker.sock`。项目通过宿主机 Docker 守护进程保留 BuildKit 构建层，Maven 与 npm 依赖分别使用 Dockerfile 中的 `/root/.m2` 和 `/root/.npm` cache mount；Runner 的 `/cache` 挂载只服务于 GitLab Job cache，不能替代 BuildKit 缓存。依赖镜像仅在对应 tag 不存在时拉取。不要配置无保留策略的定时 `docker builder prune -a`，否则下一次构建会重新下载基础镜像层和依赖。
 
-内部构建镜像统一使用 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-${commit:7}`，时间由 `CI_PIPELINE_CREATED_AT` 转换到 `Asia/Shanghai` 后生成。例如 `infra-portal/core-service:20260803153012-0123456`。后端最终镜像将完整提交 SHA 写入 `org.opencontainers.image.revision`，将 `IMAGE_TAG` 写入 `org.opencontainers.image.version`；版本元数据使每次流水线生成独立的平台镜像配置，实际文件层仍复用 BuildKit 缓存，避免 containerd 将共享同一平台 manifest 的多个历史 image index 同时显示为使用中。标签在同一流水线中保持稳定，并避免同一提交的不同流水线覆盖镜像；增量部署必须等待当前流水线全部验证和构建任务成功，不会在其他服务仍失败时提前发布；部署开始后不可被新流水线取消。开放 MR 的分支只创建 MR 流水线，避免重复占用单并发 Runner。
+内部构建镜像统一使用 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-${commit:7}`，时间由 `CI_PIPELINE_CREATED_AT` 转换到 `Asia/Shanghai` 后生成。例如 `infra-portal/core-service:20260803153012-0123456`。后端与前端最终镜像均将完整提交 SHA 写入 `org.opencontainers.image.revision`，将 `IMAGE_TAG` 写入 `org.opencontainers.image.version`；版本元数据使每次流水线生成独立的平台镜像配置，实际文件层仍复用 BuildKit 缓存，避免 containerd 将共享同一平台 manifest 的多个历史 image index 同时显示为使用中。标签在同一流水线中保持稳定，并避免同一提交的不同流水线覆盖镜像；增量部署必须等待当前流水线全部验证和构建任务成功，不会在其他服务仍失败时提前发布；部署开始后不可被新流水线取消。开放 MR 的分支只创建 MR 流水线，避免重复占用单并发 Runner。
 
 在 GitLab 项目的 Pipeline Schedules 中为 `master` 创建每日清理计划：Cron 填写 `0 3 * * *`，Cron timezone 选择 `Asia/Shanghai`。定时流水线会跳过构建和部署，仅执行 `cleanup:business-images`。该任务对 9 个后端服务和前端逐仓库按 Docker 镜像创建时间降序排序，只保留最近 3 个符合 `yyyyMMddHHmmss-commit7` 格式的标签；依赖镜像、`nacos-init`、旧格式标签和历史完整 SHA 标签不在清理范围内。若过期镜像仍被容器引用，Docker 会拒绝删除，任务会保留该镜像并记录提示，不强制影响运行容器。
 
