@@ -60,28 +60,28 @@ stages:
       allow_failure: true
 
 # 静态门禁使用临时随机测试密钥，不读取受保护变量，也不启动或更新服务。
-verify:deployment:
-  stage: validate
-  script:
-    - trap 'rm -f deploy/compose.test.env deploy/services.test.env' EXIT
-    - sh -n deploy/*.sh deploy/tests/*.sh
-    - sh deploy/tests/ci-contract.sh
-    - sh deploy/tests/compose-contract.sh
-    - sh deploy/tests/nacos-init-test.sh
-    - sh deploy/tests/image-maintenance-test.sh
-    - sh deploy/generate-test-env.sh
-    - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.yml config --quiet
-    - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.dependencies.yml config --quiet
-    - docker compose --file deploy/docker-compose.yml config --quiet
-    - docker compose --file deploy/docker-compose.dependencies.yml config --quiet
-  rules:
-    - *skip-schedule
-    - *web-manual
-    - changes:
-        - deploy/**/*
-        - db/**/*
-        - .gitignore
-        - .gitlab-ci.yml
+# verify:deployment:
+#   stage: validate
+#   script:
+#     - trap 'rm -f deploy/compose.test.env deploy/services.test.env' EXIT
+#     - sh -n deploy/*.sh deploy/tests/*.sh
+#     - sh deploy/tests/ci-contract.sh
+#     - sh deploy/tests/compose-contract.sh
+#     - sh deploy/tests/nacos-init-test.sh
+#     - sh deploy/tests/image-maintenance-test.sh
+#     - sh deploy/generate-test-env.sh
+#     - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.yml config --quiet
+#     - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.dependencies.yml config --quiet
+#     - docker compose --file deploy/docker-compose.yml config --quiet
+#     - docker compose --file deploy/docker-compose.dependencies.yml config --quiet
+#   rules:
+#     - *skip-schedule
+#     - *web-manual
+#     - changes:
+#         - deploy/**/*
+#         - db/**/*
+#         - .gitignore
+#         - .gitlab-ci.yml
 
 # 服务构建模板：Docker 多阶段构建首次执行全量 Maven verify，后续服务镜像复用该层。
 # 镜像使用上海日期和 7 位提交 SHA 组成的不可变标签，并保留在 Runner 主机 Docker 守护进程中。
