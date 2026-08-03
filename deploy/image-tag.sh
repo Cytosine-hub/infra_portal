@@ -28,9 +28,9 @@ normalized_timestamp=$(printf '%s' "$pipeline_created_at" \
 
 if timestamp_epoch=$(TZ=UTC date -D '%Y-%m-%dT%H:%M:%SZ' \
     -d "$normalized_timestamp" '+%s' 2>/dev/null); then
-    image_date=$(TZ=CST-8 date -d "@$timestamp_epoch" '+%Y%m%d')
-elif image_date=$(TZ=CST-8 date -d "$pipeline_created_at" \
-    '+%Y%m%d' 2>/dev/null); then
+    image_timestamp=$(TZ=CST-8 date -d "@$timestamp_epoch" '+%Y%m%d%H%M%S')
+elif image_timestamp=$(TZ=CST-8 date -d "$pipeline_created_at" \
+    '+%Y%m%d%H%M%S' 2>/dev/null); then
     :
 else
     timestamp_epoch=$(TZ=UTC date -j -f '%Y-%m-%dT%H:%M:%SZ' \
@@ -38,8 +38,8 @@ else
         printf '%s\n' '- Subtask failure: invalid pipeline creation time' >&2
         exit 1
     }
-    image_date=$(TZ=CST-8 date -r "$timestamp_epoch" '+%Y%m%d')
+    image_timestamp=$(TZ=CST-8 date -r "$timestamp_epoch" '+%Y%m%d%H%M%S')
 fi
 
 short_sha=$(printf '%.7s' "$commit_sha" | tr 'A-F' 'a-f')
-printf '%s-%s\n' "$image_date" "$short_sha"
+printf '%s-%s\n' "$image_timestamp" "$short_sha"

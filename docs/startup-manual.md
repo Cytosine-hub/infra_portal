@@ -79,7 +79,7 @@ sh deploy/smoke-test.sh
 
 从旧版配置升级时，必须删除 `compose.env` 中的 Docker Compose 保留变量 `COMPOSE_PROJECT_NAME`，并改用 `COMPOSE_BUSINESS_PROJECT_NAME`。保留旧变量会覆盖两份清单顶层的独立项目名，使业务栈和依赖栈重新归入同一 Compose 项目。
 
-GitLab 流水线中的 `verify:deployment` 会执行 Shell 语法检查、CI/Compose/Nacos 初始化契约测试，并使用临时测试配置解析 Compose；该门禁不启动或更新数据库、Nacos 和业务容器。后端首次镜像构建执行完整 `mvn clean verify`，同一提交的其他服务复用 BuildKit 构建层；前端镜像构建执行 Vitest 和 Vite 构建。真实部署需要在 GitLab CI/CD Variables 中创建以下变量：
+GitLab 流水线中的 `verify:deployment` 会执行 Shell 语法检查、CI/Compose/镜像维护契约测试，并使用临时测试配置解析 Compose；该门禁不安装 `jq`，也不执行依赖该工具的 Nacos 初始化单元测试，不启动或更新数据库、Nacos 和业务容器。生产 `nacos-init` 镜像仍内置 `jq`。后端首次镜像构建执行完整 `mvn clean verify`，同一提交的其他服务复用 BuildKit 构建层；前端镜像构建执行 Vitest 和 Vite 构建。真实部署需要在 GitLab CI/CD Variables 中创建以下变量：
 
 | 变量 | 类型 | 内容 |
 |------|------|------|
@@ -107,9 +107,9 @@ docker compose --env-file compose.env --file docker-compose.yml start
 
 Runner 的 Docker Executor 应保持 `pull_policy = "if-not-present"`，并挂载宿主机 `/var/run/docker.sock`。项目通过宿主机 Docker 守护进程保留 BuildKit 构建层，Maven 与 npm 依赖分别使用 Dockerfile 中的 `/root/.m2` 和 `/root/.npm` cache mount；Runner 的 `/cache` 挂载只服务于 GitLab Job cache，不能替代 BuildKit 缓存。依赖镜像仅在对应 tag 不存在时拉取。不要配置无保留策略的定时 `docker builder prune -a`，否则下一次构建会重新下载基础镜像层和依赖。
 
-内部构建镜像统一使用 `${IMAGE_NAMESPACE}/${service}:${yyyyMMdd}-${commit:7}`，日期由 `CI_PIPELINE_CREATED_AT` 转换到 `Asia/Shanghai` 后生成。例如 `infra-portal/core-service:20260803-0123456`。标签在同一流水线中保持稳定，增量部署必须等待当前流水线全部验证和构建任务成功，不会在其他服务仍失败时提前发布；部署开始后不可被新流水线取消。开放 MR 的分支只创建 MR 流水线，避免重复占用单并发 Runner。
+内部构建镜像统一使用 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-${commit:7}`，时间由 `CI_PIPELINE_CREATED_AT` 转换到 `Asia/Shanghai` 后生成。例如 `infra-portal/core-service:20260803153012-0123456`。标签在同一流水线中保持稳定，并避免同一提交的不同流水线覆盖镜像；增量部署必须等待当前流水线全部验证和构建任务成功，不会在其他服务仍失败时提前发布；部署开始后不可被新流水线取消。开放 MR 的分支只创建 MR 流水线，避免重复占用单并发 Runner。
 
-在 GitLab 项目的 Pipeline Schedules 中为 `master` 创建每日清理计划：Cron 填写 `0 3 * * *`，Cron timezone 选择 `Asia/Shanghai`。定时流水线会跳过构建和部署，仅执行 `cleanup:business-images`。该任务对 9 个后端服务和前端逐仓库按 Docker 镜像创建时间降序排序，只保留最近 3 个符合 `yyyyMMdd-commit7` 格式的标签；依赖镜像、`nacos-init` 和历史完整 SHA 标签不在清理范围内。若过期镜像仍被容器引用，Docker 会拒绝删除，任务会保留该镜像并记录提示，不强制影响运行容器。
+在 GitLab 项目的 Pipeline Schedules 中为 `master` 创建每日清理计划：Cron 填写 `0 3 * * *`，Cron timezone 选择 `Asia/Shanghai`。定时流水线会跳过构建和部署，仅执行 `cleanup:business-images`。该任务对 9 个后端服务和前端逐仓库按 Docker 镜像创建时间降序排序，只保留最近 3 个符合 `yyyyMMddHHmmss-commit7` 格式的标签；依赖镜像、`nacos-init`、旧格式标签和历史完整 SHA 标签不在清理范围内。若过期镜像仍被容器引用，Docker 会拒绝删除，任务会保留该镜像并记录提示，不强制影响运行容器。
 
 测试环境也可直接将生成的两个 `.test.env` 文件内容分别配置为上述 File 变量。部署入口会统一把业务密钥文件路径覆盖为 `./services.env`，不依赖上传前的本地文件名。
 

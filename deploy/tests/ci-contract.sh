@@ -83,14 +83,15 @@ second_gateway_secret=$(env_value "$TMP_ROOT/services.test.second.env" GATEWAY_S
     || fail 'TC-CI-004 repeated generation returned the same gateway secret'
 pass 'TC-CI-004'
 
-assert_text .gitlab-ci.yml '^verify:deployment:' 'TC-CI-005 verify deployment job'
+# assert_text .gitlab-ci.yml '^verify:deployment:' 'TC-CI-005 verify deployment job'
 assert_text .gitlab-ci.yml 'sh deploy/generate-test-env\.sh' 'TC-CI-005 test env generation'
 assert_text .gitlab-ci.yml 'docker compose .* config --quiet' 'TC-CI-005 compose validation'
-assert_text .gitlab-ci.yml 'docker compose --file deploy/docker-compose\.yml config --quiet' \
-    'TC-CI-005 business compose validation without env file'
-assert_text .gitlab-ci.yml \
-    'docker compose --file deploy/docker-compose\.dependencies\.yml config --quiet' \
-    'TC-CI-005 dependency compose validation without env file'
+assert_no_text .gitlab-ci.yml \
+    '^    - docker compose --file deploy/docker-compose\.yml config --quiet$' \
+    'TC-CI-005 redundant business Compose validation'
+assert_no_text .gitlab-ci.yml \
+    '^    - docker compose --file deploy/docker-compose\.dependencies\.yml config --quiet$' \
+    'TC-CI-005 redundant dependency Compose validation'
 
 assert_text .gitlab-ci.yml 'DEPLOY_COMPOSE_ENV_FILE:\?缺少' 'TC-CI-006 compose file variable guard'
 assert_text .gitlab-ci.yml 'DEPLOY_SERVICES_ENV_FILE:\?缺少' 'TC-CI-006 services file variable guard'

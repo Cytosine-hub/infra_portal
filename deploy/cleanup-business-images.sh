@@ -35,7 +35,7 @@ for service_name in $BUSINESS_IMAGE_SERVICES; do
                 next
             }
             tag = substr(image_ref, length(prefix) + 1)
-            if (tag ~ /^[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]$/) {
+            if (tag ~ /^[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]$/) {
                 print
             }
         }
