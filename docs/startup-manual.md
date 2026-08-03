@@ -49,25 +49,37 @@ cp deploy/services.env.example deploy/services.env
 sh deploy/generate-test-env.sh
 ```
 
-生成器会创建 `deploy/compose.test.env` 和 `deploy/services.test.env`，随机生成 MySQL、MinIO、Nacos 鉴权及业务服务密钥，并使用独立的 Compose 项目名、宿主端口和 `/app/infra-portal-test` 数据目录。Nacos 登录密码保留镜像默认值 `nacos`，因为当前镜像不会通过 Compose 环境变量修改默认账号；Nacos 鉴权 Token 和身份键值仍为随机值。生成文件权限为 `0600` 且不会被 Git 跟踪，脚本拒绝覆盖已有文件，避免测试数据卷与新密码不一致。
+生成器会创建 `deploy/compose.test.env` 和 `deploy/services.test.env`，随机生成 MySQL、MinIO、Nacos 鉴权及业务服务密钥，并使用独立的业务/依赖 Compose 项目名、共享网络、宿主端口和 `/app/infra-portal-test` 数据目录。Nacos 登录密码保留镜像默认值 `nacos`，因为当前镜像不会通过 Compose 环境变量修改默认账号；Nacos 鉴权 Token 和身份键值仍为随机值。生成文件权限为 `0600` 且不会被 Git 跟踪，脚本拒绝覆盖已有文件，避免测试数据卷与新密码不一致。
 
 配置职责必须保持分离：
 
 | 文件 | 职责 | 是否注入业务服务 |
 |------|------|------------------|
-| `deploy/compose.env` | Compose 项目名、镜像版本、端口、数据目录、MySQL/Nacos/MinIO 基础组件凭据 | 否 |
+| `deploy/docker-compose.dependencies.yml` | MySQL、Nacos、Nacos 初始化、etcd、MinIO、Milvus 依赖栈 | 不适用 |
+| `deploy/docker-compose.yml` | Gateway、9 个 Java 服务和前端业务栈 | 不适用 |
+| `deploy/compose.env` | 两个 Compose 项目名、共享网络、镜像版本、端口、数据目录、基础组件凭据 | 否 |
 | `deploy/services.env` | Gateway 签名、管理员初始密码、AI、Wiki、Zabbix 等运行时密钥 | 是 |
 | `deploy/nacos-config/*.properties` | 9 个 Java 服务的业务配置模板，构建时复制进 `nacos-init` 镜像 | 由 Nacos Config 加载 |
 
-必须补齐两个环境文件中的空密钥。随后在项目根目录启动：
+生产部署必须替换两个环境文件中的开发凭据和空业务密钥。本地在项目根目录按依赖栈、业务栈的顺序启动：
 
 ```bash
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.dependencies.yml \
+  up --detach --wait mysql nacos etcd minio milvus
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.dependencies.yml \
+  run --rm --build --no-deps nacos-init
 docker compose --env-file deploy/compose.env \
   --file deploy/docker-compose.yml up --detach --build
 sh deploy/smoke-test.sh
 ```
 
-GitLab 流水线中的 `verify:deployment` 只使用临时测试配置执行静态校验，不启动或更新数据库、Nacos 和业务容器。真实部署需要在 GitLab CI/CD Variables 中创建以下变量：
+不传 `--env-file` 时，两份 Compose 配置仍可解析，缺省使用仅限本地开发的 MySQL、Nacos 和 MinIO 凭据；缺失的 `services.env` 不阻断 Compose 配置解析。业务服务实际启动及生产部署仍必须提供至少 32 字节的 `GATEWAY_SIGNING_SECRET` 等业务密钥。
+
+从旧版配置升级时，必须删除 `compose.env` 中的 Docker Compose 保留变量 `COMPOSE_PROJECT_NAME`，并改用 `COMPOSE_BUSINESS_PROJECT_NAME`。保留旧变量会覆盖两份清单顶层的独立项目名，使业务栈和依赖栈重新归入同一 Compose 项目。
+
+GitLab 流水线中的 `verify:deployment` 会执行 Shell 语法检查、CI/Compose/Nacos 初始化契约测试，并使用临时测试配置解析 Compose；该门禁不启动或更新数据库、Nacos 和业务容器。后端首次镜像构建执行完整 `mvn clean verify`，同一提交的其他服务复用 BuildKit 构建层；前端镜像构建执行 Vitest 和 Vite 构建。真实部署需要在 GitLab CI/CD Variables 中创建以下变量：
 
 | 变量 | 类型 | 内容 |
 |------|------|------|
@@ -75,25 +87,33 @@ GitLab 流水线中的 `verify:deployment` 只使用临时测试配置执行静�
 | `DEPLOY_SERVICES_ENV_FILE` | File | 基于 `deploy/services.env.example` 的完整业务密钥配置 |
 | `DEPLOY_STATE_DIR` | Variable，可选 | Runner 宿主机上的持久化部署目录，默认 `/app/infra-portal/deploy` |
 
-部署 job 读取到的 File 变量值是 GitLab 临时文件路径，因此会将其内容复制到 Runner 宿主机的 `$DEPLOY_STATE_DIR/compose.env` 和 `$DEPLOY_STATE_DIR/services.env`。同时持久化 `docker-compose.yml`，并将 `db/init.sql` 与 `db/seed.sql` 保存到相邻的 `/app/infra-portal/db`。`compose.env` 中的 `IMAGE_TAG` 会同步为实际部署的提交 SHA，`BUSINESS_ENV_FILE` 会固定为 `./services.env`，保证上传测试配置后仍能在 Job 结束时手动执行 Compose 命令。两个密钥文件权限为 `0600`。
+`verify:all-services` 只验证并构建 9 个后端镜像，不执行部署。`deploy:dependencies` 只执行依赖镜像缺失检查、MySQL/Nacos/Milvus 依赖栈初始化或更新，以及 Nacos 配置幂等初始化；它不读取 `DEPLOY_SERVICES_ENV_FILE`，也不构建或部署业务服务。手动业务部署分为三个范围：`deploy:all-services` 仅部署全部后端，`deploy:business-stack` 部署前端和全部后端，`deploy:full-stack` 用于初始化或全量部署，会先处理依赖栈和 Nacos 初始化，再部署完整业务栈。
+
+部署 job 读取到的 File 变量值是 GitLab 临时文件路径。业务部署将其持久化为 `$DEPLOY_STATE_DIR/compose.env` 和 `$DEPLOY_STATE_DIR/services.env`；依赖部署独立持久化为 `$DEPLOY_STATE_DIR/dependencies.env`，互不覆盖运行状态。同时持久化 `docker-compose.yml` 与 `docker-compose.dependencies.yml`，并将 `db/init.sql` 与 `db/seed.sql` 保存到相邻的 `/app/infra-portal/db`。环境文件中的 `IMAGE_TAG` 会同步为实际部署标签，业务 `compose.env` 的 `BUSINESS_ENV_FILE` 会固定为 `./services.env`。密钥文件权限为 `0600`。
 
 Runner 必须将宿主机 `/app` 挂载到 Job 容器的 `/app`。默认部署完成后，在宿主机执行：
 
 ```bash
 cd /app/infra-portal/deploy
 docker compose --env-file compose.env --file docker-compose.yml ps
+docker compose --env-file dependencies.env --file docker-compose.dependencies.yml ps
 docker compose --env-file compose.env --file docker-compose.yml stop
+docker compose --env-file dependencies.env --file docker-compose.dependencies.yml stop
+docker compose --env-file dependencies.env --file docker-compose.dependencies.yml start
 docker compose --env-file compose.env --file docker-compose.yml start
-docker compose --env-file compose.env --file docker-compose.yml down
 ```
 
-此时 `docker compose ls` 的配置路径应为 `/app/infra-portal/deploy/docker-compose.yml`，不再引用会被 Runner 清理的 `/builds/...`。受保护变量只会注入受保护分支或 Tag；在普通 feature 分支手动部署前必须确认变量保护范围和 Environment scope。
+此时 `docker compose ls` 中业务项目和依赖项目的配置路径应分别位于 `/app/infra-portal/deploy/docker-compose.yml` 和 `/app/infra-portal/deploy/docker-compose.dependencies.yml`，不再引用会被 Runner 清理的 `/builds/...`。受保护变量只会注入受保护分支或 Tag；在普通 feature 分支手动部署前必须确认变量保护范围和 Environment scope。
 
 Runner 的 Docker Executor 应保持 `pull_policy = "if-not-present"`，并挂载宿主机 `/var/run/docker.sock`。项目通过宿主机 Docker 守护进程保留 BuildKit 构建层，Maven 与 npm 依赖分别使用 Dockerfile 中的 `/root/.m2` 和 `/root/.npm` cache mount；Runner 的 `/cache` 挂载只服务于 GitLab Job cache，不能替代 BuildKit 缓存。依赖镜像仅在对应 tag 不存在时拉取。不要配置无保留策略的定时 `docker builder prune -a`，否则下一次构建会重新下载基础镜像层和依赖。
 
+内部构建镜像统一使用 `${IMAGE_NAMESPACE}/${service}:${yyyyMMdd}-${commit:7}`，日期由 `CI_PIPELINE_CREATED_AT` 转换到 `Asia/Shanghai` 后生成。例如 `infra-portal/core-service:20260803-0123456`。标签在同一流水线中保持稳定，增量部署必须等待当前流水线全部验证和构建任务成功，不会在其他服务仍失败时提前发布；部署开始后不可被新流水线取消。开放 MR 的分支只创建 MR 流水线，避免重复占用单并发 Runner。
+
+在 GitLab 项目的 Pipeline Schedules 中为 `master` 创建每日清理计划：Cron 填写 `0 3 * * *`，Cron timezone 选择 `Asia/Shanghai`。定时流水线会跳过构建和部署，仅执行 `cleanup:business-images`。该任务对 9 个后端服务和前端逐仓库按 Docker 镜像创建时间降序排序，只保留最近 3 个符合 `yyyyMMdd-commit7` 格式的标签；依赖镜像、`nacos-init` 和历史完整 SHA 标签不在清理范围内。若过期镜像仍被容器引用，Docker 会拒绝删除，任务会保留该镜像并记录提示，不强制影响运行容器。
+
 测试环境也可直接将生成的两个 `.test.env` 文件内容分别配置为上述 File 变量。部署入口会统一把业务密钥文件路径覆盖为 `./services.env`，不依赖上传前的本地文件名。
 
-启动顺序由健康检查和 `depends_on` 控制：MySQL/Nacos/Milvus 先就绪，`nacos-init` 再创建缺失的 namespace 和 9 个 Data ID，最后启动 9 个 Java 服务与前端。`nacos-init` 遇到已存在的 Data ID 会跳过，人工在 Nacos 中调整的业务配置不会被覆盖。
+依赖栈内部由健康检查和 `depends_on` 控制：MySQL/Nacos/Milvus 先就绪，`nacos-init` 再创建缺失的 namespace 和 9 个 Data ID。依赖命令成功后再启动业务栈；`nacos-init` 遇到已存在的 Data ID 会跳过，人工在 Nacos 中调整的业务配置不会被覆盖。
 
 首次创建 `${DEPLOY_DATA_DIR}/mysql` 时会依次执行 `db/init.sql` 和 `db/seed.sql`，沿用现有种子账号。已有 MySQL 数据目录不会再次初始化；`ADMIN_DEFAULT_PASSWORD` 仅在账号表为空时生效。
 
@@ -108,6 +128,8 @@ Nacos：http://localhost:8848/nacos/
 ```bash
 docker compose --env-file deploy/compose.env \
   --file deploy/docker-compose.yml down
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.dependencies.yml down
 ```
 
 `down` 不删除宿主机 `${DEPLOY_DATA_DIR}` 下的数据。需要重新初始化时应先备份并明确处理对应数据目录，不要直接覆盖已有 Nacos/MySQL 数据。

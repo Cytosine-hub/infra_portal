@@ -135,25 +135,32 @@ curl -i http://127.0.0.1:8080/api/middleware-commands/types
 
 ## 7. CI/CD
 
-`.gitlab-ci.yml` 中每个岗位服务都有独立 verify/deploy 作业。verify 的路径触发由服务目录、自身 `job-*` 目录和扇出段组成；扇出段为 `common-*`、父 POM 与 `.gitlab-ci.yml`。构建命令统一为：
+`.gitlab-ci.yml` 使用 `validate → build → deploy` 三阶段。`verify:deployment` 先执行 Shell 语法检查、CI/Compose/Nacos 初始化契约测试和 Compose 静态解析；任一门禁失败时不进入构建或部署。每个岗位服务仍有独立 verify/deploy 作业，verify 的路径触发由服务目录、自身 `job-*` 目录和扇出段组成；扇出段为 `common-*`、父 POM 与 `.gitlab-ci.yml`。
+
+后端镜像的公共构建层统一执行：
 
 ```text
-mvn -pl <service> -am clean verify
+mvn clean verify
 ```
+
+同一提交首次构建时运行全量后端测试和打包，后续服务镜像复用 BuildKit 层，只复制对应服务的可执行 JAR。前端生产镜像在 `npm ci` 后依次执行 `npm test` 和 `npm run build`。应用镜像使用 `${IMAGE_NAMESPACE}/${service}:${yyyyMMdd}-${commit:7}` 不可变标签，不写入 `latest`；GitLab 定时清理任务按业务服务仓库分别保留最近 3 个新格式镜像。
+
+开放 MR 后，push 流水线会被抑制，只保留 MR 流水线；新提交可以取消尚未完成的旧验证/构建任务。部署任务不可中断，并且不使用跨阶段 `needs`，因此必须等待当前流水线全部 validate/build 作业成功，避免同一提交被部分发布。
 
 在 GitLab 的 **Run pipeline** 页面创建的 `web` 流水线中，可以手动运行以下作业：
 
 - `verify:<service>`：构建一个业务服务的可执行镜像；随后可运行对应的 `deploy:<service>`；
 - `verify:all-services`：按固定顺序构建 9 个业务服务镜像；
-- `verify:frontend`：使用生产 Nginx 镜像构建 Vue 前端；
-- `prepare:dependencies`：预拉取 MySQL、Nacos、etcd、MinIO 和 Milvus 镜像；
-- `deploy:<service>`：部署一个业务服务，其 Compose 启动依赖会自动启动；
-- `deploy:dependencies`：单独部署 MySQL、Nacos 和 Milvus 依赖组，并执行幂等 Nacos 配置初始化；
-- `deploy:full-stack`：在一个 job 中构建 9 个 Java 服务、前端和 `nacos-init` 镜像，预拉取依赖组件并部署完整运行栈；不需要先运行其他可选手动作业。
+- `verify:frontend`：执行 Vitest、构建 Vue 前端并生成生产 Nginx 镜像；
+- `deploy:<service>`：仅通过业务 Compose 部署一个业务服务，运行前依赖栈必须已启动；
+- `deploy:dependencies`：只执行依赖镜像缺失检查、MySQL/Nacos/Milvus 依赖栈初始化或更新，并执行幂等 Nacos 配置初始化；不读取业务密钥，也不构建业务服务；
+- `deploy:all-services`：部署全部 9 个 Java 后端服务，不构建或重启前端，不操作依赖组件；
+- `deploy:business-stack`：在一个 job 中构建并部署 9 个 Java 服务和前端，不操作依赖组件，执行前必须确保依赖栈已就绪；
+- `deploy:full-stack`：用于初始化或全量部署，先初始化或更新依赖栈并执行 Nacos 配置初始化，再构建和部署完整业务栈。
 
-`deploy/docker-compose.yml` 是完整运行栈定义。它使用同一个 Compose 网络连接前端、9 个 Java 服务、MySQL、Nacos 以及 Milvus/etcd/MinIO；所有有状态数据均通过宿主机目录挂载，根目录由 `DEPLOY_DATA_DIR` 控制。首次创建 `${DEPLOY_DATA_DIR}/mysql` 时，MySQL 会执行 `db/init.sql` 和 `db/seed.sql`；已有目录不会重复初始化。
+`deploy/docker-compose.yml` 定义前端和 9 个 Java 业务服务，`deploy/docker-compose.dependencies.yml` 定义 MySQL、Nacos、Nacos 初始化以及 Milvus/etcd/MinIO。两个 Compose 项目通过固定共享网络通信并独立启停；所有有状态数据均通过宿主机目录挂载，根目录由 `DEPLOY_DATA_DIR` 控制。首次创建 `${DEPLOY_DATA_DIR}/mysql` 时，MySQL 会执行 `db/init.sql` 和 `db/seed.sql`；已有目录不会重复初始化。
 
-CI 部署必须配置两个受保护的“文件”变量：`DEPLOY_COMPOSE_ENV_FILE` 基于 `deploy/compose.env.example`，负责 Compose 插值、基础组件和数据目录；`DEPLOY_SERVICES_ENV_FILE` 基于 `deploy/services.env.example`，只包含注入 Java 容器的业务密钥。业务配置由 `deploy/nacos-config/*.properties` 初始化到 Nacos；`nacos-init` 只创建缺失的 namespace/Data ID，不覆盖已有配置。
+CI 依赖部署只要求受保护的 File 变量 `DEPLOY_COMPOSE_ENV_FILE`，其内容基于 `deploy/compose.env.example`，负责 Compose 插值、基础组件和数据目录；业务部署另外要求 `DEPLOY_SERVICES_ENV_FILE`，其内容基于 `deploy/services.env.example`，只包含注入 Java 容器的业务密钥。业务配置由 `deploy/nacos-config/*.properties` 初始化到 Nacos；`nacos-init` 只创建缺失的 namespace/Data ID，不覆盖已有配置。
 
 ## 8. 沙箱依赖说明
 

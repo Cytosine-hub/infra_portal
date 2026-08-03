@@ -4,10 +4,12 @@ FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /workspace/backend
 COPY backend/ ./
 
-ARG SERVICE
 RUN --mount=type=cache,target=/root/.m2 \
-    test -n "$SERVICE" \
-    && mvn --batch-mode --no-transfer-progress -Dstyle.color=never -pl "$SERVICE" -am clean verify \
+    mvn --batch-mode --no-transfer-progress -Dstyle.color=never clean verify
+
+# SERVICE 在全量验证后声明，保证同一提交的 9 个服务复用上面的 Maven 构建层。
+ARG SERVICE
+RUN test -n "$SERVICE" \
     && cp "$SERVICE"/target/*-exec.jar /workspace/app.jar
 
 FROM eclipse-temurin:17-jre

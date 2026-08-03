@@ -56,7 +56,7 @@ cp deploy/compose.env.example deploy/compose.env
 cp deploy/services.env.example deploy/services.env
 ```
 
-测试环境可从同一组模板生成隔离配置。脚本会随机生成数据库密码、基础组件鉴权值和业务密钥，并使用独立项目名、端口和 `/app/infra-portal-test` 数据目录：
+测试环境可从同一组模板生成隔离配置。脚本会随机生成数据库密码、基础组件鉴权值和业务密钥，并使用独立的业务/依赖项目名、共享网络、端口和 `/app/infra-portal-test` 数据目录：
 
 ```bash
 sh deploy/generate-test-env.sh
@@ -64,30 +64,48 @@ sh deploy/generate-test-env.sh
 
 生成的 `deploy/compose.test.env` 和 `deploy/services.test.env` 权限为 `0600`，已被 Git 忽略。为避免意外轮换已有测试环境密码，脚本不会覆盖现有文件。
 
-- `deploy/compose.env`：镜像版本、端口、数据目录和基础组件凭据，仅用于 Compose 插值与基础设施初始化。
+- `deploy/docker-compose.dependencies.yml`：MySQL、Nacos、Nacos 配置初始化、etcd、MinIO 和 Milvus 依赖栈。
+- `deploy/docker-compose.yml`：Gateway、9 个 Java 业务服务和前端业务栈。
+- `deploy/compose.env`：两个 Compose 项目名、共享网络、镜像版本、端口、数据目录和基础组件凭据。
 - `deploy/services.env`：只注入 Java 业务容器的运行时密钥。
 - `deploy/nacos-config/*.properties`：业务服务配置模板，构建时复制进 `nacos-init` 镜像并发布到 Nacos；模板中的密钥通过业务容器环境变量解析。
 
-填写两个环境文件中的空值后启动：
+本地启动时先启动依赖栈，待其健康并完成 Nacos 初始化后再启动业务栈：
 
 ```bash
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.dependencies.yml \
+  up --detach --wait mysql nacos etcd minio milvus
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.dependencies.yml \
+  run --rm --build --no-deps nacos-init
 docker compose --env-file deploy/compose.env \
   --file deploy/docker-compose.yml up --detach --build
 sh deploy/smoke-test.sh
 ```
 
+不指定 `--env-file` 时，两份 Compose 仍可正常解析，并使用仅限本地开发的基础组件默认值；业务密钥文件也按可选文件处理。生产部署必须提供并替换 `compose.env` 和 `services.env` 中的全部密钥，禁止使用仓库内的开发默认凭据。
+
+旧版 `compose.env` 中若存在 Docker Compose 保留变量 `COMPOSE_PROJECT_NAME`，升级时必须删除并改用 `COMPOSE_BUSINESS_PROJECT_NAME`；否则它会覆盖两份清单各自的项目名，破坏独立启停。
+
 `nacos-init` 只创建缺失的 namespace 和 9 个 Data ID，不覆盖 Nacos 中已有配置。MySQL 只在全新数据目录首次执行 `db/init.sql` 和 `db/seed.sql`，已有数据目录不会重放初始化脚本。前端入口为 `http://localhost:5173`。
 
-GitLab 的 `verify:deployment` 会自动生成临时测试配置并执行 Compose 配置解析，不启动运行栈。实际部署必须配置 `DEPLOY_COMPOSE_ENV_FILE` 与 `DEPLOY_SERVICES_ENV_FILE` 两个 File 类型 CI/CD Variable；变量值是 GitLab 创建的临时文件路径，部署 job 会将其复制为 Compose 使用的环境文件。
+GitLab 的 `verify:deployment` 会执行部署脚本语法、CI/Compose/Nacos 初始化契约测试，并自动生成临时测试配置完成 Compose 解析，不启动运行栈。后端镜像首次构建运行完整 Maven 验证并通过 BuildKit 复用结果，前端镜像构建会执行 Vitest。实际部署使用 File 类型 CI/CD Variable：依赖部署只要求 `DEPLOY_COMPOSE_ENV_FILE`，业务部署还要求 `DEPLOY_SERVICES_ENV_FILE`。
 
-部署 job 会将运行清单持久化到 Runner 宿主机 `/app/infra-portal/deploy`，并将 MySQL 初始化脚本保存到 `/app/infra-portal/db`。Job 结束后可在宿主机手动管理：
+CI 构建镜像统一命名为 `${IMAGE_NAMESPACE}/${service}:${yyyyMMdd}-${commit:7}`，例如 `infra-portal/core-service:20260803-0123456`；日期取流水线创建时间并转换为 `Asia/Shanghai`。在 GitLab 为 `master` 创建时区为 `Asia/Shanghai`、Cron 为 `0 3 * * *` 的 Pipeline Schedule 后，`cleanup:business-images` 每日只运行镜像清理：9 个后端服务和前端各自保留按创建时间排序的最近 3 个新格式镜像，不清理 MySQL、Nacos、Milvus 等依赖镜像、`nacos-init` 和历史完整 SHA 标签。
+
+CI 中 `verify:all-services` 只验证并构建 9 个后端镜像，不执行部署。手动部署入口按范围分为：`deploy:all-services` 部署全部后端服务，`deploy:business-stack` 部署前端和全部后端服务，`deploy:full-stack` 先初始化或更新 MySQL、Nacos、Milvus 等依赖，再部署完整业务栈。`deploy:dependencies` 仍可单独初始化或更新依赖栈，且仅要求 `DEPLOY_COMPOSE_ENV_FILE`。
+
+部署 job 会将两份运行清单持久化到 Runner 宿主机 `/app/infra-portal/deploy`。业务环境保存为 `compose.env` 和 `services.env`，依赖环境独立保存为 `dependencies.env`；MySQL 初始化脚本保存到 `/app/infra-portal/db`。Job 结束后可在宿主机分别管理：
 
 ```bash
 cd /app/infra-portal/deploy
 docker compose --env-file compose.env --file docker-compose.yml ps
+docker compose --env-file dependencies.env --file docker-compose.dependencies.yml ps
 docker compose --env-file compose.env --file docker-compose.yml stop
+docker compose --env-file dependencies.env --file docker-compose.dependencies.yml stop
+docker compose --env-file dependencies.env --file docker-compose.dependencies.yml start
 docker compose --env-file compose.env --file docker-compose.yml start
-docker compose --env-file compose.env --file docker-compose.yml down
 ```
 
 `compose.env` 和 `services.env` 包含部署密钥，权限固定为 `0600`。模拟首次初始化时只清理 `/app/infra-portal/mysql`、`nacos`、`milvus`、`storage` 和 `ai` 等数据目录，保留 `deploy` 与 `db` 目录。
@@ -97,6 +115,8 @@ docker compose --env-file compose.env --file docker-compose.yml down
 ```bash
 docker compose --env-file deploy/compose.env \
   --file deploy/docker-compose.yml down
+docker compose --env-file deploy/compose.env \
+  --file deploy/docker-compose.dependencies.yml down
 ```
 
 ### 裸机后端

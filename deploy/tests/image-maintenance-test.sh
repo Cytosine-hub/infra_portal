@@ -1,0 +1,106 @@
+#!/bin/sh
+set -eu
+
+ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)
+TMP_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/infra-portal-image-test.XXXXXX")
+trap 'rm -rf "$TMP_ROOT"' EXIT HUP INT TERM
+
+pass() {
+    printf '| Subtask success: %s\n' "$1"
+}
+
+fail() {
+    printf '%s\n' "- Subtask failure: $1" >&2
+    exit 1
+}
+
+printf '%s\n' '+ Task start: business image maintenance'
+
+actual_tag=$(sh "$ROOT_DIR/deploy/image-tag.sh" \
+    0123456789abcdef0123456789abcdef01234567 2026-08-03T16:30:00Z)
+[ "$actual_tag" = "20260804-0123456" ] \
+    || fail "TC-CI-026 unexpected image tag: $actual_tag"
+pass 'TC-CI-026 Asia/Shanghai date and seven-character commit hash'
+
+if sh "$ROOT_DIR/deploy/image-tag.sh" invalid-sha 2026-08-03T16:30:00Z \
+    >/dev/null 2>&1; then
+    fail 'TC-CI-027 invalid commit hash must be rejected'
+fi
+pass 'TC-CI-027 invalid commit hash rejection'
+
+mkdir -p "$TMP_ROOT/bin"
+cat > "$TMP_ROOT/bin/docker" <<'EOF'
+#!/bin/sh
+set -eu
+
+if [ "$1 $2" = "image ls" ]; then
+    cat <<'IMAGES'
+2026-08-04 12:00:00 +0800 CST infra-portal/api-gateway:20260804-aaaaaaa
+2026-08-03 12:00:00 +0800 CST infra-portal/api-gateway:20260803-bbbbbbb
+2026-08-02 12:00:00 +0800 CST infra-portal/api-gateway:20260802-ccccccc
+2026-08-01 12:00:00 +0800 CST infra-portal/api-gateway:20260801-ddddddd
+2026-07-31 12:00:00 +0800 CST infra-portal/api-gateway:20260731-eeeeeee
+2026-07-30 12:00:00 +0800 CST infra-portal/api-gateway:20260730-fffffff
+2026-07-29 12:00:00 +0800 CST infra-portal/api-gateway:0123456789abcdef0123456789abcdef01234567
+2026-07-28 12:00:00 +0800 CST infra-portal/nacos-init:20260728-9999999
+IMAGES
+    exit 0
+fi
+
+if [ "$1 $2" = "container ls" ]; then
+    case "$*" in
+        *infra-portal/api-gateway:20260801-ddddddd*)
+            printf '%s\n' running-container-id
+            ;;
+    esac
+    exit 0
+fi
+
+if [ "$1 $2" = "image rm" ]; then
+    if [ "${MOCK_DOCKER_RM_FAIL:-}" = "$3" ]; then
+        exit 1
+    fi
+    printf '%s\n' "$3" >> "$MOCK_DOCKER_LOG"
+    exit 0
+fi
+
+printf 'unexpected docker arguments: %s\n' "$*" >&2
+exit 1
+EOF
+chmod +x "$TMP_ROOT/bin/docker"
+
+export MOCK_DOCKER_LOG="$TMP_ROOT/docker-rm.log"
+PATH="$TMP_ROOT/bin:$PATH" \
+    IMAGE_NAMESPACE=infra-portal \
+    BUSINESS_IMAGE_SERVICES=api-gateway \
+    BUSINESS_IMAGE_KEEP_COUNT=3 \
+    sh "$ROOT_DIR/deploy/cleanup-business-images.sh"
+
+cat > "$TMP_ROOT/expected-rm.log" <<'EOF'
+infra-portal/api-gateway:20260731-eeeeeee
+infra-portal/api-gateway:20260730-fffffff
+EOF
+
+cmp -s "$TMP_ROOT/expected-rm.log" "$MOCK_DOCKER_LOG" \
+    || fail 'TC-CI-028 cleanup removed an active, retained, or dependency image'
+pass 'TC-CI-028 keep newest three images and preserve images used by containers'
+
+if PATH="$TMP_ROOT/bin:$PATH" \
+    BUSINESS_IMAGE_SERVICES=api-gateway \
+    BUSINESS_IMAGE_KEEP_COUNT=0 \
+    sh "$ROOT_DIR/deploy/cleanup-business-images.sh" >/dev/null 2>&1; then
+    fail 'TC-CI-029 non-positive retention count must be rejected'
+fi
+pass 'TC-CI-029 invalid retention count rejection'
+
+if PATH="$TMP_ROOT/bin:$PATH" \
+    IMAGE_NAMESPACE=infra-portal \
+    BUSINESS_IMAGE_SERVICES=api-gateway \
+    BUSINESS_IMAGE_KEEP_COUNT=3 \
+    MOCK_DOCKER_RM_FAIL=infra-portal/api-gateway:20260731-eeeeeee \
+    sh "$ROOT_DIR/deploy/cleanup-business-images.sh" >/dev/null 2>&1; then
+    fail 'TC-CI-030 Docker image removal failures must fail the cleanup task'
+fi
+pass 'TC-CI-030 Docker image removal failure propagation'
+
+printf '%s\n' '* Task complete: business image maintenance'
