@@ -121,6 +121,19 @@ describe('检索标签', () => {
 
     expect(wrapper.text()).toContain('仍然可见的经验页')
   })
+
+  test('TC-KB-006A 两路检索都失败应提示服务不可用而非伪装成无命中', async () => {
+    const notify = vi.fn()
+    vi.spyOn(api, 'request').mockRejectedValue(new Error('检索服务不可用'))
+
+    const wrapper = mountTab(SearchTab, { notify })
+    await wrapper.find('input').setValue('任意')
+    await wrapper.findAll('button').at(-1).trigger('click')
+    await flushPromises()
+
+    expect(notify).toHaveBeenCalledWith('知识库检索服务暂不可用，请稍后重试。', 'error')
+    expect(wrapper.text()).toContain('知识库检索服务暂不可用，请稍后重试。')
+  })
 })
 
 describe('文档标签', () => {

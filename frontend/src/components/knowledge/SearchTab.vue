@@ -18,7 +18,7 @@
     <EmptyState
       v-else-if="searched && !results.length"
       icon="🔍"
-      message="没有命中任何内容。可以换个说法，或确认文档是否已导入。"
+      :message="searchError || '没有命中任何内容。可以换个说法，或确认文档是否已导入。'"
     />
 
     <div v-else-if="results.length" class="results">
@@ -59,6 +59,9 @@ const software = ref('')
 const results = ref([])
 const loading = ref(false)
 const searched = ref(false)
+const searchError = ref('')
+
+const SEARCH_UNAVAILABLE_MESSAGE = '知识库检索服务暂不可用，请稍后重试。'
 
 function snippetOf(text, limit = 300) {
   if (!text) return ''
@@ -69,16 +72,19 @@ async function runSearch() {
   const q = query.value.trim()
   if (!q) return
   loading.value = true
+  searchError.value = ''
   try {
     const params = new URLSearchParams({ q, topK: '8' })
     if (category.value.trim()) params.set('category', category.value.trim())
     if (software.value.trim()) params.set('software', software.value.trim())
 
     // 原始文档片段与经验页面并行检索，失败的一路不影响另一路
-    const [chunks, pages] = await Promise.all([
-      request(`/api/knowledge/search?${params}`).catch(() => []),
-      request(`/api/knowledge/pages/search?q=${encodeURIComponent(q)}&limit=8`).catch(() => [])
+    const [chunkAttempt, pageAttempt] = await Promise.allSettled([
+      request(`/api/knowledge/search?${params}`),
+      request(`/api/knowledge/pages/search?q=${encodeURIComponent(q)}&limit=8`)
     ])
+    const chunks = chunkAttempt.status === 'fulfilled' ? chunkAttempt.value || [] : []
+    const pages = pageAttempt.status === 'fulfilled' ? pageAttempt.value || [] : []
 
     results.value = [
       ...(chunks || []).map(c => ({
@@ -99,7 +105,13 @@ async function runSearch() {
       }))
     ]
     searched.value = true
+    if ((chunkAttempt.status === 'rejected' || pageAttempt.status === 'rejected')
+        && !results.value.length) {
+      searchError.value = SEARCH_UNAVAILABLE_MESSAGE
+      props.notify(SEARCH_UNAVAILABLE_MESSAGE, 'error')
+    }
   } catch (error) {
+    searchError.value = SEARCH_UNAVAILABLE_MESSAGE
     props.notify(error.message, 'error')
   } finally {
     loading.value = false

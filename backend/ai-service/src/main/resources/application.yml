@@ -94,7 +94,7 @@ langchain4j:
       log-requests: true
       log-responses: true
     embedding-model:
-      base-url: ${EMBEDDING_BASE_URL:http://localhost:11434/v1}
+      base-url: ${EMBEDDING_BASE_URL:http://host.containers.internal:11434/v1}
       api-key: ${EMBEDDING_API_KEY:ollama}
       model-name: ${EMBEDDING_MODEL:bge-large}
 
