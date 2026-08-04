@@ -49,7 +49,7 @@ cp deploy/services.env.example deploy/services.env
 sh deploy/generate-test-env.sh
 ```
 
-生成器会创建 `deploy/compose.test.env` 和 `deploy/services.test.env`，随机生成 MySQL、MinIO、Nacos 鉴权及业务服务密钥，并使用独立的业务/依赖 Compose 项目名、共享网络、宿主端口和 `/app/infra-portal-test` 数据目录。Nacos 登录密码保留镜像默认值 `nacos`，因为当前镜像不会通过 Compose 环境变量修改默认账号；Nacos 鉴权 Token 和身份键值仍为随机值。生成文件权限为 `0600` 且不会被 Git 跟踪，脚本拒绝覆盖已有文件，避免测试数据卷与新密码不一致。
+生成器会创建 `deploy/compose.test.env` 和 `deploy/services.test.env`，随机生成 MySQL、MinIO、Nacos 鉴权及业务服务密钥，并使用独立的业务/依赖 Compose 项目名、共享网络、宿主端口和 `/app/infra-portal-test/data` 数据目录。Nacos 登录密码保留镜像默认值 `nacos`，因为当前镜像不会通过 Compose 环境变量修改默认账号；Nacos 鉴权 Token 和身份键值仍为随机值。生成文件权限为 `0600` 且不会被 Git 跟踪，脚本拒绝覆盖已有文件，避免测试数据卷与新密码不一致。
 
 配置职责必须保持分离：
 
@@ -85,25 +85,26 @@ GitLab 流水线中的 `verify:deployment` 会执行 Shell 语法检查、CI/Com
 |------|------|------|
 | `DEPLOY_COMPOSE_ENV_FILE` | File | 基于 `deploy/compose.env.example` 的完整部署配置 |
 | `DEPLOY_SERVICES_ENV_FILE` | File | 基于 `deploy/services.env.example` 的完整业务密钥配置 |
-| `DEPLOY_STATE_DIR` | Variable，可选 | Runner 宿主机上的持久化部署目录，默认 `/app/infra-portal/deploy` |
+| `DEPLOY_COMPOSE_ROOT` | Variable，可选 | Runner 宿主机上的 Compose 总目录，默认 `/app/infra-portal/compose` |
+| `DEPLOY_DATA_ROOT` | Variable，可选 | Runner 宿主机上的数据总目录，默认 `/app/infra-portal/data` |
 
 `verify:all-backend-services` 只验证并构建 9 个后端镜像，不执行部署。`deploy:dependencies` 只执行依赖镜像缺失检查、MySQL/Nacos/Milvus 依赖栈初始化或更新，以及 Nacos 配置幂等初始化；它不读取 `DEPLOY_SERVICES_ENV_FILE`，也不构建或部署业务服务。手动业务部署分为三个范围：`deploy:all-backend-services` 仅部署全部后端，`deploy:all-services` 部署前端和全部后端，`deploy:full-stack` 用于初始化或全量部署，会先处理依赖栈和 Nacos 初始化，再部署完整业务栈。
 
-部署 job 读取到的 File 变量值是 GitLab 临时文件路径。业务部署将其持久化为 `$DEPLOY_STATE_DIR/compose.env` 和 `$DEPLOY_STATE_DIR/services.env`；依赖部署独立持久化为 `$DEPLOY_STATE_DIR/dependencies.env`，互不覆盖运行状态。同时持久化 `docker-compose.yml` 与 `docker-compose.dependencies.yml`，并将 `db/init.sql` 与 `db/seed.sql` 保存到相邻的 `/app/infra-portal/db`。环境文件中的 `IMAGE_TAG` 会同步为实际部署标签，业务 `compose.env` 的 `BUSINESS_ENV_FILE` 会固定为 `./services.env`。密钥文件权限为 `0600`。
+部署 job 读取到的 File 变量值是 GitLab 临时文件路径。业务部署持久化到 `$DEPLOY_COMPOSE_ROOT/business`，依赖部署持久化到 `$DEPLOY_COMPOSE_ROOT/dependencies`，MySQL 初始化脚本放在依赖目录的 `initdb` 中。环境文件中的 `IMAGE_TAG` 会同步为实际部署标签，`DEPLOY_DATA_ROOT` 固定为 `/app/infra-portal/data`，业务 `BUSINESS_ENV_FILE` 固定为 `./services.env`，依赖 `MYSQL_INIT_DIR` 固定为 `./initdb`。密钥文件权限为 `0600`。
 
 Runner 必须将宿主机 `/app` 挂载到 Job 容器的 `/app`。默认部署完成后，在宿主机执行：
 
 ```bash
-cd /app/infra-portal/deploy
-docker compose --env-file compose.env --file docker-compose.yml ps
-docker compose --env-file dependencies.env --file docker-compose.dependencies.yml ps
-docker compose --env-file compose.env --file docker-compose.yml stop
-docker compose --env-file dependencies.env --file docker-compose.dependencies.yml stop
-docker compose --env-file dependencies.env --file docker-compose.dependencies.yml start
-docker compose --env-file compose.env --file docker-compose.yml start
+cd /app/infra-portal/compose
+docker compose --env-file business/compose.env --file business/compose.yml ps
+docker compose --env-file dependencies/compose.env --file dependencies/compose.yml ps
+docker compose --env-file business/compose.env --file business/compose.yml stop
+docker compose --env-file dependencies/compose.env --file dependencies/compose.yml stop
+docker compose --env-file dependencies/compose.env --file dependencies/compose.yml start
+docker compose --env-file business/compose.env --file business/compose.yml start
 ```
 
-此时 `docker compose ls` 中业务项目和依赖项目的配置路径应分别位于 `/app/infra-portal/deploy/docker-compose.yml` 和 `/app/infra-portal/deploy/docker-compose.dependencies.yml`，不再引用会被 Runner 清理的 `/builds/...`。受保护变量只会注入受保护分支或 Tag；在普通 feature 分支手动部署前必须确认变量保护范围和 Environment scope。
+此时 `docker compose ls` 中业务项目和依赖项目的配置路径应分别位于 `/app/infra-portal/compose/business/compose.yml` 和 `/app/infra-portal/compose/dependencies/compose.yml`，不再引用会被 Runner 清理的 `/builds/...`。受保护变量只会注入受保护分支或 Tag；在普通 feature 分支手动部署前必须确认变量保护范围和 Environment scope。
 
 Runner 的 Docker Executor 应保持 `pull_policy = "if-not-present"`，并挂载宿主机 `/var/run/docker.sock`。项目通过宿主机 Docker 守护进程保留 BuildKit 构建层，Maven 与 npm 依赖分别使用 Dockerfile 中的 `/root/.m2` 和 `/root/.npm` cache mount；Runner 的 `/cache` 挂载只服务于 GitLab Job cache，不能替代 BuildKit 缓存。依赖镜像仅在对应 tag 不存在时拉取。不要配置无保留策略的定时 `docker builder prune -a`，否则下一次构建会重新下载基础镜像层和依赖。
 
@@ -115,7 +116,7 @@ Runner 的 Docker Executor 应保持 `pull_policy = "if-not-present"`，并挂�
 
 依赖栈内部由健康检查和 `depends_on` 控制：MySQL/Nacos/Milvus 先就绪，`nacos-init` 再创建缺失的 namespace 和 9 个 Data ID。依赖命令成功后再启动业务栈；`nacos-init` 遇到已存在的 Data ID 会跳过，人工在 Nacos 中调整的业务配置不会被覆盖。
 
-首次创建 `${DEPLOY_DATA_DIR}/mysql` 时会依次执行 `db/init.sql` 和 `db/seed.sql`，沿用现有种子账号。已有 MySQL 数据目录不会再次初始化；`ADMIN_DEFAULT_PASSWORD` 仅在账号表为空时生效。
+首次创建 `${DEPLOY_DATA_ROOT}/dependencies/mysql` 时会依次执行 `initdb/init.sql` 和 `initdb/seed.sql`，沿用现有种子账号。已有 MySQL 数据目录不会再次初始化；`ADMIN_DEFAULT_PASSWORD` 仅在账号表为空时生效。
 
 访问与停止命令：
 
@@ -132,9 +133,9 @@ docker compose --env-file deploy/compose.env \
   --file deploy/docker-compose.dependencies.yml down
 ```
 
-`down` 不删除宿主机 `${DEPLOY_DATA_DIR}` 下的数据。需要重新初始化时应先备份并明确处理对应数据目录，不要直接覆盖已有 Nacos/MySQL 数据。
+`down` 不删除宿主机 `${DEPLOY_DATA_ROOT}` 下的数据。需要重新初始化时应先备份并明确处理对应数据目录，不要直接覆盖已有 Nacos/MySQL 数据。
 
-模拟首次初始化时，仅清理 `/app/infra-portal/mysql`、`nacos`、`milvus`、`storage` 和 `ai` 等运行数据目录；必须保留 `/app/infra-portal/deploy` 和 `/app/infra-portal/db`，否则会丢失手动管理入口与 MySQL 初始化脚本。
+模拟首次初始化时，只能处理 `/app/infra-portal/data/dependencies` 与 `/app/infra-portal/data/business` 下明确指定的数据目录；必须保留 `/app/infra-portal/compose`。历史源码归档到 `/data/infra-portal`，不参与 Compose 运行和数据卷挂载。
 
 ## 3. 裸机启动数据库
 

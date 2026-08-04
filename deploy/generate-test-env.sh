@@ -61,7 +61,7 @@ set_env_value "$COMPOSE_OUTPUT" COMPOSE_DEPENDENCIES_PROJECT_NAME infra-portal-d
 set_env_value "$COMPOSE_OUTPUT" COMPOSE_NETWORK_NAME infra-portal-test-network
 set_env_value "$COMPOSE_OUTPUT" IMAGE_TAG test
 set_env_value "$COMPOSE_OUTPUT" BUSINESS_ENV_FILE "./$(basename "$SERVICES_OUTPUT")"
-set_env_value "$COMPOSE_OUTPUT" DEPLOY_DATA_DIR /app/infra-portal-test
+set_env_value "$COMPOSE_OUTPUT" DEPLOY_DATA_ROOT /app/infra-portal-test/data
 set_env_value "$COMPOSE_OUTPUT" FRONTEND_PORT 15173
 set_env_value "$COMPOSE_OUTPUT" API_GATEWAY_PORT 18080
 set_env_value "$COMPOSE_OUTPUT" COMMUNITY_SERVICE_PORT 18082
