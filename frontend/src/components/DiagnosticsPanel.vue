@@ -87,7 +87,17 @@
     </aside>
 
     <!-- 右侧：对话区域 / Skill 编辑 -->
-    <div class="chat-main">
+    <div
+      :class="['chat-main', { 'is-dragging-files': isDraggingFiles }]"
+      @dragenter="handleDragEnter"
+      @dragover="handleDragOver"
+      @dragleave="handleDragLeave"
+      @drop="handleDrop"
+    >
+      <div v-if="isDraggingFiles" class="attachment-drop-state" role="status" aria-live="polite">
+        <span class="attachment-drop-icon" aria-hidden="true">📎</span>
+        <span>松开以添加附件</span>
+      </div>
       <!-- Skill 查看模式 -->
       <template v-if="skillPanelMode === 'skillView' && editingSkill">
         <div class="skill-edit-panel">
@@ -333,6 +343,7 @@
                 @compositionstart="isComposing = true"
                 @compositionend="isComposing = false"
                 @keydown.stop="handleKeydown"
+                @paste="handlePaste"
               ></textarea>
               <div class="input-bottom-bar">
                 <input
@@ -371,12 +382,11 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { request, authorizedFetch } from '../api'
+import { useDiagnosticAttachmentInput } from '../composables/useDiagnosticAttachmentInput'
 import {
   DIAGNOSTIC_ATTACHMENT_ACCEPT,
-  createDiagnosticAttachment,
   formatAttachmentSize,
-  parseAttachmentMetadata,
-  validateDiagnosticAttachments
+  parseAttachmentMetadata
 } from '../utils/diagnosticAttachments'
 import MarkdownIt from 'markdown-it'
 
@@ -400,8 +410,20 @@ const isComposing = ref(false)
 const agentMode = ref('rag')
 const chatContainer = ref(null)
 const inputRef = ref(null)
-const attachmentInput = ref(null)
-const selectedAttachments = ref([])
+const {
+  attachmentInput,
+  selectedAttachments,
+  isDraggingFiles,
+  handleAttachmentSelection,
+  handlePaste,
+  handleDragEnter,
+  handleDragOver,
+  handleDragLeave,
+  handleDrop,
+  removeAttachment,
+  clearPendingAttachments,
+  revokeAttachmentPreviews
+} = useDiagnosticAttachmentInput(props.notify)
 const expandedRefs = ref({})
 const readyToSend = ref(false)
 let abortController = null
@@ -447,7 +469,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  revokeAttachmentPreviews(selectedAttachments.value)
   revokeMessagePreviews(messages.value)
 })
 
@@ -763,36 +784,6 @@ async function sendMessage() {
   }
 }
 
-function handleAttachmentSelection(event) {
-  const files = Array.from(event.target.files || [])
-  try {
-    validateDiagnosticAttachments(selectedAttachments.value, files)
-    selectedAttachments.value.push(...files.map(createDiagnosticAttachment))
-  } catch (error) {
-    props.notify?.(error.message, 'error')
-  } finally {
-    event.target.value = ''
-  }
-}
-
-function removeAttachment(id) {
-  const index = selectedAttachments.value.findIndex(attachment => attachment.id === id)
-  if (index < 0) return
-  const [removed] = selectedAttachments.value.splice(index, 1)
-  if (removed.previewUrl) URL.revokeObjectURL(removed.previewUrl)
-}
-
-function clearPendingAttachments() {
-  revokeAttachmentPreviews(selectedAttachments.value)
-  selectedAttachments.value = []
-}
-
-function revokeAttachmentPreviews(attachments) {
-  for (const attachment of attachments || []) {
-    if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
-  }
-}
-
 function revokeMessagePreviews(messageList) {
   for (const message of messageList || []) {
     revokeAttachmentPreviews(message.attachments)
@@ -1085,7 +1076,7 @@ async function submitSaveExperience() {
 
 .diagnostics-panel {
   display: flex;
-  height: 100%;
+  height: calc(100% - var(--space-lg));
   padding: 0;
   overflow: hidden;
 }
@@ -1209,7 +1200,7 @@ async function submitSaveExperience() {
 .kb-meta { color: #94a3b8; font-size: 11px; }
 
 /* 右侧对话区 */
-.chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.chat-main { position: relative; flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
 .chat-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; }
 .placeholder-content { text-align: center; }
@@ -1448,6 +1439,26 @@ async function submitSaveExperience() {
 .sent-attachment .attachment-size { color: var(--color-inverse-text); }
 
 .attachment-input { display: none; }
+
+.attachment-drop-state {
+  position: absolute;
+  inset: var(--space-md);
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  border: 2px dashed var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-light);
+  box-shadow: inset 0 0 0 1px var(--color-primary-ring);
+  color: var(--color-primary-800);
+  font-size: var(--text-base);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.attachment-drop-icon { font-size: var(--text-xl); }
 
 .input-bottom-bar { gap: var(--space-xs); }
 
