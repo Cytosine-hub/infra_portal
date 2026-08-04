@@ -57,7 +57,7 @@ cp deploy/compose.env.example deploy/compose.env
 cp deploy/services.env.example deploy/services.env
 ```
 
-测试环境可从同一组模板生成隔离配置。脚本会随机生成数据库密码、基础组件鉴权值和业务密钥，并使用独立的业务/依赖项目名、共享网络、端口和 `/app/infra-portal-test` 数据目录：
+测试环境可从同一组模板生成隔离配置。脚本会随机生成数据库密码、基础组件鉴权值和业务密钥，并使用独立的业务/依赖项目名、共享网络、端口和 `/app/infra-portal-test/data` 数据目录：
 
 ```bash
 sh deploy/generate-test-env.sh
@@ -97,19 +97,19 @@ CI 构建镜像统一命名为 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-
 
 CI 中 `verify:all-backend-services` 只验证并构建 9 个后端镜像，不执行部署。手动部署入口按范围分为：`deploy:all-backend-services` 部署全部后端服务，`deploy:all-services` 部署前端和全部后端服务，`deploy:full-stack` 先初始化或更新 MySQL、Nacos、Milvus 等依赖，再部署完整业务栈。`deploy:dependencies` 仍可单独初始化或更新依赖栈，且仅要求 `DEPLOY_COMPOSE_ENV_FILE`。
 
-部署 job 会将两份运行清单持久化到 Runner 宿主机 `/app/infra-portal/deploy`。业务环境保存为 `compose.env` 和 `services.env`，依赖环境独立保存为 `dependencies.env`；MySQL 初始化脚本保存到 `/app/infra-portal/db`。Job 结束后可在宿主机分别管理：
+部署 job 将运行清单和数据分别持久化到 Runner 宿主机 `/app/infra-portal/compose` 与 `/app/infra-portal/data`。业务清单保存在 `compose/business`，依赖清单及 MySQL 初始化脚本保存在 `compose/dependencies`；两个 Compose 项目和两类数据均可独立管理。Job 结束后可在宿主机分别操作：
 
 ```bash
-cd /app/infra-portal/deploy
-docker compose --env-file compose.env --file docker-compose.yml ps
-docker compose --env-file dependencies.env --file docker-compose.dependencies.yml ps
-docker compose --env-file compose.env --file docker-compose.yml stop
-docker compose --env-file dependencies.env --file docker-compose.dependencies.yml stop
-docker compose --env-file dependencies.env --file docker-compose.dependencies.yml start
-docker compose --env-file compose.env --file docker-compose.yml start
+cd /app/infra-portal/compose
+docker compose --env-file business/compose.env --file business/compose.yml ps
+docker compose --env-file dependencies/compose.env --file dependencies/compose.yml ps
+docker compose --env-file business/compose.env --file business/compose.yml stop
+docker compose --env-file dependencies/compose.env --file dependencies/compose.yml stop
+docker compose --env-file dependencies/compose.env --file dependencies/compose.yml start
+docker compose --env-file business/compose.env --file business/compose.yml start
 ```
 
-`compose.env` 和 `services.env` 包含部署密钥，权限固定为 `0600`。模拟首次初始化时只清理 `/app/infra-portal/mysql`、`nacos`、`milvus`、`storage` 和 `ai` 等数据目录，保留 `deploy` 与 `db` 目录。
+`compose.env` 和 `services.env` 包含部署密钥，权限固定为 `0600`。依赖数据位于 `/app/infra-portal/data/dependencies`，业务数据位于 `/app/infra-portal/data/business`；执行 `down`、更新清单或清理 `/data/infra-portal` 中归档的源码都不会删除这些运行数据。
 
 停止服务但保留数据：
 

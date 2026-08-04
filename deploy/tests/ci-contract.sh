@@ -61,6 +61,7 @@ assert_env_equals "$TMP_ROOT/compose.test.env" COMPOSE_BUSINESS_PROJECT_NAME inf
 assert_env_equals "$TMP_ROOT/compose.test.env" COMPOSE_DEPENDENCIES_PROJECT_NAME \
     infra-portal-dependencies-test
 assert_env_equals "$TMP_ROOT/compose.test.env" COMPOSE_NETWORK_NAME infra-portal-test-network
+assert_env_equals "$TMP_ROOT/compose.test.env" DEPLOY_DATA_ROOT /app/infra-portal-test/data
 for key in GATEWAY_SIGNING_SECRET ADMIN_DEFAULT_PASSWORD AI_API_KEY \
     EMBEDDING_API_KEY EMBEDDING_BASE_URL EMBEDDING_MODEL EMBEDDING_MAX_TOKENS \
     WIKI_EXPORT_SIGNATURE_SECRET ZABBIX_PASSWORD; do
@@ -148,15 +149,23 @@ assert_text .gitlab-ci.yml '旧变量 COMPOSE_PROJECT_NAME' \
 assert_text .gitlab-ci.yml '^  resource_group: staging-infra-portal$' 'TC-CI-007 deployment lock'
 assert_text .gitlab-ci.yml 'up --detach --wait --no-build' 'TC-CI-008 deployment health wait'
 assert_text .gitlab-ci.yml '^deploy:frontend:' 'TC-CI-009 frontend deployment job'
-assert_text .gitlab-ci.yml '^  DEPLOY_STATE_DIR: "/app/infra-portal/deploy"$' \
-    'TC-CI-011 stable deployment directory'
+assert_text .gitlab-ci.yml '^  DEPLOY_COMPOSE_ROOT: "/app/infra-portal/compose"$' \
+    'TC-CI-011 separated Compose root'
+assert_text .gitlab-ci.yml '^  DEPLOY_DATA_ROOT: "/app/infra-portal/data"$' \
+    'TC-CI-011 separated data root'
 assert_text .gitlab-ci.yml 'cp deploy/docker-compose\.yml "\$DEPLOY_COMPOSE_FILE"' \
     'TC-CI-011 persisted compose file'
 assert_text .gitlab-ci.yml \
     'cp deploy/docker-compose\.dependencies\.yml "\$DEPLOY_DEPENDENCIES_COMPOSE_FILE"' \
     'TC-CI-011 persisted dependency compose file'
-assert_text .gitlab-ci.yml 'cp db/init\.sql "\$DEPLOY_STATE_DIR/\.\./db/init\.sql"' \
+assert_text .gitlab-ci.yml 'cp db/init\.sql "\$DEPLOY_MYSQL_INIT_DIR/init\.sql"' \
     'TC-CI-011 persisted database init script'
+assert_text .gitlab-ci.yml 'DEPLOY_BUSINESS_DIR="\$DEPLOY_COMPOSE_ROOT/business"' \
+    'TC-CI-011 business Compose hierarchy'
+assert_text .gitlab-ci.yml 'DEPLOY_DEPENDENCIES_DIR="\$DEPLOY_COMPOSE_ROOT/dependencies"' \
+    'TC-CI-011 dependency Compose hierarchy'
+assert_text .gitlab-ci.yml 'MYSQL_INIT_DIR=\./initdb' \
+    'TC-CI-011 persisted database init path'
 assert_text .gitlab-ci.yml 'sed -i .*BUSINESS_ENV_FILE=\./services\.env.*DEPLOY_COMPOSE_ENV' \
     'TC-CI-011 persisted services env path'
 assert_text .gitlab-ci.yml 'docker compose --env-file "\$DEPLOY_COMPOSE_ENV" --file "\$DEPLOY_COMPOSE_FILE"' \
