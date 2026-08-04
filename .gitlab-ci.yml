@@ -1,10 +1,10 @@
 # ============================================================================
 # 集成中心门户 · monorepo 微服务 CI/CD
 #
-# 设计：每个服务一条独立流水线，按【路径触发】——只有相关目录变更才构建对应服务；
-#       改动共享库 common-* 或父 POM 则【扇出】重建所有服务（每个服务的 changes 里都含这几条）。
-# 构建期服务之间零依赖：只用 `mvn -pl <服务> -am`（also-make，连带构建 common-* 与其能力模块）。
-# 服务间真实联通（网关↔Nacos↔服务、认证越权）属【集成】层，单独一条流水线在预发环境跑。
+# 设计：先执行 CI/Compose 契约门禁，再按【路径触发】构建受影响服务；
+#       改动共享库 common-* 或父 POM 则【扇出】重建所有服务。
+# 后端首次镜像构建执行全量 Maven verify；其余服务复用相同 BuildKit 构建层，
+# 避免共享库变更时重复编译和重复运行测试。所有构建成功后才允许增量部署。
 #
 # 需要：Runner Job 可访问 Runner 主机的 Docker Socket（见 runner/config.md）。
 #       编译、镜像构建和 Docker Compose 部署均在同一台 Runner 主机完成，不推送 JAR 或镜像制品。
@@ -16,10 +16,14 @@
 # 避免 GitLab 把"空流水线"判为 failed（doc-only 合并不再爆红叉）。
 workflow:
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
     - if: '$CI_COMMIT_TAG'
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes: ["backend/**/*", "frontend/**/*", "deploy/**/*", "db/**/*", ".gitlab-ci.yml"]
+    # 已有 MR 时只保留 MR 流水线，避免同一提交同时创建 push + MR 两条流水线。
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "push"'
       changes: ["backend/**/*", "frontend/**/*", "deploy/**/*", "db/**/*", ".gitlab-ci.yml"]
 
@@ -27,7 +31,10 @@ default:
   image:
     name: docker:27-cli
     pull_policy: if-not-present       # 仅本地不存在时拉取镜像
-  tags: [TLZJJ]                          # 项目 Runner 标签
+  tags: [TLZJJ]                       # 项目 Runner 标签
+  interruptible: true                # 新提交可取消仍在执行的旧验证/构建任务
+  before_script:
+    - export IMAGE_TAG="$(sh deploy/image-tag.sh "$CI_COMMIT_SHA" "$CI_PIPELINE_CREATED_AT")"
 
 variables:
   DOCKER_BUILDKIT: "1"
@@ -36,50 +43,68 @@ variables:
   DEPLOY_STATE_DIR: "/app/infra-portal/deploy"
 
 stages:
-  - verify        # 编译 + 单元测试 + 打包（每服务独立）
-  - integration   # 端到端 / 认证越权（需 Nacos + 多服务，手动）
-  - deploy        # 部署业务服务、依赖组件或完整运行栈（手动）
+  - validate      # Shell/CI/Compose 契约门禁
+  - build         # 单元测试 + 编译 + 镜像构建（按路径增量）
+  - deploy        # 全部门禁通过后部署受影响服务
+  - cleanup       # 定时清理 Runner 主机上的过期业务镜像
 
-# 部署配置静态验证使用临时随机测试密钥，不读取受保护的部署变量，也不启动或更新服务。
-verify:deployment:
-  stage: verify
-  script:
-    - trap 'rm -f deploy/compose.test.env deploy/services.test.env' EXIT
-    - sh deploy/generate-test-env.sh
-    - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.yml config --quiet
+# 复用 Web 流水线中的非阻断手动作业规则。
+.manual-rule:
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-    - changes:
-        - deploy/**/*
-        - db/**/*
-        - .gitignore
-        - .gitlab-ci.yml
+    - &skip-schedule
+      if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
+    - &web-manual
+      if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      allow_failure: true
 
-# 服务构建模板：Docker 多阶段构建中执行 mvn -pl <SVC> -am clean verify，
-# 然后将可执行 JAR 封装为 Runner 主机镜像。镜像只保留在 Runner 主机的 Docker 守护进程中。
+# 静态门禁使用临时随机测试密钥，不读取受保护变量，也不启动或更新服务。
+# verify:deployment:
+#   stage: validate
+#   script:
+#     - trap 'rm -f deploy/compose.test.env deploy/services.test.env' EXIT
+#     - sh -n deploy/*.sh deploy/tests/*.sh
+#     - sh deploy/tests/ci-contract.sh
+#     - sh deploy/tests/compose-contract.sh
+#     - sh deploy/tests/nacos-init-test.sh
+#     - sh deploy/tests/image-maintenance-test.sh
+#     - sh deploy/generate-test-env.sh
+#     - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.yml config --quiet
+#     - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.dependencies.yml config --quiet
+#     - docker compose --file deploy/docker-compose.yml config --quiet
+#     - docker compose --file deploy/docker-compose.dependencies.yml config --quiet
+#   rules:
+#     - *skip-schedule
+#     - *web-manual
+#     - changes:
+#         - deploy/**/*
+#         - db/**/*
+#         - .gitignore
+#         - .gitlab-ci.yml
+
+# 服务构建模板：Docker 多阶段构建首次执行全量 Maven verify，后续服务镜像复用该层。
+# 镜像使用上海日期和 7 位提交 SHA 组成的不可变标签，并保留在 Runner 主机 Docker 守护进程中。
 .svc-verify:
-  stage: verify
+  stage: build
   script:
-    - export IMAGE_NAME="$IMAGE_NAMESPACE/$SVC"
-    - docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAME:$CI_COMMIT_SHA" --tag "$IMAGE_NAME:latest" --file deploy/Dockerfile .
-    - echo "== Runner 主机构建镜像：$IMAGE_NAME:$CI_COMMIT_SHA =="
-    - docker image inspect "$IMAGE_NAME:$CI_COMMIT_SHA" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
+    - docker build --build-arg SERVICE="$SVC" --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
+    - echo "== Runner 主机构建镜像：$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG =="
+    - docker image inspect "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
 
 # 完整业务服务构建入口。单服务构建仍复用下方 verify:<service> job，
 # 可按路径自动触发，也可在 Web 流水线中逐项手动运行。
-verify:all-services:
-  stage: verify
+verify:all-backend-services:
+  stage: build
   script:
     - |
       for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
-        export IMAGE_NAME="$IMAGE_NAMESPACE/$SVC"
-        docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAME:$CI_COMMIT_SHA" --tag "$IMAGE_NAME:latest" --file deploy/Dockerfile .
-        docker image inspect "$IMAGE_NAME:$CI_COMMIT_SHA" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
+        docker build --build-arg SERVICE="$SVC" --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
+        docker image inspect "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
       done
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       when: manual
       allow_failure: true
@@ -91,45 +116,17 @@ verify:all-services:
 
 # Compose 中的前端生产镜像，使用与本地完整栈相同的多阶段构建定义。
 verify:frontend:
-  stage: verify
+  stage: build
   script:
-    - export IMAGE_NAME="$IMAGE_NAMESPACE/frontend"
-    - docker build --tag "$IMAGE_NAME:$CI_COMMIT_SHA" --tag "$IMAGE_NAME:latest" --file deploy/Dockerfile.frontend .
-    - docker image inspect "$IMAGE_NAME:$CI_COMMIT_SHA" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
+    - docker build --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --file deploy/Dockerfile.frontend .
+    - docker image inspect "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --format 'ID={{.Id}}\n创建时间={{.Created}}\n大小={{.Size}} bytes'
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - changes:
         - frontend/**/*
-        - deploy/Dockerfile.frontend
-        - deploy/nginx.conf
+        - deploy/{Dockerfile.frontend,nginx.conf}
         - .gitlab-ci.yml
-
-# 第三方依赖不在仓库内编译；Runner 主机缺少对应 tag 时才拉取。
-prepare:dependencies:
-  stage: verify
-  script:
-    - |
-      for IMAGE in \
-        "mysql:${MYSQL_VERSION:-8.0}" \
-        "nacos/nacos-server:${NACOS_VERSION:-v2.3.2-slim}" \
-        "quay.io/coreos/etcd:${ETCD_VERSION:-v3.5.5}" \
-        "minio/minio:${MINIO_VERSION:-RELEASE.2023-03-20T20-16-18Z}" \
-        "milvusdb/milvus:${MILVUS_VERSION:-v2.3.4}"; do
-        if docker image inspect "$IMAGE" >/dev/null 2>&1; then
-          echo "依赖镜像已存在，跳过拉取：$IMAGE"
-        else
-          docker pull "$IMAGE"
-        fi
-      done
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
-    - if: '$CI_COMMIT_REF_NAME == "master"'
-      when: manual
-      allow_failure: true
 
 # ----------------------------------------------------------------------------
 # 每服务流水线（路径触发）。
@@ -140,222 +137,145 @@ verify:api-gateway:
   extends: .svc-verify
   variables: { SVC: api-gateway }
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - changes:
         - backend/api-gateway/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
         - .gitlab-ci.yml
 
 verify:core-service:
   extends: .svc-verify
   variables: { SVC: core-service }
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - changes:
-        - backend/core-service/**/*
-        - backend/identity/**/*
-        - backend/catalog/**/*
-        - backend/standards/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
+        - backend/{core-service,identity,catalog,standards}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
         - .gitlab-ci.yml
 
 verify:ai-service:
   extends: .svc-verify
   variables: { SVC: ai-service }
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - changes:
-        - backend/ai-service/**/*
-        - backend/knowledge/**/*
-        - backend/wiki/**/*
-        - backend/ops-agent/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
+        - backend/{ai-service,knowledge,wiki,ops-agent}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
         - .gitlab-ci.yml
 
 verify:community-service:
   extends: .svc-verify
   variables: { SVC: community-service }
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - changes:
-        - backend/community-service/**/*
-        - backend/community/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
+        - backend/{community-service,community}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
         - .gitlab-ci.yml
 
 verify:middleware-service:
   extends: .svc-verify
   variables: { SVC: middleware-service }
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - changes:
-        - backend/middleware-service/**/*
-        - backend/job-middleware/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
+        - backend/{middleware-service,job-middleware}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
         - .gitlab-ci.yml
 
 verify:database-service:
   extends: .svc-verify
   variables: { SVC: database-service }
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - changes:
-        - backend/database-service/**/*
-        - backend/job-database/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
+        - backend/{database-service,job-database}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
         - .gitlab-ci.yml
 
 verify:host-service:
   extends: .svc-verify
   variables: { SVC: host-service }
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - changes:
-        - backend/host-service/**/*
-        - backend/job-host/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
+        - backend/{host-service,job-host}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
         - .gitlab-ci.yml
 
 verify:network-service:
   extends: .svc-verify
   variables: { SVC: network-service }
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - changes:
-        - backend/network-service/**/*
-        - backend/job-network/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
+        - backend/{network-service,job-network}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
         - .gitlab-ci.yml
 
 verify:security-service:
   extends: .svc-verify
   variables: { SVC: security-service }
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - changes:
-        - backend/security-service/**/*
-        - backend/job-security/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
+        - backend/{security-service,job-security}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
         - .gitlab-ci.yml
 
 # ----------------------------------------------------------------------------
-# 集成流水线（骨架）：起 Nacos + 各服务，跑认证越权与联通验证。
-# 需要 docker-in-docker 或预发环境；这里给出结构与验证清单，按你们环境补全。
-# 手动触发，避免每次 push 都跑重活。
+# 部署：使用 Runner 主机 Docker Compose 启动对应服务，镜像只读取 Runner 主机已构建版本。
+# DEPLOY_COMPOSE_ENV_FILE 必须配置为受保护的 File 变量；业务部署还需要
+# DEPLOY_SERVICES_ENV_FILE。两者分别基于对应 example 文件，禁止提交真实密钥。
 # ----------------------------------------------------------------------------
-integration:e2e:
-  stage: integration
-  allow_failure: true          # 骨架阶段先不阻断；补全后改 false
-  # services:                  # ← 取消注释并配好后启用
-  #   - name: nacos/nacos-server:v2.3.2
-  #     alias: nacos
-  #   - name: mysql:8
-  #     alias: mysql
-  script:
-    - echo "== 集成验证骨架（按 docs 阶段5 安全清单补全）=="
-    - echo "1) 起 Nacos + MySQL + 各服务 fat jar（cloud profile，注入 GATEWAY_SIGNING_SECRET）"
-    - echo "2) 经网关带有效 token 访问受保护端点 -> 期望 200"
-    - echo "3) 越权A：直连下游带伪造 X-Roles 但无签名 -> 期望 401/403"
-    - echo "4) 越权B：客户端经网关塞伪造 X-User -> 网关剥除后按 token 重注入"
-    - echo "5) 越权C：直连 introspect 不带 X-Gateway-Sign -> 期望 403"
-    - echo "6) 过期 token / 退出后同 token -> 期望 401"
-    - echo "TODO 用 docker compose 起服务并用 curl 断言以上各条"
+.deploy-base:
+  stage: deploy
+  resource_group: staging-infra-portal
+  interruptible: false
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       when: manual
       allow_failure: true
 
-# ----------------------------------------------------------------------------
-# 部署：使用 Runner 主机 Docker Compose 启动对应服务，镜像只读取 Runner 主机已构建版本。
-# DEPLOY_COMPOSE_ENV_FILE 和 DEPLOY_SERVICES_ENV_FILE 必须在 GitLab CI/CD Variables
-# 中配置为受保护的“文件”变量，分别基于两个 example 文件，禁止提交真实密钥。
-# ----------------------------------------------------------------------------
 .deploy-common:
-  stage: deploy
-  resource_group: staging-infra-portal
-  interruptible: false
+  extends: .deploy-base
   before_script:
+    - export IMAGE_TAG="$(sh deploy/image-tag.sh "$CI_COMMIT_SHA" "$CI_PIPELINE_CREATED_AT")"
     - ': "${DEPLOY_COMPOSE_ENV_FILE:?缺少 DEPLOY_COMPOSE_ENV_FILE（GitLab File 类型变量）}"'
     - ': "${DEPLOY_SERVICES_ENV_FILE:?缺少 DEPLOY_SERVICES_ENV_FILE（GitLab File 类型变量）}"'
     - test -f "$DEPLOY_COMPOSE_ENV_FILE"
     - test -f "$DEPLOY_SERVICES_ENV_FILE"
+    - |
+      if grep -q '^COMPOSE_PROJECT_NAME=' "$DEPLOY_COMPOSE_ENV_FILE"; then
+        echo '检测到旧变量 COMPOSE_PROJECT_NAME，请改用 COMPOSE_BUSINESS_PROJECT_NAME 后重新部署'
+        exit 1
+      fi
     - export BUSINESS_ENV_FILE="$DEPLOY_SERVICES_ENV_FILE"
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV_FILE" --file deploy/docker-compose.yml config --quiet
     - export DEPLOY_COMPOSE_FILE="$DEPLOY_STATE_DIR/docker-compose.yml"
     - export DEPLOY_COMPOSE_ENV="$DEPLOY_STATE_DIR/compose.env"
     - export DEPLOY_SERVICES_ENV="$DEPLOY_STATE_DIR/services.env"
-    - mkdir -p "$DEPLOY_STATE_DIR" "$DEPLOY_STATE_DIR/../db"
+    - mkdir -p "$DEPLOY_STATE_DIR"
     - chmod 700 "$DEPLOY_STATE_DIR"
     - cp deploy/docker-compose.yml "$DEPLOY_COMPOSE_FILE"
     - cp "$DEPLOY_COMPOSE_ENV_FILE" "$DEPLOY_COMPOSE_ENV"
     - cp "$DEPLOY_SERVICES_ENV_FILE" "$DEPLOY_SERVICES_ENV"
-    - cp db/init.sql "$DEPLOY_STATE_DIR/../db/init.sql"
-    - cp db/seed.sql "$DEPLOY_STATE_DIR/../db/seed.sql"
     - |
       if grep -q '^IMAGE_TAG=' "$DEPLOY_COMPOSE_ENV"; then
-        sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$CI_COMMIT_SHA/" "$DEPLOY_COMPOSE_ENV"
+        sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" "$DEPLOY_COMPOSE_ENV"
       else
-        printf '\nIMAGE_TAG=%s\n' "$CI_COMMIT_SHA" >> "$DEPLOY_COMPOSE_ENV"
+        printf '\nIMAGE_TAG=%s\n' "$IMAGE_TAG" >> "$DEPLOY_COMPOSE_ENV"
       fi
       if grep -q '^BUSINESS_ENV_FILE=' "$DEPLOY_COMPOSE_ENV"; then
         sed -i 's|^BUSINESS_ENV_FILE=.*|BUSINESS_ENV_FILE=./services.env|' "$DEPLOY_COMPOSE_ENV"
@@ -363,32 +283,52 @@ integration:e2e:
         printf '\nBUSINESS_ENV_FILE=./services.env\n' >> "$DEPLOY_COMPOSE_ENV"
       fi
     - chmod 600 "$DEPLOY_COMPOSE_ENV" "$DEPLOY_SERVICES_ENV"
-    - chmod 644 "$DEPLOY_COMPOSE_FILE" "$DEPLOY_STATE_DIR/../db/init.sql" "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - chmod 644 "$DEPLOY_COMPOSE_FILE"
     - export BUSINESS_ENV_FILE=./services.env
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" config --quiet
-  # 默认（依赖组件、全栈）：始终手动，且非阻断——即使不点也不拖住流水线徽章。
-  # 单服务/前端 deploy 各自覆盖为“按路径变更自动部署”，见下。
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
-    - if: '$CI_COMMIT_REF_NAME == "master"'
-      when: manual
-      allow_failure: true
+
+.deploy-dependencies-common:
+  extends: .deploy-base
+  before_script:
+    - export IMAGE_TAG="$(sh deploy/image-tag.sh "$CI_COMMIT_SHA" "$CI_PIPELINE_CREATED_AT")"
+    - ': "${DEPLOY_COMPOSE_ENV_FILE:?缺少 DEPLOY_COMPOSE_ENV_FILE（GitLab File 类型变量）}"'
+    - test -f "$DEPLOY_COMPOSE_ENV_FILE"
+    - |
+      if grep -q '^COMPOSE_PROJECT_NAME=' "$DEPLOY_COMPOSE_ENV_FILE"; then
+        echo '检测到旧变量 COMPOSE_PROJECT_NAME，请改用 COMPOSE_BUSINESS_PROJECT_NAME 后重新部署'
+        exit 1
+      fi
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV_FILE" --file deploy/docker-compose.dependencies.yml config --quiet
+    - export DEPLOY_DEPENDENCIES_COMPOSE_FILE="$DEPLOY_STATE_DIR/docker-compose.dependencies.yml"
+    - export DEPLOY_DEPENDENCIES_COMPOSE_ENV="$DEPLOY_STATE_DIR/dependencies.env"
+    - mkdir -p "$DEPLOY_STATE_DIR" "$DEPLOY_STATE_DIR/../db"
+    - chmod 700 "$DEPLOY_STATE_DIR"
+    - cp deploy/docker-compose.dependencies.yml "$DEPLOY_DEPENDENCIES_COMPOSE_FILE"
+    - cp "$DEPLOY_COMPOSE_ENV_FILE" "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+    - cp db/init.sql "$DEPLOY_STATE_DIR/../db/init.sql"
+    - cp db/seed.sql "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - |
+      if grep -q '^IMAGE_TAG=' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"; then
+        sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      else
+        printf '\nIMAGE_TAG=%s\n' "$IMAGE_TAG" >> "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      fi
+    - chmod 600 "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+    - chmod 644 "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" "$DEPLOY_STATE_DIR/../db/init.sql" "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" config --quiet
 
 .deploy-tpl:
   extends: .deploy-common
   environment:
     name: "staging/$SVC"
   script:
-    - export IMAGE_TAG="$CI_COMMIT_SHA"
-    - docker build --tag "$IMAGE_NAMESPACE/nacos-init:$IMAGE_TAG" --file deploy/Dockerfile.nacos-init .
     - |
       if ! docker image inspect "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" >/dev/null 2>&1; then
         echo "Runner 缺少服务镜像，开始构建：$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG"
         docker build --build-arg SERVICE="$SVC" \
+          --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" \
+          --build-arg IMAGE_VERSION="$IMAGE_TAG" \
           --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" \
-          --tag "$IMAGE_NAMESPACE/$SVC:latest" \
           --file deploy/Dockerfile .
       fi
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never "$SVC"
@@ -397,34 +337,13 @@ integration:e2e:
 # 单独部署依赖组件。MySQL 首次创建数据卷时会执行 db/init.sql 和 db/seed.sql；
 # 后续部署不会重放初始化脚本。
 deploy:dependencies:
-  extends: .deploy-common
+  extends: .deploy-dependencies-common
   environment:
     name: staging/dependencies
   script:
-    - export IMAGE_TAG="$CI_COMMIT_SHA"
-    - docker build --tag "$IMAGE_NAMESPACE/nacos-init:$IMAGE_TAG" --file deploy/Dockerfile.nacos-init .
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build mysql nacos etcd minio milvus
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" run --rm --no-deps nacos-init
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps --all mysql nacos nacos-init etcd minio milvus
-
-# 一键构建并部署完整运行栈。该 job 独立完成构建和依赖镜像预拉取，
-# 不依赖未选择的手动作业，从而可直接在 GitLab Web 流水线中执行。
-deploy:full-stack:
-  extends: .deploy-common
-  # 全量重部署：始终手动（继承 .deploy-common 的非阻断手动规则），用于一次性重建整栈。
-  # 日常合并走下方单服务自动部署，不再每次全栈重建。
-  environment:
-    name: staging/full-stack
-  script:
-    - export IMAGE_TAG="$CI_COMMIT_SHA"
-    - |
-      for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
-        docker build --build-arg SERVICE="$SVC" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:latest" --file deploy/Dockerfile .
-      done
-    - docker build --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/frontend:latest" --file deploy/Dockerfile.frontend .
     - docker build --tag "$IMAGE_NAMESPACE/nacos-init:$IMAGE_TAG" --file deploy/Dockerfile.nacos-init .
     - |
-      for IMAGE in $(docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" config --images); do
+      for IMAGE in $(docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" config --images); do
         case "$IMAGE" in
           "$IMAGE_NAMESPACE"/*) continue ;;
         esac
@@ -434,14 +353,85 @@ deploy:full-stack:
           docker pull "$IMAGE"
         fi
       done
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" up --detach --wait --no-build --pull never mysql nacos etcd minio milvus
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" run --rm --no-deps nacos-init
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" ps --all mysql nacos nacos-init etcd minio milvus
+
+# 部署全部 9 个后端服务，不构建或重启前端，也不操作依赖组件。
+deploy:all-backend-services:
+  extends: .deploy-common
+  environment:
+    name: staging/all-backend-services
+  script:
+    - |
+      for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
+        if ! docker image inspect "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" >/dev/null 2>&1; then
+          echo "Runner 缺少服务镜像，开始构建：$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG"
+          docker build --build-arg SERVICE="$SVC" \
+            --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" \
+            --build-arg IMAGE_VERSION="$IMAGE_TAG" \
+            --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" \
+            --file deploy/Dockerfile .
+        fi
+      done
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service
+
+# 部署完整业务栈：9 个后端服务加前端，不操作依赖组件。
+deploy:all-services:
+  extends: .deploy-common
+  environment:
+    name: staging/all-services
+  script:
+    - |
+      for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
+        docker build --build-arg SERVICE="$SVC" --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
+      done
+    - docker build --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --file deploy/Dockerfile.frontend .
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/api/public/releases
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps --all
 
+# 初始化或全量部署：先初始化/更新依赖栈，再构建并部署完整业务栈。
+deploy:full-stack:
+  extends: .deploy-common
+  environment:
+    name: staging/full-stack
+  script:
+    - export DEPLOY_DEPENDENCIES_COMPOSE_FILE="$DEPLOY_STATE_DIR/docker-compose.dependencies.yml"
+    - export DEPLOY_DEPENDENCIES_COMPOSE_ENV="$DEPLOY_STATE_DIR/dependencies.env"
+    - mkdir -p "$DEPLOY_STATE_DIR/../db"
+    - cp deploy/docker-compose.dependencies.yml "$DEPLOY_DEPENDENCIES_COMPOSE_FILE"
+    - cp "$DEPLOY_COMPOSE_ENV_FILE" "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+    - cp db/init.sql "$DEPLOY_STATE_DIR/../db/init.sql"
+    - cp db/seed.sql "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - |
+      if grep -q '^IMAGE_TAG=' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"; then
+        sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      else
+        printf '\nIMAGE_TAG=%s\n' "$IMAGE_TAG" >> "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      fi
+    - chmod 600 "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+    - chmod 644 "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" "$DEPLOY_STATE_DIR/../db/init.sql" "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" config --quiet
+    - docker build --tag "$IMAGE_NAMESPACE/nacos-init:$IMAGE_TAG" --file deploy/Dockerfile.nacos-init .
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" up --detach --wait --no-build --pull missing mysql nacos etcd minio milvus
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" run --rm --no-deps nacos-init
+    - |
+      for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
+        docker build --build-arg SERVICE="$SVC" --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
+      done
+    - docker build --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --file deploy/Dockerfile.frontend .
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/api/public/releases
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" ps --all mysql nacos nacos-init etcd minio milvus
+    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps --all
+
 # ----------------------------------------------------------------------------
 # 单服务自动部署（增量 CD）：master 上仅当该服务自身/能力模块/共享库变更时，
-# verify:<svc> 通过后自动部署该服务；未变服务不进流水线，不部署也不阻断。
+# 所有 validate/build 作业通过后自动部署该服务；未变服务不进流水线，不部署也不阻断。
 # 每个 changes 与对应 verify:<svc> 保持一致，但去掉 .gitlab-ci.yml——
 # 改 CI 文件本身不应触发未变服务的重部署。改共享库仍扇出到全部服务。
 # Web 手动流水线里可逐个手动部署（非阻断）。
@@ -449,214 +439,138 @@ deploy:full-stack:
 deploy:api-gateway:
   extends: .deploy-tpl
   variables: { SVC: api-gateway }
-  needs: [{ job: "verify:api-gateway", optional: true }]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       changes:
         - backend/api-gateway/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
-      when: on_success
-      allow_failure: false
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
 
 deploy:core-service:
   extends: .deploy-tpl
   variables: { SVC: core-service }
-  needs: [{ job: "verify:core-service", optional: true }]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       changes:
-        - backend/core-service/**/*
-        - backend/identity/**/*
-        - backend/catalog/**/*
-        - backend/standards/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
-      when: on_success
-      allow_failure: false
+        - backend/{core-service,identity,catalog,standards}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
 
 deploy:ai-service:
   extends: .deploy-tpl
   variables: { SVC: ai-service }
-  needs: [{ job: "verify:ai-service", optional: true }]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       changes:
-        - backend/ai-service/**/*
-        - backend/knowledge/**/*
-        - backend/wiki/**/*
-        - backend/ops-agent/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
-      when: on_success
-      allow_failure: false
+        - backend/{ai-service,knowledge,wiki,ops-agent}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
 
 deploy:community-service:
   extends: .deploy-tpl
   variables: { SVC: community-service }
-  needs: [{ job: "verify:community-service", optional: true }]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       changes:
-        - backend/community-service/**/*
-        - backend/community/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
-      when: on_success
-      allow_failure: false
+        - backend/{community-service,community}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
 
 deploy:middleware-service:
   extends: .deploy-tpl
   variables: { SVC: middleware-service }
-  needs: [{ job: "verify:middleware-service", optional: true }]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       changes:
-        - backend/middleware-service/**/*
-        - backend/job-middleware/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
-      when: on_success
-      allow_failure: false
+        - backend/{middleware-service,job-middleware}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
 
 deploy:database-service:
   extends: .deploy-tpl
   variables: { SVC: database-service }
-  needs: [{ job: "verify:database-service", optional: true }]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       changes:
-        - backend/database-service/**/*
-        - backend/job-database/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
-      when: on_success
-      allow_failure: false
+        - backend/{database-service,job-database}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
 
 deploy:host-service:
   extends: .deploy-tpl
   variables: { SVC: host-service }
-  needs: [{ job: "verify:host-service", optional: true }]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       changes:
-        - backend/host-service/**/*
-        - backend/job-host/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
-      when: on_success
-      allow_failure: false
+        - backend/{host-service,job-host}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
 
 deploy:network-service:
   extends: .deploy-tpl
   variables: { SVC: network-service }
-  needs: [{ job: "verify:network-service", optional: true }]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       changes:
-        - backend/network-service/**/*
-        - backend/job-network/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
-      when: on_success
-      allow_failure: false
+        - backend/{network-service,job-network}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
 
 deploy:security-service:
   extends: .deploy-tpl
   variables: { SVC: security-service }
-  needs: [{ job: "verify:security-service", optional: true }]
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       changes:
-        - backend/security-service/**/*
-        - backend/job-security/**/*
-        - backend/pom.xml
-        - backend/modular-monolith-parent/pom.xml
-        - backend/common-core/**/*
-        - backend/common-security/**/*
-        - backend/common-web/**/*
-      when: on_success
-      allow_failure: false
+        - backend/{security-service,job-security}/**/*
+        - backend/{pom.xml,modular-monolith-parent/pom.xml,common-core/**/*,common-security/**/*,common-web/**/*}
 
 # 前端独立更新不拉起依赖，避免要求同一提交同时存在 Gateway 镜像。
 deploy:frontend:
   extends: .deploy-common
   environment:
     name: staging/frontend
-  needs: [{ job: "verify:frontend", optional: true }]
   # 前端有变更时（master）自动部署；与 verify:frontend 触发路径一致（去掉 .gitlab-ci.yml）。
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
-      allow_failure: true
+    - *skip-schedule
+    - *web-manual
     - if: '$CI_COMMIT_REF_NAME == "master"'
       changes:
         - frontend/**/*
-        - deploy/Dockerfile.frontend
-        - deploy/nginx.conf
-      when: on_success
-      allow_failure: false
+        - deploy/{Dockerfile.frontend,nginx.conf}
   script:
-    - export IMAGE_TAG="$CI_COMMIT_SHA"
     - |
       if ! docker image inspect "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" >/dev/null 2>&1; then
         echo "Runner 缺少前端镜像，开始构建：$IMAGE_NAMESPACE/frontend:$IMAGE_TAG"
         docker build \
+          --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" \
+          --build-arg IMAGE_VERSION="$IMAGE_TAG" \
           --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" \
-          --tag "$IMAGE_NAMESPACE/frontend:latest" \
           --file deploy/Dockerfile.frontend .
       fi
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-deps --no-build --pull never frontend
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps frontend
+
+# GitLab Pipeline Schedule 每日触发；只清理 10 个业务服务的新格式标签。
+# 每个服务按镜像创建时间保留最近 3 个，旧 SHA 标签和依赖镜像不在清理范围内。
+cleanup:business-images:
+  stage: cleanup
+  resource_group: staging-infra-portal
+  interruptible: false
+  variables:
+    BUSINESS_IMAGE_KEEP_COUNT: "3"
+  script:
+    - sh deploy/cleanup-business-images.sh
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
