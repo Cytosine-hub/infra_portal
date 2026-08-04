@@ -15,5 +15,6 @@ public class ChatMessage {
     private String role;
     private String content;
     private String referencesText;
+    private String attachmentsText;
     private LocalDateTime createdAt;
 }

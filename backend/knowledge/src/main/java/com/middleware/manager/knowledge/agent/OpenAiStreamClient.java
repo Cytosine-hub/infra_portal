@@ -7,7 +7,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.Content;
+import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -127,7 +130,7 @@ public class OpenAiStreamClient {
         }
     }
 
-    private JsonArray toOpenAiMessages(List<ChatMessage> messages) {
+    JsonArray toOpenAiMessages(List<ChatMessage> messages) {
         JsonArray array = new JsonArray();
         for (ChatMessage message : messages) {
             JsonObject item = new JsonObject();
@@ -136,7 +139,11 @@ public class OpenAiStreamClient {
                 item.addProperty("content", systemMessage.text());
             } else if (message instanceof UserMessage userMessage) {
                 item.addProperty("role", "user");
-                item.addProperty("content", userMessage.hasSingleText() ? userMessage.singleText() : userMessage.toString());
+                if (userMessage.hasSingleText()) {
+                    item.addProperty("content", userMessage.singleText());
+                } else {
+                    item.add("content", toOpenAiUserContent(userMessage.contents()));
+                }
             } else if (message instanceof AiMessage aiMessage) {
                 item.addProperty("role", "assistant");
                 item.addProperty("content", aiMessage.text() != null ? aiMessage.text() : "");
@@ -147,6 +154,31 @@ public class OpenAiStreamClient {
             array.add(item);
         }
         return array;
+    }
+
+    private JsonArray toOpenAiUserContent(List<Content> contents) {
+        JsonArray result = new JsonArray();
+        for (Content content : contents) {
+            JsonObject item = new JsonObject();
+            if (content instanceof TextContent textContent) {
+                item.addProperty("type", "text");
+                item.addProperty("text", textContent.text());
+            } else if (content instanceof ImageContent imageContent) {
+                item.addProperty("type", "image_url");
+                JsonObject imageUrl = new JsonObject();
+                if (imageContent.image().url() != null) {
+                    imageUrl.addProperty("url", imageContent.image().url().toString());
+                } else {
+                    imageUrl.addProperty("url", "data:" + imageContent.image().mimeType()
+                            + ";base64," + imageContent.image().base64Data());
+                }
+                item.add("image_url", imageUrl);
+            } else {
+                continue;
+            }
+            result.add(item);
+        }
+        return result;
     }
 
     private String trimTrailingSlash(String value) {

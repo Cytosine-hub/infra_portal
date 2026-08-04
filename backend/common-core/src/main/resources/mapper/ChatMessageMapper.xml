@@ -8,6 +8,7 @@
         <result property="role" column="role"/>
         <result property="content" column="content"/>
         <result property="referencesText" column="references_text"/>
+        <result property="attachmentsText" column="attachments_text"/>
         <result property="createdAt" column="created_at"/>
     </resultMap>
 
@@ -16,8 +17,8 @@
     </select>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO chat_messages (session_id, role, content, references_text, created_at)
-        VALUES (#{sessionId}, #{role}, #{content}, #{referencesText}, COALESCE(#{createdAt}, NOW()))
+        INSERT INTO chat_messages (session_id, role, content, references_text, attachments_text, created_at)
+        VALUES (#{sessionId}, #{role}, #{content}, #{referencesText}, #{attachmentsText}, COALESCE(#{createdAt}, NOW()))
     </insert>
 
 </mapper>

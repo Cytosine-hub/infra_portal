@@ -51,6 +51,7 @@ cp -r "$PROJECT_DIR/frontend/dist/"* "$OUTPUT_DIR/frontend/dist/"
 
 # DDL
 cp "$PROJECT_DIR/backend/knowledge/src/main/resources/db/knowledge_ddl.sql" "$OUTPUT_DIR/db/"
+cp "$PROJECT_DIR/db/upgrade_20260804_diagnostic_attachments.sql" "$OUTPUT_DIR/db/"
 
 # 文档
 cp "$PROJECT_DIR/docs/production-deploy.md" "$OUTPUT_DIR/docs/"

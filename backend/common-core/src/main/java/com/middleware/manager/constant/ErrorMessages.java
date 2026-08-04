@@ -25,6 +25,14 @@ public final class ErrorMessages {
     public static final String FILE_UPLOAD_FAILED = "文件上传失败";
     public static final String FILE_READ_FAILED = "文件读取失败";
     public static final String KNOWLEDGE_CONTENT_EMPTY = "文档未解析出可索引的正文";
+    public static final String DIAGNOSTIC_ATTACHMENT_COUNT_EXCEEDED = "每次最多上传 5 个附件";
+    public static final String DIAGNOSTIC_ATTACHMENT_TOO_LARGE = "单个附件不能超过 10MB";
+    public static final String DIAGNOSTIC_ATTACHMENT_TOTAL_SIZE_EXCEEDED = "附件总大小不能超过 20MB";
+    public static final String DIAGNOSTIC_ATTACHMENT_TYPE_UNSUPPORTED = "不支持该附件格式";
+    public static final String DIAGNOSTIC_ATTACHMENT_EMPTY = "附件内容为空";
+    public static final String DIAGNOSTIC_ATTACHMENT_READ_FAILED = "附件读取失败";
+    public static final String DIAGNOSTIC_ATTACHMENT_PROMPT = "请分析附件内容并给出排查结论";
+    public static final String DIAGNOSTIC_MESSAGE_REQUIRED = "消息或附件不能为空";
 
     // 用户相关
     public static final String USER_NOT_FOUND = "用户不存在";

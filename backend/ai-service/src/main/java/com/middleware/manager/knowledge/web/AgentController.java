@@ -8,11 +8,12 @@ import com.middleware.manager.exception.NotFoundException;
 import com.middleware.manager.knowledge.agent.ChatMessage;
 import com.middleware.manager.knowledge.agent.ChatSession;
 import com.middleware.manager.knowledge.agent.ChatSessionMapper;
+import com.middleware.manager.knowledge.agent.DiagnosticAttachment;
+import com.middleware.manager.knowledge.agent.DiagnosticAttachmentService;
 import com.middleware.manager.knowledge.agent.TroubleshootAgent;
 import com.middleware.manager.knowledge.agent.TroubleshootAgent.AgentResponse;
 import com.middleware.manager.repository.AdminAccountMapper;
 import com.middleware.manager.security.PermissionService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,8 +22,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.multipart.MultipartFile;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -38,29 +42,54 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class AgentController {
 
-    @Autowired
-    private TroubleshootAgent agent;
-
-    @Autowired
-    private ChatSessionMapper chatSessionMapper;
-
-    @Autowired
-    private AdminAccountMapper adminAccountMapper;
-
-    @Autowired
-    private PermissionService permissionService;
+    private final TroubleshootAgent agent;
+    private final ChatSessionMapper chatSessionMapper;
+    private final AdminAccountMapper adminAccountMapper;
+    private final PermissionService permissionService;
+    private final DiagnosticAttachmentService attachmentService;
 
     private final ExecutorService sseExecutor = Executors.newCachedThreadPool();
 
-    @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public AgentController(TroubleshootAgent agent,
+                           ChatSessionMapper chatSessionMapper,
+                           AdminAccountMapper adminAccountMapper,
+                           PermissionService permissionService,
+                           DiagnosticAttachmentService attachmentService) {
+        this.agent = agent;
+        this.chatSessionMapper = chatSessionMapper;
+        this.adminAccountMapper = adminAccountMapper;
+        this.permissionService = permissionService;
+        this.attachmentService = attachmentService;
+    }
+
+    @PostMapping(value = "/chat", consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chat(@RequestBody ChatRequest request, Authentication authentication) {
+        String message = requireMessage(request.getMessage(), false);
+        return startChat(request.getSessionId(), message, List.of(), authentication);
+    }
+
+    @PostMapping(value = "/chat", consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chatMultipart(@RequestParam(required = false) Long sessionId,
+                                    @RequestParam(required = false) String message,
+                                    @RequestPart(name = "attachments", required = false)
+                                    List<MultipartFile> files,
+                                    Authentication authentication) {
+        List<DiagnosticAttachment> attachments = attachmentService.prepare(files);
+        return startChat(sessionId, requireMessage(message, !attachments.isEmpty()),
+                attachments, authentication);
+    }
+
+    private SseEmitter startChat(Long requestedSessionId, String message,
+                                 List<DiagnosticAttachment> attachments,
+                                 Authentication authentication) {
         SseEmitter emitter = new SseEmitter(300_000L);
         AtomicBoolean clientOpen = new AtomicBoolean(true);
 
         sseExecutor.submit(() -> {
             try {
-                String message = requireMessage(request.getMessage());
-                Long sessionId = request.getSessionId();
+                Long sessionId = requestedSessionId;
                 if (sessionId == null) {
                     ChatSession session = agent.createSession(resolveActorId(authentication));
                     sessionId = session.getId();
@@ -69,7 +98,7 @@ public class AgentController {
                 }
 
                 Long finalSessionId = sessionId;
-                AgentResponse response = agent.chatStream(sessionId, message, retryMsg -> {
+                AgentResponse response = agent.chatStream(sessionId, message, attachments, retryMsg -> {
                     safeSend(emitter, clientOpen, "retry", Map.of("message", retryMsg));
                 }, delta -> {
                     if (!safeSend(emitter, clientOpen, "delta", Map.of("content", delta))) {
@@ -202,9 +231,12 @@ public class AgentController {
         public void setMessage(String message) { this.message = message; }
     }
 
-    private String requireMessage(String message) {
+    private String requireMessage(String message, boolean hasAttachments) {
         if (message == null || message.isBlank()) {
-            throw new BusinessException(ErrorCode.PARAM_INVALID, "消息不能为空");
+            if (hasAttachments) {
+                return ErrorMessages.DIAGNOSTIC_ATTACHMENT_PROMPT;
+            }
+            throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.DIAGNOSTIC_MESSAGE_REQUIRED);
         }
         return message.trim();
     }

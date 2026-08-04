@@ -24,7 +24,8 @@ import lombok.extern.slf4j.Slf4j;
 
 @RestControllerAdvice(basePackages = {
         "com.middleware.manager.web.api",
-        "com.middleware.manager.knowledge.web"
+        "com.middleware.manager.knowledge.web",
+        "com.middleware.manager.agent.web"
 })
 @Slf4j
 public class ApiExceptionHandler {

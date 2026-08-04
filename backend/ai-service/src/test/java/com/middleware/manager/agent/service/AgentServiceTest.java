@@ -6,6 +6,9 @@ import com.middleware.manager.agent.repository.AgentToolInvocationMapper;
 import com.middleware.manager.agent.skill.Skill;
 import com.middleware.manager.agent.skill.SkillLoader;
 import com.middleware.manager.agent.tool.Tool;
+import com.middleware.manager.knowledge.agent.DiagnosticAttachment;
+import com.middleware.manager.knowledge.agent.DiagnosticAttachmentService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -15,6 +18,27 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AgentServiceTest {
+
+    @Test
+    @DisplayName("TC-DIAG-ATT-110 Ops Agent 应把附件正文和图片传入模型")
+    void passesAttachmentsToModel() {
+        RecordingChatModel model = new RecordingChatModel();
+        AgentService service = new AgentService(model, new SingleSkillLoader(null),
+                List.of(new StaticTool("knowledge_search", "未命中")), null,
+                new DiagnosticAttachmentService(List.of()));
+        List<DiagnosticAttachment> attachments = List.of(
+                new DiagnosticAttachment("error.log", "text/plain", 18,
+                        DiagnosticAttachment.Kind.DOCUMENT, "upstream timeout", null),
+                new DiagnosticAttachment("screen.png", "image/png", 4,
+                        DiagnosticAttachment.Kind.IMAGE, null, "aGVsbG8="));
+
+        service.chat("分析附件", Map.of(), null, 7L, 10L, ignored -> {}, attachments);
+
+        ChatModel.Message user = model.messages.get(model.messages.size() - 1);
+        assertTrue(user.content().contains("upstream timeout"));
+        assertEquals(1, user.images().size());
+        assertEquals("image/png", user.images().get(0).contentType());
+    }
 
     @Test
     void skillToolCallEmitsEventsAndAuditsInvocation() {
@@ -72,7 +96,8 @@ class AgentServiceTest {
 
     private AgentService service(Skill skill, Tool tool, AgentToolInvocationMapper mapper) {
         ToolGateway gateway = new ToolGateway(new AgentToolInvocationService(mapper));
-        return new AgentService(new StaticChatModel(), new SingleSkillLoader(skill), List.of(tool), gateway);
+        return new AgentService(new StaticChatModel(), new SingleSkillLoader(skill), List.of(tool), gateway,
+                new DiagnosticAttachmentService(List.of()));
     }
 
     private Skill skill(String name, Skill.Step... steps) {
@@ -116,6 +141,16 @@ class AgentServiceTest {
     private static class StaticChatModel implements ChatModel {
         @Override
         public String generate(List<Message> messages) {
+            return "final answer";
+        }
+    }
+
+    private static class RecordingChatModel implements ChatModel {
+        private List<Message> messages = List.of();
+
+        @Override
+        public String generate(List<Message> messages) {
+            this.messages = messages;
             return "final answer";
         }
     }

@@ -117,6 +117,19 @@ export async function request(path, options = {}) {
   return JSON.parse(text)
 }
 
+export async function authorizedFetch(path, options = {}) {
+  const token = 'token' in options ? options.token : localStorage.getItem(TOKEN_KEY)
+  const headers = new Headers(options.headers || {})
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+  const response = await fetch(path, { ...options, headers })
+  if (response.status === 401 && token) {
+    handleUnauthorized()
+  }
+  return response
+}
+
 export async function fetchBinary(path) {
   const token = localStorage.getItem(TOKEN_KEY)
   const headers = new Headers()
