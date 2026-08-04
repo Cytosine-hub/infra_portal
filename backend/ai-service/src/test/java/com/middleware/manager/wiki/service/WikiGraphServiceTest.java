@@ -2,8 +2,10 @@ package com.middleware.manager.wiki.service;
 
 import com.middleware.manager.wiki.entity.WikiLink;
 import com.middleware.manager.wiki.entity.WikiPage;
+import com.middleware.manager.wiki.entity.WikiSource;
 import com.middleware.manager.wiki.repository.WikiLinkMapper;
 import com.middleware.manager.wiki.repository.WikiPageMapper;
+import com.middleware.manager.wiki.repository.WikiSourceMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,8 @@ class WikiGraphServiceTest {
     @Mock
     private WikiLinkMapper linkMapper;
     @Mock
+    private WikiSourceMapper sourceMapper;
+    @Mock
     private WikiPermissionService permissionService;
 
     private WikiGraphService graphService;
@@ -34,8 +38,9 @@ class WikiGraphServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        graphService = new WikiGraphService(pageMapper, linkMapper, permissionService);
+        graphService = new WikiGraphService(pageMapper, linkMapper, sourceMapper, permissionService);
         ReflectionTestUtils.setField(graphService, "maxNodes", 1000);
+        when(sourceMapper.findAllForGraph()).thenReturn(List.of());
     }
 
     @Test
@@ -98,6 +103,24 @@ class WikiGraphServiceTest {
         assertEquals(1, besStats.get("edgeCount"));
     }
 
+    @Test
+    @DisplayName("登录用户图谱包含参数标准和文档来源")
+    void authenticatedGraphIncludesKnowledgeSourcesWhenPagesAreEmpty() {
+        when(pageMapper.findAllExcludingContent()).thenReturn(List.of());
+        when(linkMapper.findAll()).thenReturn(List.of());
+        when(sourceMapper.findAllForGraph()).thenReturn(List.of(
+                source(77L, "Tomcat JVM 参数标准", "STANDARD_DOC", "中间件", "Tomcat"),
+                source(78L, "Tomcat 监控标准", "STANDARD_DOCUMENT", "中间件", "Tomcat"),
+                source(79L, "MySQL 参数标准", "STANDARD_DOC", "数据库", "MySQL")));
+
+        Map<String, Object> graph = graphService.buildGraph(authentication());
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) graph.get("nodes");
+
+        assertEquals(3, nodes.size());
+        assertEquals("Tomcat JVM 参数标准", findSourceNode(nodes, 77L).get("name"));
+        assertEquals(1, ((List<?>) graph.get("links")).size());
+    }
+
     private TestingAuthenticationToken authentication() {
         TestingAuthenticationToken authentication = new TestingAuthenticationToken("mwadmin", "n/a", "ROLE_MIDDLEWARE_ADMIN");
         authentication.setAuthenticated(true);
@@ -134,5 +157,23 @@ class WikiGraphServiceTest {
         link.setLinkType("RELATED");
         link.setConfidence(BigDecimal.ONE);
         return link;
+    }
+
+    private WikiSource source(Long id, String title, String sourceType, String category, String software) {
+        WikiSource source = new WikiSource();
+        source.setId(id);
+        source.setTitle(title);
+        source.setSourceType(sourceType);
+        source.setCategory(category);
+        source.setSoftware(software);
+        source.setIngested(true);
+        return source;
+    }
+
+    private Map<String, Object> findSourceNode(List<Map<String, Object>> nodes, Long sourceId) {
+        return nodes.stream()
+                .filter(node -> sourceId.equals(node.get("sourceId")))
+                .findFirst()
+                .orElseThrow();
     }
 }

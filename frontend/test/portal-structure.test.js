@@ -351,6 +351,15 @@ describe('门户页面结构优化验收', () => {
     expect(context.notify).toHaveBeenCalledWith('复制失败', 'error')
   })
 
+  test('TC-PORTAL-010 旧 Wiki 地址只规范化到统一知识库入口', () => {
+    expect(parseHashRoute('/wiki')).toEqual({
+      name: 'knowledge', legacy: true, legacyTarget: 'knowledge'
+    })
+    expect(parseHashRoute('/wiki?page=42')).toEqual({
+      name: 'knowledge', legacy: true, legacyTarget: 'knowledge'
+    })
+  })
+
   test('TC-PORTAL-006 (TC-06) 岗位模块独立注册入口、功能路由与接口配置', async () => {
     expect(new Set(jobModules.map(({ modulePath }) => modulePath)).size).toBe(5)
     expect(new Set(jobModules.map(({ apiConfigKey }) => apiConfigKey)).size).toBe(5)

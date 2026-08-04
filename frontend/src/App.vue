@@ -366,9 +366,14 @@ function syncRoute() {
   const next = parseHashRoute(window.location.hash)
   Object.assign(route, {
     token: null, standardId: null, standardType: null, documentId: null, postId: null,
-    jobId: null, feature: null, legacy: false
+    jobId: null, feature: null, legacy: false, legacyTarget: null
   }, next)
-  if (next.legacy) window.history.replaceState(null, '', `#/jobs/${next.jobId}/${next.feature}`)
+  if (next.legacy) {
+    const target = next.legacyTarget === 'knowledge'
+      ? '#/knowledge'
+      : `#/jobs/${next.jobId}/${next.feature}`
+    window.history.replaceState(null, '', target)
+  }
   updateDocumentTitle()
   // 独立页面组件自行加载数据（HomePage/DownloadsPage/StandardsPage/岗位模块/KnowledgeBasePage/DiagnosticsPanel）
   const selfManagedRoutes = ['home', 'public', 'standards', 'jobModule', 'knowledge', 'diagnostics']

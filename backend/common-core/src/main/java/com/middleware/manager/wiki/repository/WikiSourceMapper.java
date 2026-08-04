@@ -23,6 +23,9 @@ public interface WikiSourceMapper {
 
     List<WikiSource> findAll();
 
+    /** 图谱投影：只返回来源元数据，不加载正文。 */
+    List<WikiSource> findAllForGraph();
+
     /** 健康检查投影：content 只返回是否存在，避免传输 LONGTEXT。 */
     List<WikiSource> findAllForHealth();
 

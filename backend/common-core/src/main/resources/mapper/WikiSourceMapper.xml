@@ -40,6 +40,12 @@
         SELECT * FROM wiki_sources ORDER BY created_at DESC
     </select>
 
+    <select id="findAllForGraph" resultMap="wikiSourceResultMap">
+        SELECT id, title, source_type, source_ref, category, software, ingested, created_at
+        FROM wiki_sources
+        ORDER BY created_at DESC, id DESC
+    </select>
+
     <select id="findAllForHealth" resultMap="wikiSourceResultMap">
         SELECT id, title, source_type, source_ref, file_path, content_hash,
                CASE WHEN content IS NULL OR TRIM(content) = '' THEN NULL ELSE '1' END AS content

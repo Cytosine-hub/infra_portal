@@ -11,7 +11,7 @@
     <EmptyState
       v-else-if="!nodeCount"
       icon="🌐"
-      message="还没有可展示的关系。经验页面之间用 [[页面标题]] 互相引用后会自动成图。"
+      message="还没有可展示的知识关系。导入标准、文档或经验内容后会按软件和分类自动成图。"
     />
     <div v-show="!loading && nodeCount" ref="container" class="graph-container"></div>
   </div>

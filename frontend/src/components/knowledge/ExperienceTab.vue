@@ -287,7 +287,7 @@ async function exportPages() {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'wiki-export.zip'
+    link.download = 'knowledge-export.zip'
     link.click()
     URL.revokeObjectURL(url)
   } catch (error) {

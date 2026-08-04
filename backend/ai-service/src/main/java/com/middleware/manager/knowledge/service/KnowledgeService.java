@@ -29,6 +29,8 @@ public class KnowledgeService implements KnowledgeSearchPort {
 
     private static final Set<String> IMPORTABLE_CONTENT_TYPES = Set.of(
             "STANDARD_DOCUMENT", "FORUM_POST");
+    private static final Set<String> LISTABLE_SOURCE_TYPES = Set.of(
+            "UPLOAD", "STANDARD_DOC", "STANDARD_DOCUMENT", "FORUM_POST");
 
     private final TextSplitter textSplitter;
     private final EmbeddingService embeddingService;
@@ -294,7 +296,7 @@ public class KnowledgeService implements KnowledgeSearchPort {
     public List<Map<String, Object>> listDocuments() {
         List<Map<String, Object>> docs = new ArrayList<>();
         for (WikiSource source : wikiSourceMapper.findAll()) {
-            if (!"UPLOAD".equals(source.getSourceType()) && !"STANDARD_DOC".equals(source.getSourceType())) {
+            if (!LISTABLE_SOURCE_TYPES.contains(source.getSourceType())) {
                 continue;
             }
             Map<String, Object> item = new LinkedHashMap<>();

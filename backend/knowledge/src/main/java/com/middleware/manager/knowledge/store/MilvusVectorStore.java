@@ -13,10 +13,8 @@ import io.milvus.v2.service.collection.request.AddFieldReq;
 import io.milvus.v2.service.collection.request.CreateCollectionReq;
 import io.milvus.v2.service.collection.request.DescribeCollectionReq;
 import io.milvus.v2.service.collection.request.DropCollectionReq;
-import io.milvus.v2.service.collection.request.GetCollectionStatsReq;
 import io.milvus.v2.service.collection.request.HasCollectionReq;
 import io.milvus.v2.service.collection.request.LoadCollectionReq;
-import io.milvus.v2.service.collection.response.GetCollectionStatsResp;
 import io.milvus.v2.service.vector.request.AnnSearchReq;
 import io.milvus.v2.service.vector.request.DeleteReq;
 import io.milvus.v2.service.vector.request.HybridSearchReq;
@@ -341,10 +339,21 @@ public class MilvusVectorStore implements VectorStore {
 
     @Override
     public long count() {
-        GetCollectionStatsResp stats = client.getCollectionStats(GetCollectionStatsReq.builder()
+        // 集合 stats 的 numOfEntities 可能包含删除标记，健康度需要统计当前可见实体。
+        QueryResp response = client.query(QueryReq.builder()
                 .collectionName(config.getVectorCollection())
+                .filter("")
+                .outputFields(Collections.singletonList("count(*)"))
                 .build());
-        return stats.getNumOfEntities() == null ? 0L : stats.getNumOfEntities();
+        if (response == null || response.getQueryResults() == null
+                || response.getQueryResults().isEmpty()) {
+            return 0L;
+        }
+        Object value = response.getQueryResults().get(0).getEntity().get("count(*)");
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        return value == null ? 0L : Long.parseLong(String.valueOf(value));
     }
 
     /** 重建 collection：切换 embedding 模型或维度时使用，会清空全部向量。 */

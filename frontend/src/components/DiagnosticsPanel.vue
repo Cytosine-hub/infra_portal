@@ -265,9 +265,8 @@
                   </button>
                   <div v-if="expandedRefs[idx]" class="references-list">
                     <div v-for="(ref, rIdx) in msg.references" :key="rIdx" class="reference-item">
-                      <span v-if="ref.wikiPageId" class="ref-badge wiki">Wiki</span>
-                      <span v-else class="ref-badge kb">知识库</span>
-                      <a v-if="ref.wikiPageId" class="ref-link" @click.prevent="openWikiPage(ref.wikiPageId)">{{ ref.title }}</a>
+                      <span class="ref-badge kb">知识库</span>
+                      <a v-if="ref.wikiPageId" class="ref-link" @click.prevent="openKnowledgePage()">{{ ref.title }}</a>
                       <span v-else class="ref-title">{{ ref.title }}</span>
                     </div>
                   </div>
@@ -393,8 +392,8 @@ async function loadSessions() {
   }
 }
 
-function openWikiPage(pageId) {
-  window.open(`/#/wiki?page=${pageId}`, '_blank')
+function openKnowledgePage() {
+  window.location.hash = '#/knowledge'
 }
 
 async function switchSession(sessionId) {
@@ -1171,7 +1170,6 @@ async function submitSaveExperience() {
 .references-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
 .reference-item { background: rgba(255,255,255,0.6); border-radius: 6px; padding: 6px 10px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
 .ref-badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; flex-shrink: 0; }
-.ref-badge.wiki { background: #dbeafe; color: #1e40af; }
 .ref-badge.kb { background: #fef3c7; color: #92400e; }
 .ref-link { color: #2563eb; cursor: pointer; text-decoration: underline; font-weight: 500; }
 .ref-link:hover { color: #1d4ed8; }
