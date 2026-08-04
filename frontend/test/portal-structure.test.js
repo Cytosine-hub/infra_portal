@@ -137,8 +137,9 @@ describe('门户页面结构优化验收', () => {
       expect(job.entryComponent).toBeTruthy()
 
       const entry = track(mount(job.entryComponent, { props: { job, feature: null, context: {} } }))
-      expect(entry.find('.job-workspace-header').text()).toContain(`集成中心·${job.shortName}`)
-      expect(entry.find('.job-mark').text()).toBe(job.shortName)
+      expect(entry.find('.job-workspace-header').exists()).toBe(false)
+      expect(entry.find('.job-mark').exists()).toBe(false)
+      expect(entry.find('.job-feature-grid').exists()).toBe(true)
     }
   })
 
@@ -348,6 +349,15 @@ describe('门户页面结构优化验收', () => {
     await flushPromises()
 
     expect(context.notify).toHaveBeenCalledWith('复制失败', 'error')
+  })
+
+  test('TC-PORTAL-010 旧 Wiki 地址只规范化到统一知识库入口', () => {
+    expect(parseHashRoute('/wiki')).toEqual({
+      name: 'knowledge', legacy: true, legacyTarget: 'knowledge'
+    })
+    expect(parseHashRoute('/wiki?page=42')).toEqual({
+      name: 'knowledge', legacy: true, legacyTarget: 'knowledge'
+    })
   })
 
   test('TC-PORTAL-006 (TC-06) 岗位模块独立注册入口、功能路由与接口配置', async () => {

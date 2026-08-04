@@ -32,6 +32,23 @@ CREATE TABLE `agent_tool_invocations` (
   KEY `idx_created_by` (`created_by`),
   KEY `idx_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='Agent工具调用审计';
+DROP TABLE IF EXISTS `api_audit_log`;
+CREATE TABLE `api_audit_log` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `username` varchar(60) NOT NULL COMMENT '用户账号',
+  `method` varchar(10) NOT NULL COMMENT 'HTTP方法',
+  `path` varchar(500) NOT NULL COMMENT '请求路径',
+  `query_string` varchar(500) DEFAULT NULL COMMENT '查询参数',
+  `status_code` int DEFAULT NULL COMMENT '响应状态码',
+  `ip_address` varchar(50) DEFAULT NULL COMMENT '客户端IP',
+  `user_agent` varchar(500) DEFAULT NULL COMMENT '用户代理',
+  `duration_ms` bigint DEFAULT NULL COMMENT '请求耗时(毫秒)',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '操作时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_username` (`username`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_path` (`path`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='API操作审计日志';
 DROP TABLE IF EXISTS `chat_messages`;
 CREATE TABLE `chat_messages` (
   `id` bigint NOT NULL AUTO_INCREMENT,
@@ -118,7 +135,8 @@ CREATE TABLE `forum_posts` (
   `published_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_status` (`status`),
-  KEY `idx_author` (`author_username`)
+  KEY `idx_author` (`author_username`),
+  FULLTEXT KEY `ft_forum_posts_title_content` (`title`,`content`) /*!50100 WITH PARSER `ngram` */
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 DROP TABLE IF EXISTS `forum_tags`;
 CREATE TABLE `forum_tags` (
@@ -128,25 +146,7 @@ CREATE TABLE `forum_tags` (
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `name` (`name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-DROP TABLE IF EXISTS `knowledge_chunks`;
-CREATE TABLE `knowledge_chunks` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `content` text NOT NULL COMMENT '切片文本内容',
-  `source_title` varchar(500) DEFAULT NULL COMMENT '来源文档标题',
-  `source_type` varchar(50) DEFAULT NULL COMMENT '来源类型：STANDARD_DOC / UPLOAD',
-  `source_id` bigint DEFAULT NULL COMMENT '来源文档ID',
-  `category` varchar(80) DEFAULT NULL COMMENT '分类',
-  `software` varchar(120) DEFAULT NULL COMMENT '软件名称',
-  `chunk_index` int DEFAULT '0' COMMENT '切片在文档中的序号',
-  `vector_id` varchar(100) DEFAULT NULL COMMENT '向量存储ID',
-  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_source` (`source_type`,`source_id`),
-  KEY `idx_category` (`category`),
-  KEY `idx_software` (`software`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='知识库文本切片';
-DROP TABLE IF EXISTS `middleware_commands`;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;DROP TABLE IF EXISTS `middleware_commands`;
 CREATE TABLE `middleware_commands` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `software_type_id` bigint NOT NULL,
@@ -379,63 +379,7 @@ CREATE TABLE `wiki_audit_log` (
   KEY `idx_actor` (`actor_id`),
   KEY `idx_action_time` (`action`,`created_at`),
   KEY `idx_target` (`target_type`,`target_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-DROP TABLE IF EXISTS `wiki_ingest_log`;
-CREATE TABLE `wiki_ingest_log` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `source_id` bigint NOT NULL,
-  `operator_id` bigint DEFAULT NULL,
-  `pages_created` int DEFAULT '0',
-  `pages_updated` int DEFAULT '0',
-  `links_created` int DEFAULT '0',
-  `contradictions_found` int DEFAULT '0',
-  `llm_model` varchar(100) DEFAULT NULL,
-  `llm_tokens_used` int DEFAULT NULL,
-  `duration_ms` int DEFAULT NULL,
-  `status` enum('SUCCESS','PARTIAL','FAILED') NOT NULL,
-  `error_detail` text,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_source` (`source_id`),
-  KEY `idx_operator` (`operator_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-DROP TABLE IF EXISTS `wiki_ingest_tasks`;
-CREATE TABLE `wiki_ingest_tasks` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `source_id` bigint DEFAULT NULL,
-  `file_name` varchar(200) DEFAULT NULL,
-  `status` enum('PENDING','PROCESSING','COMPLETED','PARTIAL','FAILED') DEFAULT 'PENDING',
-  `progress` int DEFAULT '0' COMMENT '0-100',
-  `step` varchar(100) DEFAULT NULL COMMENT '当前步骤描述',
-  `total_chunks` int DEFAULT '0',
-  `completed_chunks` int DEFAULT '0',
-  `pages_created` int DEFAULT '0',
-  `pages_updated` int DEFAULT '0',
-  `error_message` text,
-  `quality_report` json DEFAULT NULL COMMENT '质量门禁报告',
-  `section_facts` json DEFAULT NULL COMMENT '章节事实中间产物',
-  `page_plan` json DEFAULT NULL COMMENT '页面计划中间产物',
-  `operator_id` bigint DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_status` (`status`),
-  KEY `idx_source` (`source_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-DROP TABLE IF EXISTS `wiki_links`;
-CREATE TABLE `wiki_links` (
-  `id` bigint NOT NULL AUTO_INCREMENT,
-  `from_page_id` bigint NOT NULL,
-  `to_page_id` bigint NOT NULL,
-  `link_type` enum('REFERENCES','CONTRADICTS','SPECIALIZES','DEPENDS_ON','RELATED') DEFAULT 'REFERENCES',
-  `confidence` decimal(3,2) DEFAULT NULL,
-  `context` varchar(500) DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_link` (`from_page_id`,`to_page_id`,`link_type`),
-  KEY `idx_to_page` (`to_page_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-DROP TABLE IF EXISTS `wiki_lint_results`;
+) ENGINE=InnoDB AUTO_INCREMENT=15 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;DROP TABLE IF EXISTS `wiki_lint_results`;
 CREATE TABLE `wiki_lint_results` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `lint_type` enum('ORPHAN','STALE','BROKEN_LINK','CONTRADICTION','GAP') NOT NULL,
@@ -493,13 +437,14 @@ CREATE TABLE `wiki_pages` (
   KEY `idx_status` (`status`),
   KEY `idx_software_version` (`software`,`version`),
   KEY `idx_canonical_title` (`canonical_title`),
-  FULLTEXT KEY `ft_content` (`title`,`summary`,`content`)
+  FULLTEXT KEY `ft_content` (`title`,`summary`,`content`) /*!50700 WITH PARSER `ngram` */
 ) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 DROP TABLE IF EXISTS `wiki_sources`;
 CREATE TABLE `wiki_sources` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `title` varchar(200) NOT NULL,
-  `source_type` enum('UPLOAD','STANDARD_DOC','EXPERIENCE','WEB','MANUAL') NOT NULL,
+  `source_type` varchar(40) NOT NULL,
+  `source_ref` varchar(100) DEFAULT NULL,
   `file_path` varchar(500) DEFAULT NULL,
   `content_hash` varchar(64) DEFAULT NULL,
   `content` longtext,
@@ -511,5 +456,6 @@ CREATE TABLE `wiki_sources` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_ingested` (`ingested`),
-  KEY `idx_content_hash` (`content_hash`)
+  KEY `idx_content_hash` (`content_hash`),
+  UNIQUE KEY `uk_source_ref` (`source_type`,`source_ref`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

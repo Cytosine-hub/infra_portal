@@ -41,6 +41,9 @@ spring:
       max-request-size: 2048MB
 
 app:
+  catalog:
+    base-url: "${CORE_SERVICE_URL:http://127.0.0.1:8084}"
+    load-balanced: false
   storage:
     location: ./storage
   security:
@@ -51,10 +54,12 @@ app:
   llm:
     max-concurrent: ${LLM_MAX_CONCURRENT:5}
     timeout-seconds: ${LLM_TIMEOUT_SECONDS:600}
+  embedding:
+    max-tokens: ${EMBEDDING_MAX_TOKENS:512}
   ai:
-    base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
+    base-url: ${AI_BASE_URL:http://ai.tlb.shcj-s.com:8080/v1}
     api-key: ${AI_API_KEY:}
-    model: ${AI_MODEL:mimo-v2.5-pro}
+    model: ${AI_MODEL:gpt-5.6-sol}
     max-tokens: ${AI_MAX_TOKENS:8192}
     temperature: ${AI_TEMPERATURE:0.1}
   vector:
@@ -62,17 +67,13 @@ app:
     host: ${VECTOR_HOST:localhost}
     port: ${VECTOR_PORT:19530}
     collection: ${VECTOR_COLLECTION:knowledge_chunks}
+    dimension: ${VECTOR_DIMENSION:1024}
+    rrf-k: ${VECTOR_RRF_K:60}
+    analyzer: ${VECTOR_ANALYZER:chinese}
   wiki:
     search:
       max-context-pages: ${WIKI_MAX_CONTEXT_PAGES:8}
-      max-content-chars: ${WIKI_MAX_CONTENT_CHARS:2000}
       graph-hop-limit: ${WIKI_GRAPH_HOP_LIMIT:1}
-      fulltext-min-results: ${WIKI_FULLTEXT_MIN_RESULTS:3}
-      min-results-for-wiki: ${WIKI_MIN_RESULTS:2}
-    ingest:
-      max-content-chars: ${WIKI_INGEST_MAX_CHARS:20000}
-      chunk-overlap: ${WIKI_CHUNK_OVERLAP:500}
-      parallel-chunks: ${WIKI_PARALLEL_CHUNKS:3}
     export:
       signature-secret: ${WIKI_EXPORT_SIGNATURE_SECRET:}
   zabbix:
@@ -84,16 +85,16 @@ app:
 langchain4j:
   open-ai:
     chat-model:
-      base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
+      base-url: ${AI_BASE_URL:http://ai.tlb.shcj-s.com:8080/v1}
       api-key: ${AI_API_KEY:}
-      model-name: ${AI_MODEL:mimo-v2.5-pro}
+      model-name: ${AI_MODEL:gpt-5.6-sol}
       max-tokens: ${AI_MAX_TOKENS:8192}
       temperature: ${AI_TEMPERATURE:0.1}
       timeout: ${AI_TIMEOUT:PT600S}
       log-requests: true
       log-responses: true
     embedding-model:
-      base-url: ${EMBEDDING_BASE_URL:http://localhost:11434/v1}
+      base-url: ${EMBEDDING_BASE_URL:http://host.containers.internal:11434/v1}
       api-key: ${EMBEDDING_API_KEY:ollama}
       model-name: ${EMBEDDING_MODEL:bge-large}
 
@@ -106,12 +107,12 @@ mybatis:
     - classpath*:mapper/ChatMessageMapper.xml
     - classpath*:mapper/ChatSessionMapper.xml
     - classpath*:mapper/StandardDocumentMapper.xml
+    - classpath*:mapper/KnowledgeImportSourceMapper.xml
     - classpath*:mapper/WikiSourceMapper.xml
-    - classpath*:mapper/KnowledgeChunkMapper.xml
-    - classpath*:mapper/IngestTaskMapper.xml
+    - classpath*:mapper/ParameterStandardIndexMapper.xml
+    - classpath*:mapper/StandardParameterLookupMapper.xml
     - classpath*:mapper/LintResultMapper.xml
     - classpath*:mapper/WikiAuditLogMapper.xml
-    - classpath*:mapper/WikiIngestLogMapper.xml
     - classpath*:mapper/WikiLinkMapper.xml
     - classpath*:mapper/WikiPageMapper.xml
     - classpath*:mapper/WikiPagePermissionMapper.xml

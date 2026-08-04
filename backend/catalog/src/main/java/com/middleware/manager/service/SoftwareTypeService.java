@@ -38,39 +38,15 @@ public class SoftwareTypeService implements SoftwareTypeLookup {
         this.releaseAssetMapper = releaseAssetMapper;
     }
 
-    @Transactional
-    public void initializeDefaults() {
-        seedCategory("中间件");
-        seedCategory("主机");
-        seedCategory("数据库");
-        seedCategory("安全");
-        seedCategory("网络");
-        seed("中间件", "Redis");
-        seed("中间件", "Kafka");
-        seed("中间件", "Zookeeper");
-        seed("中间件", "RabbitMQ");
-        seed("中间件", "RocketMQ");
-        seed("中间件", "Java容器");
-        seed("中间件", "Nacos");
-        seed("中间件", "nginx");
-        seed("中间件", "tomcat");
-        seed("中间件", "jdk");
-        seed("主机", "Linux");
-        seed("主机", "Windows Server");
-        seed("数据库", "MySQL");
-        seed("数据库", "PostgreSQL");
-        seed("数据库", "Oracle");
-        seed("安全", "Nessus");
-        seed("安全", "OpenVAS");
-        seed("网络", "F5");
-        seed("网络", "HAProxy");
-        seed("网络", "Keepalived");
-    }
-
     public List<SoftwareType> list(boolean activeOnly) {
         return activeOnly
                 ? softwareTypeMapper.findByActiveTrueOrderByCategoryAscNameAsc()
                 : softwareTypeMapper.findAllByOrderByCategoryAscNameAsc();
+    }
+
+    @Override
+    public List<SoftwareType> findActive() {
+        return softwareTypeMapper.findByActiveTrueOrderByCategoryAscNameAsc();
     }
 
     public List<String> listCategories() {
@@ -193,28 +169,6 @@ public class SoftwareTypeService implements SoftwareTypeLookup {
         }
         softwareTypeMapper.deleteById(id);
         log.info("软件类型已删除 id={}", id);
-    }
-
-    private void seed(String category, String name) {
-        seedCategory(category);
-        if (softwareTypeMapper.existsByCategoryIgnoreCaseAndNameIgnoreCase(category, name)) {
-            return;
-        }
-        SoftwareType type = new SoftwareType();
-        type.setCategory(category);
-        type.setName(name);
-        type.setActive(true);
-        type.setCreatedAt(LocalDateTime.now());
-        type.setUpdatedAt(LocalDateTime.now());
-        softwareTypeMapper.insert(type);
-    }
-
-    private void seedCategory(String category) {
-        String name = normalizeCategory(category);
-        if (softwareCategoryMapper.existsByNameIgnoreCase(name)) {
-            return;
-        }
-        insertCategory(name);
     }
 
     private void ensureCategory(String category) {

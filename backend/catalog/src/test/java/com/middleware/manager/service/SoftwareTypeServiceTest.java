@@ -76,6 +76,17 @@ class SoftwareTypeServiceTest {
         assertThat(service.findByIds(List.of(8L, 13L))).containsExactlyElementsOf(types);
     }
 
+    @Test
+    @DisplayName("TC-CATALOG-006 软件类型端口返回后台全部启用类型")
+    void findActiveDelegatesToCatalogMapper() {
+        List<SoftwareType> types = List.of(
+                softwareType(8L, "中间件", "Kafka"),
+                softwareType(13L, "数据库", "MySQL"));
+        when(softwareTypeMapper.findByActiveTrueOrderByCategoryAscNameAsc()).thenReturn(types);
+
+        assertThat(service.findActive()).containsExactlyElementsOf(types);
+    }
+
     private SoftwareType softwareType(Long id, String category, String name) {
         SoftwareType type = new SoftwareType();
         type.setId(id);

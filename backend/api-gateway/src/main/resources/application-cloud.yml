@@ -34,7 +34,7 @@ spring:
             - id: ai-api
               uri: lb://ai-service
               predicates:
-                - Path=/api/knowledge/**,/api/agent/**,/api/wiki/**,/api/ops-agent/**,/api/ops-agent/export/**
+                - Path=/api/knowledge/**,/api/agent/**,/api/ops-agent/**,/api/ops-agent/export/**
             - id: core-api
               uri: lb://core-service
               predicates:

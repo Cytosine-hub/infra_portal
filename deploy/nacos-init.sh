@@ -90,27 +90,33 @@ for config_file in "$NACOS_CONFIG_DIR"/*.properties; do
 
     case "$status_code" in
         200)
-            log_info "SKIP dataId=$data_id already exists"
+            if cmp -s "$config_file" "$response_file"; then
+                log_info "SKIP dataId=$data_id content unchanged"
+                continue
+            fi
+            publish_action=Updated
             ;;
         404)
-            publish_result=$(curl --fail --silent --show-error \
-                --request POST \
-                --data-urlencode "accessToken=$access_token" \
-                --data-urlencode "dataId=$data_id" \
-                --data-urlencode "group=$NACOS_CONFIG_GROUP" \
-                --data-urlencode "tenant=$NACOS_NAMESPACE" \
-                --data-urlencode 'type=properties' \
-                --data-urlencode "content@$config_file" \
-                "$NACOS_URL/nacos/v1/cs/configs") \
-                || fail "Failed to publish Nacos Data ID: $data_id"
-            [ "$publish_result" = true ] \
-                || fail "Nacos rejected Data ID publication: $data_id"
-            log_success "Published dataId=$data_id"
+            publish_action=Published
             ;;
         *)
             fail "Unexpected HTTP status for dataId=$data_id status=$status_code"
             ;;
     esac
+
+    publish_result=$(curl --fail --silent --show-error \
+        --request POST \
+        --data-urlencode "accessToken=$access_token" \
+        --data-urlencode "dataId=$data_id" \
+        --data-urlencode "group=$NACOS_CONFIG_GROUP" \
+        --data-urlencode "tenant=$NACOS_NAMESPACE" \
+        --data-urlencode 'type=properties' \
+        --data-urlencode "content@$config_file" \
+        "$NACOS_URL/nacos/v1/cs/configs") \
+        || fail "Failed to publish Nacos Data ID: $data_id"
+    [ "$publish_result" = true ] \
+        || fail "Nacos rejected Data ID publication: $data_id"
+    log_success "$publish_action dataId=$data_id"
 done
 
 [ "$config_count" -gt 0 ] || fail "No .properties files found in $NACOS_CONFIG_DIR"

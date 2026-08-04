@@ -17,7 +17,7 @@ import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,14 +37,14 @@ import lombok.extern.slf4j.Slf4j;
 public class TroubleshootAgent {
 
     private static final String SYSTEM_PROMPT =
-            "你是企业内部中间件知识库问答助手。你会收到用户问题以及系统检索到的 Wiki 和向量/关键词知识库内容。\n" +
+            "你是企业运维智能排查与知识问答助手。你会收到用户问题，以及可能为空的内部 Wiki 和知识库检索内容。\n" +
             "必须遵守：\n" +
             "1. 优先基于提供的内部知识库内容回答，不要编造内部标准、参数、流程或版本信息。\n" +
-            "2. 如果上下文来自 Wiki，引用时标注【Wiki：页面标题】；如果上下文来自知识库文档，引用时标注【知识库：来源标题】。\n" +
-            "3. 如果知识库中完全没有相关信息，明确告知用户：'知识库中未找到相关内容，无法给出基于内部知识库的结论'。\n" +
+            "2. 只有实际使用了提供的 Wiki 或知识库内容时才标注来源：Wiki 使用【Wiki：页面标题】，知识库文档使用【知识库：来源标题】。\n" +
+            "3. 如果没有提供内部知识库内容，仍要基于通用专业知识直接给出可执行的回答；简要说明未引用内部资料，不得虚构来源或出处。\n" +
             "4. 只有用户问题明显是故障、告警或线上异常排查时，才使用'问题诊断、排查步骤、解决方案'结构。\n" +
-            "5. 对介绍、说明、是什么、有哪些、如何配置、使用场景等知识问答类问题，按'概述、关键能力/配置要点、适用场景、参考来源'组织，不要输出问题诊断。\n" +
-            "6. 如果确需补充通用知识，只能放在'通用补充'中，并明确不是内部知识库依据。";
+            "5. 对介绍、说明、是什么、有哪些、如何配置、使用场景等知识问答类问题，按'概述、关键能力/配置要点、适用场景'组织；仅在有内部资料时增加'参考来源'。\n" +
+            "6. 有内部资料时如果还需补充通用知识，只能放在'通用补充'中，并明确不是内部知识库依据。";
 
     private static final int MAX_HISTORY_MESSAGES = 10;
     private static final int DEFAULT_SEARCH_TOP_K = 5;
@@ -55,24 +55,30 @@ public class TroubleshootAgent {
 
     private final ChatModel chatModel;
     private final OpenAiStreamClient streamClient;
-
-    @Autowired
-    private KnowledgeSearchPort knowledgeService;
-
-    @Autowired(required = false)
-    private WikiSearchPort wikiSearchService;
-
-    @Autowired
-    private ChatSessionMapper chatSessionMapper;
-
-    @Autowired
-    private ChatMessageMapper chatMessageMapper;
-
+    private final KnowledgeSearchPort knowledgeService;
+    private final WikiSearchPort wikiSearchService;
+    private final ChatSessionMapper chatSessionMapper;
+    private final ChatMessageMapper chatMessageMapper;
+    private final RetrievalEvidenceFilter evidenceFilter;
+    private final AnswerGroundingVerifier groundingVerifier;
     private final Gson gson = new Gson();
 
-    public TroubleshootAgent(ChatModel chatModel, OpenAiStreamClient streamClient) {
+    public TroubleshootAgent(ChatModel chatModel,
+                             OpenAiStreamClient streamClient,
+                             KnowledgeSearchPort knowledgeService,
+                             ObjectProvider<WikiSearchPort> wikiSearchServiceProvider,
+                             ChatSessionMapper chatSessionMapper,
+                             ChatMessageMapper chatMessageMapper,
+                             RetrievalEvidenceFilter evidenceFilter,
+                             AnswerGroundingVerifier groundingVerifier) {
         this.chatModel = chatModel;
         this.streamClient = streamClient;
+        this.knowledgeService = knowledgeService;
+        this.wikiSearchService = wikiSearchServiceProvider.getIfAvailable();
+        this.chatSessionMapper = chatSessionMapper;
+        this.chatMessageMapper = chatMessageMapper;
+        this.evidenceFilter = evidenceFilter;
+        this.groundingVerifier = groundingVerifier;
     }
 
     /**
@@ -137,7 +143,7 @@ public class TroubleshootAgent {
             throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
         }
 
-        String answer = response.aiMessage() != null ? response.aiMessage().text() : "";
+        String answer = finalizeAnswer(context, response.aiMessage() != null ? response.aiMessage().text() : "");
         saveAssistantMessage(sessionId, answer, context.references());
 
         // 6. Return response
@@ -158,6 +164,7 @@ public class TroubleshootAgent {
             if (answer.isBlank()) {
                 throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
             }
+            answer = finalizeAnswer(context, answer);
             saveAssistantMessage(sessionId, answer, context.references());
             return new AgentResponse(answer, context.references());
         } catch (BusinessException e) {
@@ -205,9 +212,33 @@ public class TroubleshootAgent {
             }
             throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
         }
-        String answer = response.aiMessage() != null ? response.aiMessage().text() : "";
+        String answer = finalizeAnswer(context, response.aiMessage() != null ? response.aiMessage().text() : "");
         saveAssistantMessage(sessionId, answer, context.references());
         return new AgentResponse(answer, context.references());
+    }
+
+    /**
+     * 出口侧防幻觉：核对答案中的技术标识是否在检索上下文或用户问题里有据可查。
+     * <p>不改写正文、也不整体丢弃——多数情况下答案的主体是对的，只是掺入了个别
+     * 编造的参数名或错误码。把这些标识显式列出来交给用户判断，比悄悄给出看似
+     * 专业的错误建议要安全，也比一律拒答有用。
+     */
+    private String finalizeAnswer(ChatContext context, String answer) {
+        if (answer == null || answer.isBlank()) {
+            return answer;
+        }
+        if (!context.hasReliableEvidence()) {
+            return answer;
+        }
+        AnswerGroundingVerifier.GroundingResult result =
+                groundingVerifier.verify(context.userMessage(), answer, context.evidenceText());
+        if (result.grounded()) {
+            return answer;
+        }
+        log.warn("答案包含无出处的技术标识 tokens={} question={}",
+                result.ungroundedTokens(), context.userMessage());
+        return answer + "\n\n---\n⚠️ 以下内容未能在知识库中找到依据，请人工核实："
+                + String.join("、", result.ungroundedTokens());
     }
 
     private void saveAssistantMessage(Long sessionId, String answer, List<Map<String, Object>> references) {
@@ -277,10 +308,16 @@ public class TroubleshootAgent {
         }
 
         List<KnowledgeSearchResult> searchResults = knowledgeService.search(userMessage, DEFAULT_SEARCH_TOP_K);
+        RetrievalEvidenceFilter.EvidenceSelection evidence =
+                evidenceFilter.select(userMessage, wikiResults, searchResults);
+        wikiResults = evidence.wikiResults();
+        searchResults = evidence.knowledgeResults();
         List<Map<String, Object>> references = buildReferences(wikiResults, searchResults);
         String contextMessage = buildHybridContextMessage(userMessage, wikiResults, searchResults);
         List<ChatMessage> messages = buildMessages(sessionId, contextMessage);
-        return new ChatContext(messages, references);
+        // contextMessage 即拼给模型的证据原文，出口校验据此判断答案有无出处
+        return new ChatContext(messages, references, evidence.hasReliableEvidence(),
+                userMessage, contextMessage);
     }
 
     private List<Map<String, Object>> buildReferences(List<WikiSearchResult> wikiResults,
@@ -348,7 +385,8 @@ public class TroubleshootAgent {
             }
         }
         if (wikiResults.isEmpty() && knowledgeResults.isEmpty()) {
-            sb.append("知识库中未找到相关内容。\n");
+            sb.append("没有检索到可用的内部知识库内容。请基于通用专业知识直接回答，"
+                    + "简要说明未引用内部资料，并且不要生成 Wiki、知识库来源标记或参考来源章节。\n");
         }
         return sb.toString();
     }
@@ -422,6 +460,10 @@ public class TroubleshootAgent {
         }
     }
 
-    private record ChatContext(List<ChatMessage> messages, List<Map<String, Object>> references) {
+    private record ChatContext(List<ChatMessage> messages,
+                               List<Map<String, Object>> references,
+                               boolean hasReliableEvidence,
+                               String userMessage,
+                               String evidenceText) {
     }
 }

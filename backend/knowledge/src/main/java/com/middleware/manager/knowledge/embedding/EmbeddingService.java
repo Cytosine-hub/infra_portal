@@ -16,12 +16,16 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class EmbeddingService implements EmbeddingProvider {
     private final EmbeddingModel embeddingModel;
+    private final int maxChars;
 
-    @Value("${app.embedding.max-chars:1500}")
-    private int maxChars;
-
-    public EmbeddingService(EmbeddingModel embeddingModel) {
+    public EmbeddingService(EmbeddingModel embeddingModel,
+                            @Value("${app.embedding.max-tokens:512}") int maxTokens) {
+        // 与切片预算同源：切片器按同一个 token 上限决定切多大，这里不再各说各话。
+        // 此前 splitter 900 而 embedding 截断 1500/300，两个数字对不上，
+        // 结果要么撑爆模型上下文，要么切片后半段被静默丢弃。
         this.embeddingModel = embeddingModel;
+        this.maxChars = com.middleware.manager.knowledge.splitter.TextSplitter
+                .budgetForTokenLimit(maxTokens);
     }
 
     @Override

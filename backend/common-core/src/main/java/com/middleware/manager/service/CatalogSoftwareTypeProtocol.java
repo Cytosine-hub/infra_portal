@@ -8,9 +8,11 @@ public final class CatalogSoftwareTypeProtocol {
     public static final String BASE_PATH = "/api/internal/catalog/software-types";
     public static final String BY_IDS_PATH = "/by-ids";
     public static final String BY_CATEGORY_PATH = "/by-category";
+    public static final String ACTIVE_PATH = "/active";
     public static final String RESOLVE_PATH = "/resolve";
     public static final String BY_IDS_OPERATION = "catalog.software-types.by-ids";
     public static final String BY_CATEGORY_OPERATION = "catalog.software-types.by-category";
+    public static final String ACTIVE_OPERATION = "catalog.software-types.active";
     public static final String RESOLVE_OPERATION = "catalog.software-types.resolve";
 
     private CatalogSoftwareTypeProtocol() {

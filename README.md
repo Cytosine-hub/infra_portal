@@ -29,7 +29,8 @@
 
 ### 智能排查
 - 基于知识库的 RAG 对话，AI 辅助故障诊断和排查建议
-- 工具调用：Zabbix 监控数据查询、日志检索、命令执行
+- 工具调用：知识库检索、Zabbix 监控查询与导出、排查经验沉淀
+- 日志检索和 Prometheus 查询保留扩展接口，当前尚未接入；不提供生产命令自动执行
 
 ### 论坛
 - 发帖、评论、点赞、标签分类
@@ -88,7 +89,7 @@ sh deploy/smoke-test.sh
 
 旧版 `compose.env` 中若存在 Docker Compose 保留变量 `COMPOSE_PROJECT_NAME`，升级时必须删除并改用 `COMPOSE_BUSINESS_PROJECT_NAME`；否则它会覆盖两份清单各自的项目名，破坏独立启停。
 
-`nacos-init` 只创建缺失的 namespace 和 9 个 Data ID，不覆盖 Nacos 中已有配置。MySQL 只在全新数据目录首次执行 `db/init.sql` 和 `db/seed.sql`，已有数据目录不会重放初始化脚本。前端入口为 `http://localhost:5173`。
+`nacos-init` 会创建缺失的 namespace 和 9 个 Data ID，并在模板内容变化时更新对应 Data ID。MySQL 只在全新数据目录首次执行 `db/init.sql` 和 `db/seed.sql`，已有数据目录不会重放初始化脚本。前端入口为 `http://localhost:5173`。
 
 GitLab 的 `verify:deployment` 会执行部署脚本语法、CI/Compose/镜像维护契约测试，并自动生成临时测试配置完成 Compose 解析，不启动运行栈。Nacos 初始化单元测试依赖 `jq`，不在 `docker:27-cli` 门禁中执行；生产 `nacos-init` 镜像仍内置 `jq`。后端镜像首次构建运行完整 Maven 验证并通过 BuildKit 复用结果，前端镜像构建会执行 Vitest。实际部署使用 File 类型 CI/CD Variable：依赖部署只要求 `DEPLOY_COMPOSE_ENV_FILE`，业务部署还要求 `DEPLOY_SERVICES_ENV_FILE`。
 
@@ -151,9 +152,9 @@ npm run dev
 | `APP_DB_NAME` | `middleware_resource_manager` | 数据库名 |
 | `APP_DB_USERNAME` | `root` | 数据库用户 |
 | `APP_DB_PASSWORD` | — | 数据库密码 |
-| `AI_BASE_URL` | `https://token-plan-cn.xiaomimimo.com/v1` | LLM API 地址 |
+| `AI_BASE_URL` | `http://ai.tlb.shcj-s.com:8080/v1` | OpenAI 兼容 LLM API 地址，必须包含 `/v1` |
 | `AI_API_KEY` | — | LLM API Key |
-| `AI_MODEL` | `mimo-v2.5-pro` | 模型名称 |
+| `AI_MODEL` | `gpt-5.6-sol` | 模型名称 |
 | `VECTOR_HOST` | `localhost` | Milvus 地址 |
 | `VECTOR_PORT` | `19530` | Milvus 端口 |
 | `ZABBIX_URL` | `http://localhost:8080/api_jsonrpc.php` | Zabbix API 地址 |
@@ -234,6 +235,7 @@ mysql -u root middleware_resource_manager < db/seed.sql
 
 ## 文档
 
+- `docs/system-handover-overview.md` — 系统功能、架构、技术方案与知识库/智能排查现状
 - `docs/development-standards.md` — 开发规范
 - `docs/wiki-ingest-quality-optimization-plan-v2.md` — Wiki 编译优化方案
 - `docs/wiki-ingest-quality-issues.md` — Wiki 编译质量问题清单

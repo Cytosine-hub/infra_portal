@@ -3,7 +3,7 @@ import { getJobModule } from '../modules/index.js'
 
 const routeNames = {
   HOME: 'home', PUBLIC: 'public', STANDARDS: 'standards', FORUM: 'forum', FORUM_DETAIL: 'forumDetail',
-  FORUM_EDITOR: 'forumEditor', FORUM_MINE: 'forumMine', KNOWLEDGE: 'knowledge', WIKI: 'wiki',
+  FORUM_EDITOR: 'forumEditor', FORUM_MINE: 'forumMine', KNOWLEDGE: 'knowledge',
   DIAGNOSTICS: 'diagnostics', JOB_MODULE: 'jobModule', ADMIN: 'admin', DOCUMENT_EDITOR: 'documentEditor',
   WORD_PREVIEW: 'wordPreview', DATA_MIGRATION: 'dataMigration'
 }
@@ -25,7 +25,10 @@ export function parseHashRoute(hashValue = '') {
   if (forumPostMatch) return { name: 'forumDetail', postId: forumPostMatch[1] }
   if (hash === '/forum' || hash.startsWith('/forum')) return { name: 'forum', postId: null }
   if (hash.startsWith('/knowledge')) return { name: 'knowledge' }
-  if (hash.startsWith('/wiki')) return { name: 'wiki' }
+  // Wiki 已并入知识库，旧书签只规范化到统一入口，不再挂载旧页面。
+  if (hash === '/wiki' || hash.startsWith('/wiki?') || hash.startsWith('/wiki/')) {
+    return { name: 'knowledge', legacy: true, legacyTarget: 'knowledge' }
+  }
   if (hash.startsWith('/diagnostics')) return { name: 'diagnostics' }
   if (hash.startsWith('/data-migration')) {
     return { name: 'jobModule', jobId: 'database', feature: 'data-migration', legacy: true }
@@ -49,7 +52,7 @@ export function parseHashRoute(hashValue = '') {
 
 const currentHash = () => typeof window === 'undefined' ? '/home' : window.location.hash
 const route = reactive(Object.assign(
-  { documentId: null, postId: null, standardType: null, standardId: null, token: null, returnTo: null, jobId: null, feature: null, legacy: false },
+  { documentId: null, postId: null, standardType: null, standardId: null, token: null, returnTo: null, jobId: null, feature: null, legacy: false, legacyTarget: null },
   parseHashRoute(currentHash())
 ))
 
@@ -57,7 +60,7 @@ export function useRoute() {
   function syncRoute() {
     Object.assign(route, {
       documentId: null, postId: null, standardType: null, standardId: null, token: null,
-      jobId: null, feature: null, legacy: false
+      jobId: null, feature: null, legacy: false, legacyTarget: null
     }, parseHashRoute(currentHash()))
   }
 

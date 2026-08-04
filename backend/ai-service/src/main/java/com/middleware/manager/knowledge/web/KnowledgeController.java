@@ -1,15 +1,17 @@
 package com.middleware.manager.knowledge.web;
 
+import com.middleware.manager.knowledge.service.KnowledgeContentImportService;
 import com.middleware.manager.knowledge.service.KnowledgeService;
 import com.middleware.manager.knowledge.service.KnowledgeService.ImportResult;
 import com.middleware.manager.knowledge.service.KnowledgeService.PreviewDocument;
 import com.middleware.manager.knowledge.service.KnowledgeSearchResult;
 import com.middleware.manager.knowledge.store.VectorSearchFilter;
+import com.middleware.manager.knowledge.web.dto.KnowledgeContentImportRequest;
+import jakarta.validation.Valid;
 import com.middleware.manager.service.StorageService;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.sax.ToXMLContentHandler;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,6 +33,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import com.middleware.manager.knowledge.service.CorpusHealthService;
+import com.middleware.manager.knowledge.service.ParameterLookupService;
+import com.middleware.manager.knowledge.service.StandardIndexSyncService;
+import com.middleware.manager.security.PermissionService;
+import org.springframework.security.core.Authentication;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
@@ -37,11 +45,29 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class KnowledgeController {
 
-    @Autowired
-    private KnowledgeService knowledgeService;
+    private final KnowledgeService knowledgeService;
+    private final StorageService storageService;
+    private final StandardIndexSyncService standardIndexSyncService;
+    private final PermissionService permissionService;
+    private final ParameterLookupService parameterLookupService;
+    private final CorpusHealthService corpusHealthService;
+    private final KnowledgeContentImportService contentImportService;
 
-    @Autowired
-    private StorageService storageService;
+    public KnowledgeController(KnowledgeService knowledgeService,
+                               StorageService storageService,
+                               StandardIndexSyncService standardIndexSyncService,
+                               PermissionService permissionService,
+                               ParameterLookupService parameterLookupService,
+                               CorpusHealthService corpusHealthService,
+                               KnowledgeContentImportService contentImportService) {
+        this.knowledgeService = knowledgeService;
+        this.storageService = storageService;
+        this.standardIndexSyncService = standardIndexSyncService;
+        this.permissionService = permissionService;
+        this.parameterLookupService = parameterLookupService;
+        this.corpusHealthService = corpusHealthService;
+        this.contentImportService = contentImportService;
+    }
 
     /**
      * POST /api/knowledge/upload
@@ -61,59 +87,50 @@ public class KnowledgeController {
     }
 
     /**
-     * POST /api/knowledge/batch-upload
-     * Upload multiple files into the knowledge base.
-     */
-    @PostMapping("/batch-upload")
-    public ResponseEntity<?> batchUpload(@RequestParam(value = "files", required = false) MultipartFile[] files) {
-        if (files == null || files.length == 0) {
-            Map<String, String> error = new HashMap<>();
-            error.put("error", "未选择文件");
-            return ResponseEntity.badRequest().body(error);
-        }
-        List<Map<String, Object>> results = new java.util.ArrayList<>();
-        for (MultipartFile file : files) {
-            Map<String, Object> item = new HashMap<>();
-            item.put("fileName", file.getOriginalFilename());
-            try {
-                ImportResult result = knowledgeService.importFile(file);
-                item.put("status", "success");
-                item.put("chunkCount", result.getChunkCount());
-                item.put("sourceTitle", result.getSourceTitle());
-            } catch (Exception e) {
-                log.warn("Knowledge batch upload failed file={}: {}", file.getOriginalFilename(), e.getMessage());
-                item.put("status", "error");
-                item.put("error", "知识库文档上传失败，请查看后台日志");
-            }
-            results.add(item);
-        }
-        Map<String, Object> response = new HashMap<>();
-        response.put("total", files.length);
-        response.put("results", results);
-        return ResponseEntity.ok(response);
-    }
-
-    /**
-     * POST /api/knowledge/import/{docId}
-     * Import an existing StandardDocument into the knowledge base.
-     */
-    @PostMapping("/import/{docId}")
-    public ResponseEntity<?> importDoc(@PathVariable Long docId) {
-        try {
-            ImportResult result = knowledgeService.importStandardDocument(docId);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            log.warn("Knowledge standard document import failed docId={}: {}", docId, e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", "知识库文档导入失败，请查看后台日志");
-            return ResponseEntity.badRequest().body(error);
-        }
-    }
-
-    /**
      * GET /api/knowledge/search?q=xxx&topK=5
      * Search the knowledge base.
      */
+    /**
+     * 触发参数标准 → 知识库索引的对账。标准发布后由启动对账或此端点同步，
+     * 不提供人工「导入」入口（导入会产生会腐烂的静态副本）。
+     */
+    @PostMapping("/sync-standards")
+    public ResponseEntity<StandardIndexSyncService.SyncReport> syncStandards(Authentication authentication) {
+        if (!permissionService.isAdmin(authentication)) {
+            return ResponseEntity.status(403).build();
+        }
+        return ResponseEntity.ok(standardIndexSyncService.sync());
+    }
+
+    /**
+     * 导入标准文档、论坛文章等已有业务正文。参数标准使用 sync-standards 对账，避免静态副本过期。
+     */
+    @PostMapping("/import-content")
+    public ResponseEntity<ImportResult> importContent(
+            @Valid @RequestBody KnowledgeContentImportRequest request,
+            Authentication authentication) {
+        return ResponseEntity.ok(contentImportService.importContent(
+                request.getSourceType(), request.getSourceId(), authentication));
+    }
+
+    /**
+     * 参数标准精确查询。参数值必须 100% 准确且可追责，RAG 只能给语义相近的片段，
+     * 因此这类问题直接查表并返回带标准版本号的确定答案，不走检索。
+     */
+    @GetMapping("/parameters")
+    public ResponseEntity<List<ParameterLookupService.ParameterAnswer>> lookupParameters(
+            @RequestParam(required = false) String software,
+            @RequestParam(required = false) String name,
+            @RequestParam(defaultValue = "20") int limit) {
+        return ResponseEntity.ok(parameterLookupService.lookup(software, name, limit));
+    }
+
+    /** 面向知识库全部来源与页面的确定性健康度检查。 */
+    @GetMapping("/corpus-health")
+    public ResponseEntity<CorpusHealthService.CorpusHealthReport> corpusHealth() {
+        return ResponseEntity.ok(corpusHealthService.report());
+    }
+
     @GetMapping("/search")
     public ResponseEntity<?> search(
             @RequestParam String q,
@@ -262,21 +279,4 @@ public class KnowledgeController {
         }
     }
 
-    /**
-     * DELETE /api/knowledge/docs/test
-     * Delete all test documents from the knowledge base.
-     */
-    @DeleteMapping("/docs/test")
-    public ResponseEntity<?> deleteTestDocs() {
-        try {
-            int count = knowledgeService.deleteTestDocuments();
-            Map<String, Object> result = new HashMap<>();
-            result.put("deleted", count);
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, String> error = new HashMap<>();
-            error.put("error", e.getMessage());
-            return ResponseEntity.badRequest().body(error);
-        }
-    }
 }

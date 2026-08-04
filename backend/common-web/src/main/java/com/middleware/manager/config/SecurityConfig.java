@@ -20,9 +20,16 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import jakarta.servlet.DispatcherType;
 import java.util.Arrays;
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
+
+    static final String DEFAULT_CORS_ALLOWED_ORIGINS = String.join(",",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080");
 
     static {
         // 允许异步线程继承 SecurityContext
@@ -70,6 +77,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 CatalogSoftwareTypeProtocol.BASE_PATH + CatalogSoftwareTypeProtocol.BY_IDS_PATH,
                                 CatalogSoftwareTypeProtocol.BASE_PATH + CatalogSoftwareTypeProtocol.BY_CATEGORY_PATH,
+                                CatalogSoftwareTypeProtocol.BASE_PATH + CatalogSoftwareTypeProtocol.ACTIVE_PATH,
                                 CatalogSoftwareTypeProtocol.BASE_PATH + CatalogSoftwareTypeProtocol.RESOLVE_PATH)
                         .permitAll()
                         // 其他 auth 接口需认证
@@ -86,19 +94,28 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
-        // 使用环境变量配置允许的源，默认允许本地开发
-        String origins = System.getenv().getOrDefault("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:8080");
-        configuration.setAllowedOriginPatterns(Arrays.asList(origins.split(",")));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("*"));
-        configuration.setExposedHeaders(Arrays.asList("Content-Disposition"));
-        configuration.setAllowCredentials(true);
+        String origins = System.getenv().getOrDefault("CORS_ALLOWED_ORIGINS", DEFAULT_CORS_ALLOWED_ORIGINS);
+        CorsConfiguration configuration = buildCorsConfiguration(origins);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/api/**", configuration);
         source.registerCorsConfiguration("/files/**", configuration);
         return source;
+    }
+
+    static CorsConfiguration buildCorsConfiguration(String origins) {
+        CorsConfiguration configuration = new CorsConfiguration();
+        List<String> allowedOrigins = Arrays.stream(origins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .distinct()
+                .toList();
+        configuration.setAllowedOriginPatterns(allowedOrigins);
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
+        configuration.setAllowedHeaders(Arrays.asList("*"));
+        configuration.setExposedHeaders(Arrays.asList("Content-Disposition"));
+        configuration.setAllowCredentials(true);
+        return configuration;
     }
 
     @Bean

@@ -215,7 +215,7 @@ API 调用统一走 `api.js` 的 `request()`（自动附带 `Authorization: Bear
 
 认证：九个后端进程启动前必须设置同一个至少 32 UTF-8 字节的 `GATEWAY_SIGNING_SECRET`，配置无生产默认值。外部请求只进 Gateway；Token 校验、滑动续期、角色和岗位权威归 core-service 的 identity，各业务服务的受保护端点只接受 Gateway 签名的身份头（`GatewayHeaderAuthenticationFilter` 验 `X-Gateway-Sign`）。协议和联通验证见 `docs/microservices-stage5-gateway-authentication.md`。
 
-Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，9 个服务名与 Maven 服务目录一致。Gateway 将 `/api/forum/**` 路由到 community-service，将 `/api/knowledge/**`、`/api/agent/**`、`/api/wiki/**`、`/api/ops-agent/**` 路由到 ai-service，将 identity/catalog/standards 的原路径和 `/files/**` 路由到 core-service，将 `/api/middleware-commands/**` 路由到 middleware-service；其余 4 个岗位服务仅注册 Nacos，新增业务端点时再增加精确网关路由，禁止恢复 `/api/**` 泛路由。Gateway 对 introspect 的调用在 `cloud` profile 下通过负载均衡的 `http://core-service` 完成。端口和路由见 `docs/microservices-stage6-job-services.md`。
+Nacos：默认 profile 明确关闭注册与配置；仅 `cloud` profile 启用，9 个服务名与 Maven 服务目录一致。Gateway 将 `/api/forum/**` 路由到 community-service，将 `/api/knowledge/**`、`/api/agent/**`、`/api/knowledge/**`、`/api/ops-agent/**` 路由到 ai-service，将 identity/catalog/standards 的原路径和 `/files/**` 路由到 core-service，将 `/api/middleware-commands/**` 路由到 middleware-service；其余 4 个岗位服务仅注册 Nacos，新增业务端点时再增加精确网关路由，禁止恢复 `/api/**` 泛路由。Gateway 对 introspect 的调用在 `cloud` profile 下通过负载均衡的 `http://core-service` 完成。端口和路由见 `docs/microservices-stage6-job-services.md`。
 
 ## 8. 测试（严格 TDD）
 
@@ -275,5 +275,5 @@ void getMissingThrows() { ... }
 - **模块开关在 `system_settings` 表**（knowledge-enabled、diagnostics-enabled）：功能"不见了"先查开关再查代码；前端门户级开关另见 `src/config/portalFeatures.js`。
 - **权限模型有两级**：管理员（`isCategoryAdmin`，可改可审）vs 管理岗（`isManagement`，只能改不能审），审核相关接口必须走 `PermissionService.canReview(auth, category)`，只按角色名判断会放过管理岗越权审核。
 - **文件存储路径**：上传文件落在 `./storage/<middlewareName>/`，下载走公开的 `/files/**`；本地调试删库不删 storage 会出现悬空记录。
-- **前端 Node 版本被 engines 锁定**（`>=20.19 <21`，`.nvmrc` 指定 20）：Node 21+ 或低版本会在 install 阶段报错，切换版本后再装依赖。
+- **前端 Node 只限最低版本**（`package.json` engines `>=20.19`）：不设上界，高版本可直接用（实测 Node 26 通过）。构建确定性由 `deploy/Dockerfile.frontend` 的 `node:20.19-alpine` 保证，`.nvmrc` 的 20 只是本地 nvm 的默认值，都不是硬约束。
 - **9 个服务共享一个签名密钥**：本地起多服务时用 `scripts/services.env.example` 派生统一环境，漏设或不一致会导致所有受保护端点 401。

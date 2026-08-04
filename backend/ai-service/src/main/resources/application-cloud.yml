@@ -20,3 +20,8 @@ spring:
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:}
         group: ${NACOS_DISCOVERY_GROUP:DEFAULT_GROUP}
+
+app:
+  catalog:
+    base-url: http://core-service
+    load-balanced: true

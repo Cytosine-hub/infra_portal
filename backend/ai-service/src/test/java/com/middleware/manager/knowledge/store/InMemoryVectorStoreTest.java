@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,5 +52,35 @@ class InMemoryVectorStoreTest {
 
         assertEquals(2, results.size());
         assertTrue(results.get(0).getScore() >= results.get(1).getScore());
+    }
+
+    @Test
+    @DisplayName("TC-VECTOR-001 更新来源后只保留当前版本切片")
+    void removesStaleSourceVectorsAfterReplacement() {
+        InMemoryVectorStore store = new InMemoryVectorStore();
+        Map<String, String> source = Map.of("sourceType", "UPLOAD", "sourceId", "31");
+        store.add("knowledge_source_31_0", new float[]{1.0f}, source);
+        store.add("knowledge_source_31_1", new float[]{1.0f}, source);
+        store.add("other", new float[]{1.0f}, Map.of("sourceType", "UPLOAD", "sourceId", "32"));
+
+        store.deleteBySourceExcept("UPLOAD", 31L, Set.of("knowledge_source_31_0"));
+
+        assertEquals(2, store.count());
+        assertEquals(Set.of("knowledge_source_31_0", "other"),
+                store.search(new float[]{1.0f}, 5).stream()
+                        .map(VectorStore.VectorSearchResult::getId)
+                        .collect(java.util.stream.Collectors.toSet()));
+    }
+
+    @Test
+    @DisplayName("TC-VECTOR-002 删除来源时清理其全部切片")
+    void deletesAllVectorsForSource() {
+        InMemoryVectorStore store = new InMemoryVectorStore();
+        store.add("knowledge_source_31_0", new float[]{1.0f},
+                Map.of("sourceType", "UPLOAD", "sourceId", "31"));
+
+        store.deleteBySource("UPLOAD", 31L);
+
+        assertEquals(0, store.count());
     }
 }

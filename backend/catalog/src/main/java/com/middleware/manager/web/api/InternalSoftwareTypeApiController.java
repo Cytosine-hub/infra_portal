@@ -31,6 +31,15 @@ public class InternalSoftwareTypeApiController {
         this.signatureService = signatureService;
     }
 
+    @PostMapping(CatalogSoftwareTypeProtocol.ACTIVE_PATH)
+    public List<SoftwareTypeResponse> findActive(
+            @RequestHeader(value = GatewayIdentityHeaders.SIGNATURE, required = false) String signature) {
+        verify(CatalogSoftwareTypeProtocol.ACTIVE_OPERATION, "", signature);
+        return softwareTypeService.findActive().stream()
+                .map(SoftwareTypeResponse::from)
+                .toList();
+    }
+
     @PostMapping(CatalogSoftwareTypeProtocol.BY_IDS_PATH)
     public List<SoftwareTypeResponse> findByIds(
             @Valid @RequestBody SoftwareTypeIdsRequest request,

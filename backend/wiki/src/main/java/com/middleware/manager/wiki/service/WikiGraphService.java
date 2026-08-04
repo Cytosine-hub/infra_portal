@@ -2,8 +2,10 @@ package com.middleware.manager.wiki.service;
 
 import com.middleware.manager.wiki.entity.WikiLink;
 import com.middleware.manager.wiki.entity.WikiPage;
+import com.middleware.manager.wiki.entity.WikiSource;
 import com.middleware.manager.wiki.repository.WikiLinkMapper;
 import com.middleware.manager.wiki.repository.WikiPageMapper;
+import com.middleware.manager.wiki.repository.WikiSourceMapper;
 import org.jgrapht.Graph;
 import org.jgrapht.graph.DefaultWeightedEdge;
 import org.jgrapht.graph.SimpleWeightedGraph;
@@ -21,6 +23,7 @@ public class WikiGraphService {
 
     private final WikiPageMapper pageMapper;
     private final WikiLinkMapper linkMapper;
+    private final WikiSourceMapper sourceMapper;
     private final WikiPermissionService permissionService;
 
     @Value("${app.wiki.graph.max-nodes:1000}")
@@ -41,9 +44,11 @@ public class WikiGraphService {
             "DRAFT", "PENDING_REVIEW", "ACTIVE", "CONTRADICTED");
 
     public WikiGraphService(WikiPageMapper pageMapper, WikiLinkMapper linkMapper,
+                            WikiSourceMapper sourceMapper,
                             WikiPermissionService permissionService) {
         this.pageMapper = pageMapper;
         this.linkMapper = linkMapper;
+        this.sourceMapper = sourceMapper;
         this.permissionService = permissionService;
     }
 
@@ -72,6 +77,10 @@ public class WikiGraphService {
                 .filter(page -> isGraphVisibleStatus(page, authenticated))
                 .limit(Math.max(1, maxNodes))
                 .collect(Collectors.toList());
+        Map<Long, WikiSource> sourceNodes = new HashMap<>();
+        if (authenticated && pages.size() < Math.max(1, maxNodes)) {
+            appendSourceNodes(pages, sourceNodes, Math.max(1, maxNodes) - pages.size());
+        }
         List<WikiLink> links = linkMapper.findAll();
 
         if (pages.isEmpty()) {
@@ -212,7 +221,13 @@ public class WikiGraphService {
         for (WikiPage p : pages) {
             Map<String, Object> node = new HashMap<>();
             node.put("id", idx);
-            node.put("pageId", p.getId());
+            WikiSource source = sourceNodes.get(p.getId());
+            if (source == null) {
+                node.put("pageId", p.getId());
+            } else {
+                node.put("pageId", null);
+                node.put("sourceId", source.getId());
+            }
             node.put("name", p.getTitle());
             node.put("pageType", p.getPageType());
             node.put("category", p.getCategory());
@@ -298,6 +313,37 @@ public class WikiGraphService {
         result.put("communities", stableCommunities.communityNames());
         result.put("communityStats", buildCommunityStats(stableCommunities, communities, graph));
         return result;
+    }
+
+    /**
+     * 将已导入知识来源作为图谱节点。来源正文不参与图谱计算，只用软件和分类建立可解释的关联，
+     * 避免知识库只有标准来源、尚未创建经验页面时图谱永远为空。
+     */
+    private void appendSourceNodes(List<WikiPage> pages, Map<Long, WikiSource> sourceNodes, int capacity) {
+        if (capacity <= 0) return;
+        List<WikiSource> sources = sourceMapper.findAllForGraph();
+        if (sources == null || sources.isEmpty()) return;
+        for (WikiSource source : sources) {
+            if (source == null || source.getId() == null || source.getTitle() == null
+                    || source.getTitle().isBlank()) {
+                continue;
+            }
+            long nodeId = -Math.abs(source.getId());
+            if (nodeId == 0 || pages.stream().anyMatch(page -> page.getId().equals(nodeId))) {
+                continue;
+            }
+            WikiPage node = new WikiPage();
+            node.setId(nodeId);
+            node.setTitle(source.getTitle());
+            node.setPageType(source.getSourceType());
+            node.setCategory(source.getCategory());
+            node.setSoftware(source.getSoftware());
+            node.setSourceRefs(source.getSourceRef());
+            node.setStatus("ACTIVE");
+            pages.add(node);
+            sourceNodes.put(nodeId, source);
+            if (sourceNodes.size() >= capacity) break;
+        }
     }
 
     private boolean isRealUser(Authentication authentication) {

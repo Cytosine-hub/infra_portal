@@ -41,7 +41,6 @@ class ApiGatewayApplicationTests {
             assertThat(predicate.getArgs()).containsValues(
                     "/api/knowledge/**",
                     "/api/agent/**",
-                    "/api/wiki/**",
                     "/api/ops-agent/**",
                     "/api/ops-agent/export/**");
         });

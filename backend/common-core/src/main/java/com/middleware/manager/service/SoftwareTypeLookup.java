@@ -5,6 +5,8 @@ import com.middleware.manager.domain.SoftwareType;
 import java.util.List;
 
 public interface SoftwareTypeLookup {
+    List<SoftwareType> findActive();
+
     SoftwareType get(Long id);
 
     List<SoftwareType> findByIds(List<Long> ids);

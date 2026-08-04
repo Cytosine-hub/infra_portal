@@ -28,7 +28,7 @@ echo "TOKEN=$TOKEN"
 ### 2. 验证 Token
 
 ```bash
-curl -s http://localhost:8080/api/wiki/pages -H "Authorization: Bearer $TOKEN" | python3 -c "
+curl -s http://localhost:8080/api/knowledge/pages -H "Authorization: Bearer $TOKEN" | python3 -c "
 import sys, json
 pages = json.load(sys.stdin)
 print(f'认证成功，Wiki 页面数: {len(pages)}')
@@ -48,5 +48,5 @@ echo "export WIKI_TOKEN=$TOKEN"
 获取 Token 后，后续 API 测试直接使用 `$WIKI_TOKEN`：
 
 ```bash
-curl -s http://localhost:8080/api/wiki/pages -H "Authorization: Bearer $WIKI_TOKEN"
+curl -s http://localhost:8080/api/knowledge/pages -H "Authorization: Bearer $WIKI_TOKEN"
 ```

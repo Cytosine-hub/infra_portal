@@ -1,14 +1,11 @@
 package com.middleware.manager.knowledge.service;
 
-import com.middleware.manager.domain.StandardDocument;
+import com.middleware.manager.domain.ParameterStandard;
 import com.middleware.manager.constant.ErrorCode;
 import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.exception.BusinessException;
 import com.middleware.manager.knowledge.embedding.EmbeddingService;
-import com.middleware.manager.knowledge.entity.KnowledgeChunk;
 import com.middleware.manager.knowledge.loader.DocumentLoader;
-import com.middleware.manager.knowledge.loader.StandardDocumentLoader;
-import com.middleware.manager.knowledge.repository.KnowledgeChunkMapper;
 import com.middleware.manager.knowledge.splitter.TextSplitter;
 import com.middleware.manager.knowledge.store.VectorStore;
 import com.middleware.manager.knowledge.store.VectorSearchFilter;
@@ -17,6 +14,9 @@ import com.middleware.manager.util.TextUtil;
 import com.middleware.manager.wiki.entity.WikiSource;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
@@ -27,11 +27,14 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class KnowledgeService implements KnowledgeSearchPort {
 
+    private static final Set<String> IMPORTABLE_CONTENT_TYPES = Set.of(
+            "STANDARD_DOCUMENT", "FORUM_POST");
+    private static final Set<String> LISTABLE_SOURCE_TYPES = Set.of(
+            "UPLOAD", "STANDARD_DOC", "STANDARD_DOCUMENT", "FORUM_POST");
+
     private final TextSplitter textSplitter;
     private final EmbeddingService embeddingService;
     private final VectorStore vectorStore;
-    private final KnowledgeChunkMapper chunkMapper;
-    private final StandardDocumentLoader standardDocumentLoader;
     private final List<DocumentLoader> documentLoaders;
     private final StorageService storageService;
     private final WikiSourceMapper wikiSourceMapper;
@@ -39,52 +42,128 @@ public class KnowledgeService implements KnowledgeSearchPort {
     public KnowledgeService(TextSplitter textSplitter,
                             EmbeddingService embeddingService,
                             VectorStore vectorStore,
-                            KnowledgeChunkMapper chunkMapper,
-                            StandardDocumentLoader standardDocumentLoader,
                             List<DocumentLoader> documentLoaders,
                             StorageService storageService,
                             WikiSourceMapper wikiSourceMapper) {
         this.textSplitter = textSplitter;
         this.embeddingService = embeddingService;
         this.vectorStore = vectorStore;
-        this.chunkMapper = chunkMapper;
-        this.standardDocumentLoader = standardDocumentLoader;
         this.documentLoaders = documentLoaders;
         this.storageService = storageService;
         this.wikiSourceMapper = wikiSourceMapper;
     }
 
+    /**
+     * 把一篇已发布的参数标准写入索引。由 StandardIndexSyncService 对账时调用，
+     * 不再提供人工「导入」入口——人工导入会产生标准的静态副本，标准更新后必然腐烂。
+     */
+    @Transactional
+    public ImportResult indexStandard(ParameterStandard standard) {
+        String sourceTitle = standard.getTitle();
+        String content = standard.getContent();
+        List<TextSplitter.TextChunk> chunks = textSplitter.split(content, sourceTitle);
+        if (chunks.isEmpty()) {
+            deleteDocument(sourceTitle, "STANDARD_DOC");
+            return emptyImportResult(sourceTitle);
+        }
+        List<float[]> vectors = embeddingService.embedBatch(chunkTexts(chunks));
+        SourceUpsertResult upsert = upsertSource(sourceTitle, "STANDARD_DOC", null, content,
+                standard.getCategory(), standard.getSoftware(), null, null);
+        return persistVectors(chunks, vectors, upsert.source().getId(), "STANDARD_DOC",
+                standard.getCategory(), standard.getSoftware(), null);
+    }
+
+    @Transactional
+    public boolean removeStandardIfUnindexable(ParameterStandard standard) {
+        List<TextSplitter.TextChunk> chunks = textSplitter.split(standard.getContent(), standard.getTitle());
+        if (!chunks.isEmpty()) {
+            return false;
+        }
+        deleteDocument(standard.getTitle(), "STANDARD_DOC");
+        return true;
+    }
+
+    @Transactional(rollbackFor = Exception.class)
     public ImportResult importFile(MultipartFile file) throws Exception {
         String fileName = file.getOriginalFilename();
         DocumentLoader loader = resolveLoader(fileName);
 
         byte[] fileBytes = file.getBytes();
         StorageService.StoredFile storedFile = storageService.store(file, "knowledge");
+        SourceUpsertResult upsert = null;
+        try {
+            String content;
+            try (InputStream is = new java.io.ByteArrayInputStream(fileBytes)) {
+                content = loader.load(is, fileName);
+            }
 
-        String content;
-        try (InputStream is = new java.io.ByteArrayInputStream(fileBytes)) {
-            content = loader.load(is, fileName);
+            List<TextSplitter.TextChunk> chunks = textSplitter.split(content, fileName);
+            if (chunks.isEmpty()) {
+                throw new BusinessException(ErrorCode.KNOWLEDGE_CONTENT_EMPTY,
+                        ErrorMessages.KNOWLEDGE_CONTENT_EMPTY);
+            }
+
+            // Embedding 成功后再创建来源记录，避免模型失败留下悬空文档。
+            List<float[]> vectors = embeddingService.embedBatch(chunkTexts(chunks));
+            upsert = upsertSource(fileName, "UPLOAD", storedFile.storedFileName(), content,
+                    null, null, null, null);
+            ImportResult result = persistVectors(chunks, vectors, upsert.source().getId(), "UPLOAD",
+                    null, null, storedFile.storedFileName());
+            deleteReplacedFileAfterCommit(upsert, storedFile.storedFileName());
+            return result;
+        } catch (Exception e) {
+            compensateFailedImport(storedFile, upsert);
+            throw e;
+        }
+    }
+
+    /**
+     * 把其他业务模块中已经发布的正文导入知识库。相同业务来源 ID 和来源类型会更新原来源，
+     * 供前端的“从现有内容导入”入口重复执行而不会不断制造副本。
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ImportResult importContent(String title, String sourceType, String content,
+                                      String category, String software, String sourceRef) {
+        String normalizedTitle = title == null ? "" : title.trim();
+        String normalizedType = sourceType == null
+                ? "" : sourceType.trim().toUpperCase(Locale.ROOT);
+        if (normalizedTitle.isEmpty() || sourceRef == null || sourceRef.isBlank()
+                || !IMPORTABLE_CONTENT_TYPES.contains(normalizedType)) {
+            throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.PARAM_INVALID);
         }
 
-        String sourceTitle = fileName;
-        List<TextSplitter.TextChunk> chunks = textSplitter.split(content, sourceTitle);
-        WikiSource source = upsertSource(sourceTitle, "UPLOAD", storedFile.storedFileName(), content, null, null, null);
+        List<TextSplitter.TextChunk> chunks = textSplitter.split(content, normalizedTitle);
+        if (chunks.isEmpty()) {
+            throw new BusinessException(ErrorCode.KNOWLEDGE_CONTENT_EMPTY,
+                    ErrorMessages.KNOWLEDGE_CONTENT_EMPTY);
+        }
 
-        return persistVectors(chunks, source.getId(), "UPLOAD", null, null, storedFile.storedFileName());
+        List<float[]> vectors = embeddingService.embedBatch(chunkTexts(chunks));
+        SourceUpsertResult upsert = upsertSource(normalizedTitle, normalizedType, null, content,
+                category, software, null, sourceRef.trim());
+        try {
+            return persistVectors(chunks, vectors, upsert.source().getId(), normalizedType,
+                    category, software, null);
+        } catch (RuntimeException exception) {
+            cleanupNewSourceVectors(upsert);
+            throw exception;
+        }
     }
 
-    public ImportResult importStandardDocument(Long docId) {
-        StandardDocument doc = standardDocumentLoader.getStandardDocument(docId);
-        String content = doc.getContent();
-        String sourceTitle = doc.getTitle();
-
-        List<TextSplitter.TextChunk> chunks = textSplitter.split(content, sourceTitle);
-        WikiSource source = upsertSource(sourceTitle, "STANDARD_DOC", null, content, doc.getCategory(), doc.getSoftware(), docId);
-
-        return persistVectors(chunks, source.getId(), "STANDARD_DOC", doc.getCategory(), doc.getSoftware(), null);
+    private void cleanupNewSourceVectors(SourceUpsertResult upsert) {
+        if (!upsert.created() || upsert.source().getId() == null) {
+            return;
+        }
+        try {
+            vectorStore.deleteBySource(upsert.source().getSourceType(), upsert.source().getId());
+        } catch (Exception cleanupError) {
+            log.warn("清理失败业务导入的向量失败 sourceId={}: {}",
+                    upsert.source().getId(), cleanupError.getMessage());
+        }
     }
 
-    private static final float MIN_SCORE_THRESHOLD = 0.5f;
+    /** 本模块写入向量时打的来源标记，检索时据此与 wiki 的向量隔离。 */
+    private static final String SOURCE_KNOWLEDGE = "knowledge";
 
     @Override
     public List<KnowledgeSearchResult> search(String query, int topK) {
@@ -93,70 +172,43 @@ public class KnowledgeService implements KnowledgeSearchPort {
 
     @Override
     public List<KnowledgeSearchResult> search(String query, int topK, VectorSearchFilter filter) {
-        List<KnowledgeSearchResult> results = new ArrayList<>();
         VectorSearchFilter safeFilter = filter == null ? VectorSearchFilter.none() : filter;
+        // 只召回本模块写入的切片。此前不加此过滤，会串到 wiki 的向量（含未发布草稿）
+        VectorSearchFilter scoped = safeFilter.isEmpty()
+                ? VectorSearchFilter.none().addSource(SOURCE_KNOWLEDGE)
+                : safeFilter.addSource(SOURCE_KNOWLEDGE);
 
-        // 向量检索
         try {
             float[] queryVector = embeddingService.embed(query);
-            List<VectorStore.VectorSearchResult> vectorResults = vectorStore.search(queryVector, topK, safeFilter);
-            if (!vectorResults.isEmpty() && vectorResults.get(0).getScore() >= MIN_SCORE_THRESHOLD) {
-                for (VectorStore.VectorSearchResult vr : vectorResults) {
-                    if (vr.getScore() < MIN_SCORE_THRESHOLD) break;
-                    Map<String, String> meta = vr.getMetadata();
-                    KnowledgeSearchResult sr = new KnowledgeSearchResult();
-                    sr.setContent(meta != null ? meta.get("content") : null);
-                    sr.setSourceTitle(meta != null ? meta.get("sourceTitle") : null);
-                    sr.setSourceType(meta != null ? meta.get("sourceType") : null);
-                    sr.setSourceId(parseLong(meta != null ? meta.get("sourceId") : null));
-                    sr.setCategory(meta != null ? meta.get("category") : null);
-                    sr.setSoftware(meta != null ? meta.get("software") : null);
-                    sr.setScore(vr.getScore());
-                    sr.setSource("vector");
-                    results.add(sr);
-                }
+            // 混合检索：稠密语义 + BM25 精确 token，由 Milvus 原生 RRF 融合。
+            // 参数名、错误码这类查询稠密向量召不回，必须靠 BM25 那一路。
+            List<VectorStore.VectorSearchResult> hits =
+                    vectorStore.hybridSearch(query, queryVector, topK, scoped);
+            List<KnowledgeSearchResult> results = new ArrayList<>();
+            for (VectorStore.VectorSearchResult hit : hits) {
+                results.add(toSearchResult(hit));
             }
-        } catch (Exception e) {
-            log.warn("Vector search failed: {}", e.getMessage());
-        }
-
-        // 关键词搜索（补充或降级）
-        List<String> terms = buildSearchTerms(query);
-        if (terms.isEmpty()) {
             return results;
+        } catch (Exception e) {
+            log.warn("知识库检索失败 query={}: {}", query, e.getMessage());
+            return List.of();
         }
-        List<Integer> weights = buildSearchWeights(terms, query);
-        List<KnowledgeChunk> keywordChunks = safeFilter.isEmpty()
-                ? chunkMapper.findByTermsWithScore(terms, weights, topK)
-                : chunkMapper.findByTermsWithScoreFiltered(terms, weights, topK, safeFilter);
-        for (KnowledgeChunk chunk : keywordChunks) {
-            boolean duplicate = false;
-            for (KnowledgeSearchResult existing : results) {
-                if (chunk.getSourceTitle() != null && chunk.getSourceTitle().equals(existing.getSourceTitle())
-                        && chunk.getContent() != null && chunk.getContent().equals(existing.getContent())) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (!duplicate) {
-                KnowledgeSearchResult sr = new KnowledgeSearchResult();
-                sr.setContent(chunk.getContent());
-                sr.setSourceTitle(chunk.getSourceTitle());
-                sr.setSourceType(chunk.getSourceType());
-                sr.setSourceId(chunk.getSourceId());
-                sr.setCategory(chunk.getCategory());
-                sr.setSoftware(chunk.getSoftware());
-                sr.setScore(0.8f);
-                sr.setSource("keyword");
-                results.add(sr);
-            }
-        }
+    }
 
-        results.sort((a, b) -> Float.compare(b.getScore(), a.getScore()));
-        if (results.size() > topK) {
-            results = results.subList(0, topK);
-        }
-        return results;
+    private KnowledgeSearchResult toSearchResult(VectorStore.VectorSearchResult hit) {
+        Map<String, String> meta = hit.getMetadata() == null ? Map.of() : hit.getMetadata();
+        KnowledgeSearchResult sr = new KnowledgeSearchResult();
+        sr.setContent(meta.get("content"));
+        sr.setSourceTitle(meta.get("sourceTitle"));
+        sr.setSourceType(meta.get("sourceType"));
+        sr.setSourceId(parseLong(meta.get("sourceId")));
+        sr.setCategory(meta.get("category"));
+        sr.setSoftware(meta.get("software"));
+        sr.setSectionPath(meta.get("sectionPath"));
+        sr.setScore(hit.getScore());
+        // RRF 融合后无法区分单路来源，统一标记为 hybrid
+        sr.setSource("hybrid");
+        return sr;
     }
 
     private Long parseLong(String value) {
@@ -170,35 +222,6 @@ public class KnowledgeService implements KnowledgeSearchPort {
         }
     }
 
-    private List<String> buildSearchTerms(String keyword) {
-        List<String> terms = new ArrayList<>();
-        if (keyword == null || keyword.isBlank()) return terms;
-        keyword = keyword.trim();
-        terms.add(keyword);
-        char[] chars = keyword.toCharArray();
-        for (int i = 0; i < chars.length - 1; i++) {
-            String bigram = new String(new char[]{chars[i], chars[i + 1]});
-            if (!terms.contains(bigram)) terms.add(bigram);
-        }
-        for (char c : chars) {
-            String s = String.valueOf(c);
-            if (!terms.contains(s)) terms.add(s);
-        }
-        return terms;
-    }
-
-    private List<Integer> buildSearchWeights(List<String> terms, String keyword) {
-        List<Integer> weights = new ArrayList<>();
-        if (terms.isEmpty()) return weights;
-        int bigramCount = keyword.trim().length() - 1;
-        for (int i = 0; i < terms.size(); i++) {
-            if (i == 0) weights.add(100);
-            else if (i < 1 + bigramCount) weights.add(10);
-            else weights.add(1);
-        }
-        return weights;
-    }
-
     private DocumentLoader resolveLoader(String fileName) {
         for (DocumentLoader loader : documentLoaders) {
             if (loader.supports(fileName)) return loader;
@@ -207,50 +230,52 @@ public class KnowledgeService implements KnowledgeSearchPort {
     }
 
     private ImportResult persistVectors(List<TextSplitter.TextChunk> chunks,
+                                        List<float[]> vectors,
                                         Long sourceId,
                                         String sourceType,
                                         String category,
                                         String software,
                                         String storedFileName) {
-        List<String> texts = new ArrayList<>();
-        for (TextSplitter.TextChunk chunk : chunks) {
-            texts.add(chunk.getContent());
-        }
-
-        List<float[]> vectors = embeddingService.embedBatch(texts);
-
-        int count = 0;
+        List<VectorStore.VectorRecord> records = new ArrayList<>(chunks.size());
+        Set<String> retainedIds = new LinkedHashSet<>();
         for (int i = 0; i < chunks.size(); i++) {
             TextSplitter.TextChunk chunk = chunks.get(i);
             float[] vector = vectors.get(i);
 
             String vectorId = vectorId(sourceId, i);
+            retainedIds.add(vectorId);
 
             Map<String, String> metadata = new HashMap<>();
-            metadata.put("source", "knowledge");
+            metadata.put("source", SOURCE_KNOWLEDGE);
             metadata.put("content", chunk.getContent());
             metadata.put("sourceTitle", chunk.getSourceTitle());
             metadata.put("chunkIndex", String.valueOf(chunk.getChunkIndex()));
+            if (chunk.getSectionPath() != null && !chunk.getSectionPath().isEmpty()) {
+                metadata.put("sectionPath", chunk.getSectionPath());
+            }
             if (sourceType != null) metadata.put("sourceType", sourceType);
             if (sourceId != null) metadata.put("sourceId", String.valueOf(sourceId));
             if (category != null) metadata.put("category", category);
             if (software != null) metadata.put("software", software);
             if (storedFileName != null) metadata.put("filePath", storedFileName);
 
-            try {
-                vectorStore.delete(vectorId);
-            } catch (Exception e) {
-                log.debug("Vector delete before upsert ignored vectorId={}", vectorId);
-            }
-            vectorStore.add(vectorId, vector, metadata);
-            count++;
+            records.add(new VectorStore.VectorRecord(vectorId, vector, metadata));
         }
 
-        log.info("Imported {} chunks from source: {}", count,
+        vectorStore.addAll(records);
+        try {
+            vectorStore.deleteBySourceExcept(sourceType, sourceId, retainedIds);
+        } catch (Exception cleanupError) {
+            // 当前版本已完整写入，保留少量旧切片比回滚数据库后留下新旧来源错位更可控。
+            log.warn("清理来源过期向量失败 sourceType={} sourceId={}: {}",
+                    sourceType, sourceId, cleanupError.getMessage());
+        }
+
+        log.info("Imported {} chunks from source: {}", records.size(),
                 chunks.isEmpty() ? "unknown" : chunks.get(0).getSourceTitle());
 
         ImportResult result = new ImportResult();
-        result.setChunkCount(count);
+        result.setChunkCount(records.size());
         result.setSourceTitle(chunks.isEmpty() ? null : chunks.get(0).getSourceTitle());
         result.setSourceId(sourceId);
         return result;
@@ -265,28 +290,13 @@ public class KnowledgeService implements KnowledgeSearchPort {
             }
             wikiSourceMapper.deleteById(source.getId());
         }
-        return chunkMapper.deleteBySourceTitleAndSourceType(sourceTitle, sourceType);
-    }
-
-    public int deleteTestDocuments() {
-        List<KnowledgeChunk> all = chunkMapper.findAll();
-        for (KnowledgeChunk chunk : all) {
-            if (chunk.getSourceTitle() != null &&
-                (chunk.getSourceTitle().startsWith("test") || chunk.getSourceTitle().startsWith("proxy-test"))) {
-                if (chunk.getVectorId() != null) {
-                    try { vectorStore.delete(chunk.getVectorId()); } catch (Exception ignored) {}
-                }
-            }
-        }
-        int count = chunkMapper.deleteBySourceTitleLike("test%");
-        count += chunkMapper.deleteBySourceTitleLike("proxy-test%");
-        return count;
+        return 0;
     }
 
     public List<Map<String, Object>> listDocuments() {
         List<Map<String, Object>> docs = new ArrayList<>();
         for (WikiSource source : wikiSourceMapper.findAll()) {
-            if (!"UPLOAD".equals(source.getSourceType()) && !"STANDARD_DOC".equals(source.getSourceType())) {
+            if (!LISTABLE_SOURCE_TYPES.contains(source.getSourceType())) {
                 continue;
             }
             Map<String, Object> item = new LinkedHashMap<>();
@@ -319,20 +329,18 @@ public class KnowledgeService implements KnowledgeSearchPort {
         return source.getFilePath();
     }
 
-    private WikiSource upsertSource(String title, String sourceType, String filePath, String content,
-                                    String category, String software, Long createdBy) {
+    private SourceUpsertResult upsertSource(String title, String sourceType, String filePath, String content,
+                                            String category, String software, Long createdBy,
+                                            String sourceRef) {
         String hash = TextUtil.sha256Hex(content == null ? "" : content);
-        WikiSource source = wikiSourceMapper.findByTitleAndType(title, sourceType);
-        if (source == null) {
-            WikiSource sameContent = wikiSourceMapper.findByContentHash(hash);
-            if (sameContent != null && sourceType.equals(sameContent.getSourceType())) {
-                source = sameContent;
-            }
-        }
+        WikiSource source = sourceRef == null
+                ? wikiSourceMapper.findByTitleAndType(title, sourceType)
+                : wikiSourceMapper.findByTypeAndSourceRef(sourceType, sourceRef);
         if (source == null) {
             source = new WikiSource();
             source.setTitle(title);
             source.setSourceType(sourceType);
+            source.setSourceRef(sourceRef);
             source.setFilePath(filePath);
             source.setContentHash(hash);
             source.setContent(content);
@@ -340,18 +348,78 @@ public class KnowledgeService implements KnowledgeSearchPort {
             source.setSoftware(software);
             source.setCreatedBy(createdBy);
             wikiSourceMapper.insert(source);
-            return source;
+            return new SourceUpsertResult(source, true, null);
         }
-        deleteSourceVectors(source);
+        String previousFilePath = source.getFilePath();
         source.setTitle(title);
         source.setSourceType(sourceType);
+        source.setSourceRef(sourceRef);
         if (filePath != null) source.setFilePath(filePath);
         source.setContentHash(hash);
         source.setContent(content);
         if (category != null) source.setCategory(category);
         if (software != null) source.setSoftware(software);
         wikiSourceMapper.update(source);
-        return source;
+        return new SourceUpsertResult(source, false, previousFilePath);
+    }
+
+    private List<String> chunkTexts(List<TextSplitter.TextChunk> chunks) {
+        return chunks.stream().map(TextSplitter.TextChunk::getContent).toList();
+    }
+
+    private ImportResult emptyImportResult(String sourceTitle) {
+        ImportResult result = new ImportResult();
+        result.setSourceTitle(sourceTitle);
+        result.setChunkCount(0);
+        return result;
+    }
+
+    private void compensateFailedImport(StorageService.StoredFile storedFile, SourceUpsertResult upsert) {
+        if (upsert != null && upsert.created() && upsert.source().getId() != null) {
+            try {
+                deleteSourceVectors(upsert.source());
+            } catch (Exception cleanupError) {
+                log.warn("清理失败上传的向量失败 sourceId={}: {}",
+                        upsert.source().getId(), cleanupError.getMessage());
+            }
+            try {
+                wikiSourceMapper.deleteById(upsert.source().getId());
+            } catch (Exception cleanupError) {
+                log.warn("清理失败上传的来源记录失败 sourceId={}: {}",
+                        upsert.source().getId(), cleanupError.getMessage());
+            }
+        }
+        try {
+            storageService.deleteIfExists(storedFile.storedFileName());
+        } catch (Exception cleanupError) {
+            log.warn("清理失败上传的文件失败 path={}: {}",
+                    storedFile.storedFileName(), cleanupError.getMessage());
+        }
+    }
+
+    private void deleteReplacedFileAfterCommit(SourceUpsertResult upsert, String currentFilePath) {
+        String previousFilePath = upsert.previousFilePath();
+        if (previousFilePath == null || previousFilePath.equals(currentFilePath)) {
+            return;
+        }
+        Runnable cleanup = () -> {
+            try {
+                storageService.deleteIfExists(previousFilePath);
+            } catch (Exception cleanupError) {
+                log.warn("清理被替换的旧文件失败 path={}: {}",
+                        previousFilePath, cleanupError.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    cleanup.run();
+                }
+            });
+            return;
+        }
+        cleanup.run();
     }
 
     private WikiSource requireSource(String title, String sourceType) {
@@ -381,14 +449,14 @@ public class KnowledgeService implements KnowledgeSearchPort {
     }
 
     private void deleteSourceVectors(WikiSource source) {
-        int chunkCount = previewChunks(source).size();
-        for (int i = 0; i < chunkCount; i++) {
-            try { vectorStore.delete(vectorId(source.getId(), i)); } catch (Exception ignored) {}
-        }
+        vectorStore.deleteBySource(source.getSourceType(), source.getId());
     }
 
     private String vectorId(Long sourceId, int chunkIndex) {
         return "knowledge_source_" + sourceId + "_" + chunkIndex;
+    }
+
+    private record SourceUpsertResult(WikiSource source, boolean created, String previousFilePath) {
     }
 
     public static class ImportResult {

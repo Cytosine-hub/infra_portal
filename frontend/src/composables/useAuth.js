@@ -3,10 +3,54 @@
  * 从 App.vue 中提取，供所有组件共享
  */
 import { reactive, computed } from 'vue'
-import { getSavedAuth, saveAuth, clearAuth, request } from '../api'
+import {
+  getSavedAuth,
+  getSavedAuthExpiry,
+  saveAuth,
+  clearAuth,
+  handleUnauthorized,
+  request
+} from '../api'
 import CryptoJS from 'crypto-js'
 
 const auth = reactive({ token: '', user: null })
+const MAX_TIMER_DELAY = 2_147_483_647
+let expiryTimer = null
+
+function clearExpiryTimer() {
+  if (expiryTimer !== null) {
+    clearTimeout(expiryTimer)
+    expiryTimer = null
+  }
+}
+
+function expireSession() {
+  expiryTimer = null
+  auth.token = ''
+  auth.user = null
+  handleUnauthorized()
+}
+
+function scheduleExpiryTimer() {
+  clearExpiryTimer()
+  const expiry = getSavedAuthExpiry()
+  if (!expiry) return
+
+  const remaining = expiry.getTime() - Date.now()
+  if (remaining <= 0) {
+    expireSession()
+    return
+  }
+
+  expiryTimer = setTimeout(() => {
+    const latestExpiry = getSavedAuthExpiry()
+    if (latestExpiry && latestExpiry.getTime() > Date.now()) {
+      scheduleExpiryTimer()
+      return
+    }
+    expireSession()
+  }, Math.min(remaining, MAX_TIMER_DELAY))
+}
 
 function sha256(str) {
   return CryptoJS.SHA256(str).toString()
@@ -43,10 +87,12 @@ export function useAuth() {
     saveAuth(username, data.token, data, data.expiresAt)
     auth.token = data.token
     auth.user = data
+    scheduleExpiryTimer()
     return data
   }
 
   async function logout(callApi = true) {
+    clearExpiryTimer()
     if (callApi && auth.token) {
       try {
         await request('/api/auth/logout', { method: 'POST' })
@@ -62,6 +108,11 @@ export function useAuth() {
     if (saved) {
       auth.token = saved.token
       auth.user = saved.user
+      scheduleExpiryTimer()
+    } else {
+      clearExpiryTimer()
+      auth.token = ''
+      auth.user = null
     }
   }
 

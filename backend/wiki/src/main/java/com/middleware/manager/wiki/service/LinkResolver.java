@@ -5,6 +5,7 @@ import com.middleware.manager.wiki.entity.WikiPage;
 import com.middleware.manager.wiki.repository.WikiLinkMapper;
 import com.middleware.manager.wiki.repository.WikiPageMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -35,6 +36,13 @@ public class LinkResolver {
         return links;
     }
 
+    /**
+     * 按当前正文重建各页出边。
+     * <p>必须在事务内：本方法是「先删后插」的多步写入，删除成功而插入失败会让该页
+     * 出边被清空且无补偿——图谱与图扩展检索直接少边，用户不会收到任何提示。
+     * 改造前只做幂等插入，失败是无害的，这条破坏性路径是随清理逻辑一起引入的。
+     */
+    @Transactional
     public int resolveLinks(List<WikiPage> pages) {
         Map<String, Long> titleIndex = new HashMap<>();
         for (WikiPage page : pages) {
@@ -51,6 +59,9 @@ public class LinkResolver {
         int created = 0;
         for (WikiPage page : pages) {
             if (page.getId() == null) continue;
+            // 先清掉本页已有的出边再按当前正文重建：仅做幂等插入的话，正文把 [[A]]
+            // 改成 [[B]] 后 A 的旧边会一直留着，反复编辑持续累积过期引用。
+            linkMapper.deleteOutgoingReferences(page.getId());
             List<String> linkTargets = extractWikiLinks(page.getContent());
             for (String target : linkTargets) {
                 Long targetId = titleIndex.get(target);

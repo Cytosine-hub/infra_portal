@@ -43,3 +43,10 @@ backend/app/logs/
 backend/app/storage/
 deploy/services.env
 /deploy/services.test.env
+
+# 本地临时产物与运行期上传数据
+/.scratch/
+/storage/
+
+# 由 scripts/gen-golden-set.py 自动生成，人工筛选后合并到 golden-set.json
+/docs/eval/golden-set-generated.json

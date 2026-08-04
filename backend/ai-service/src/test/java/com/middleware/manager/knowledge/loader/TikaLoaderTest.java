@@ -7,6 +7,7 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocume
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -41,7 +42,8 @@ class TikaLoaderTest {
     }
 
     @Test
-    void prependsPdfBookmarksAsTocSignals() throws Exception {
+    @DisplayName("TC-LOADER-014 PDF 书签应转写为正文中的 Markdown 标题（目录块已随编译流水线移除）")
+    void convertsPdfBookmarksIntoBodyHeadings() throws Exception {
         byte[] bytes;
         try (PDDocument document = new PDDocument();
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
@@ -66,7 +68,6 @@ class TikaLoaderTest {
 
         String content = loader.load(new ByteArrayInputStream(bytes), "manual.pdf");
 
-        assertThat(content).startsWith("目录");
-        assertThat(content).contains("配置说明 .... 1");
+        assertThat(content).contains("# 配置说明");
     }
 }

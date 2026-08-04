@@ -43,6 +43,10 @@
         DELETE FROM wiki_links WHERE from_page_id = #{pageId} OR to_page_id = #{pageId}
     </delete>
 
+    <delete id="deleteOutgoingReferences">
+        DELETE FROM wiki_links WHERE from_page_id = #{pageId} AND link_type = 'REFERENCES'
+    </delete>
+
     <select id="countAll" resultType="int">
         SELECT COUNT(*) FROM wiki_links
     </select>

@@ -24,6 +24,7 @@ public final class ErrorMessages {
     public static final String FILE_TOO_LARGE = "上传文件超过大小限制";
     public static final String FILE_UPLOAD_FAILED = "文件上传失败";
     public static final String FILE_READ_FAILED = "文件读取失败";
+    public static final String KNOWLEDGE_CONTENT_EMPTY = "文档未解析出可索引的正文";
 
     // 用户相关
     public static final String USER_NOT_FOUND = "用户不存在";
@@ -115,4 +116,9 @@ public final class ErrorMessages {
     public static final String LLM_SERVICE_BUSY = "模型服务繁忙，请稍后再试";
     public static final String LLM_RESPONSE_TIMEOUT = "模型响应超时，请稍后再试";
     public static final String LLM_STREAM_UNAVAILABLE = "流式响应不可用，已切换为普通响应";
+
+    // 知识库源文档与起草
+    public static final String WIKI_SOURCE_NOT_FOUND = "源文档不存在";
+    public static final String WIKI_DRAFT_FAILED = "起草失败，模型未返回有效内容";
+    public static final String WIKI_LINK_RESOLVE_FAILED = "页面已保存，但正文中的关联未能建立，图谱与关联检索会缺少这些边。可稍后点击「重建关联」重试。";
 }

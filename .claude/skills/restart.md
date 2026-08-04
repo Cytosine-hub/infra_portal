@@ -59,7 +59,7 @@ nohup npx vite --host 0.0.0.0 > /tmp/frontend.log 2>&1 &
 
 ```bash
 # 后端（401 = 需要认证，正常）
-curl -s -o /dev/null -w "Backend: %{http_code}\n" http://localhost:8080/api/wiki/pages
+curl -s -o /dev/null -w "Backend: %{http_code}\n" http://localhost:8080/api/knowledge/pages
 
 # 前端
 curl -s -o /dev/null -w "Frontend: %{http_code}\n" http://localhost:5173

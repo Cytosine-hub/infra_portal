@@ -17,11 +17,6 @@
         <p class="setting-desc">开启后用户可使用 AI 智能排查和运维助手功能</p>
       </div>
       <div class="setting-item">
-        <label class="setting-label">
-          <input type="checkbox" v-model="settings['wiki-enabled']" true-value="true" false-value="false" />
-          <span>Wiki 知识库</span>
-        </label>
-        <p class="setting-desc">开启后用户可使用 Wiki 知识库查阅文档</p>
       </div>
       <div class="form-actions" style="margin-top:20px">
         <button @click="$emit('save')">保存设置</button>

@@ -63,7 +63,8 @@ assert_env_equals "$TMP_ROOT/compose.test.env" COMPOSE_DEPENDENCIES_PROJECT_NAME
 assert_env_equals "$TMP_ROOT/compose.test.env" COMPOSE_NETWORK_NAME infra-portal-test-network
 assert_env_equals "$TMP_ROOT/compose.test.env" DEPLOY_DATA_ROOT /app/infra-portal-test/data
 for key in GATEWAY_SIGNING_SECRET ADMIN_DEFAULT_PASSWORD AI_API_KEY \
-    EMBEDDING_API_KEY WIKI_EXPORT_SIGNATURE_SECRET ZABBIX_PASSWORD; do
+    EMBEDDING_API_KEY EMBEDDING_BASE_URL EMBEDDING_MODEL EMBEDDING_MAX_TOKENS \
+    WIKI_EXPORT_SIGNATURE_SECRET ZABBIX_PASSWORD; do
     assert_nonempty_env "$TMP_ROOT/services.test.env" "$key"
 done
 grep -Eq '^# .*测试' "$TMP_ROOT/compose.test.env" \
@@ -84,7 +85,53 @@ second_gateway_secret=$(env_value "$TMP_ROOT/services.test.second.env" GATEWAY_S
     || fail 'TC-CI-004 repeated generation returned the same gateway secret'
 pass 'TC-CI-004'
 
-# assert_text .gitlab-ci.yml '^verify:deployment:' 'TC-CI-005 verify deployment job'
+assert_text deploy/services.env.example '^EMBEDDING_BASE_URL=' \
+    'TC-CI-032 embedding base URL env'
+assert_text deploy/services.env.example '^EMBEDDING_MODEL=' \
+    'TC-CI-032 embedding model env'
+assert_text deploy/services.env.example '^EMBEDDING_MAX_TOKENS=' \
+    'TC-CI-032 embedding token limit env'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^langchain4j\.open-ai\.embedding-model\.base-url=\$\{EMBEDDING_BASE_URL:' \
+    'TC-CI-032 Nacos embedding base URL override'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^langchain4j\.open-ai\.embedding-model\.model-name=\$\{EMBEDDING_MODEL:' \
+    'TC-CI-032 Nacos embedding model override'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^app\.embedding\.max-tokens=\$\{EMBEDDING_MAX_TOKENS:' \
+    'TC-CI-032 Nacos embedding token limit override'
+assert_text deploy/services.env.example '^AI_BASE_URL=http://ai\.tlb\.shcj-s\.com:8080/v1$' \
+    'TC-CI-034 chat model base URL env'
+assert_text deploy/services.env.example '^AI_MODEL=gpt-5\.6-sol$' \
+    'TC-CI-034 chat model name env'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^app\.ai\.base-url=\$\{AI_BASE_URL:http://ai\.tlb\.shcj-s\.com:8080/v1\}$' \
+    'TC-CI-034 Nacos app AI base URL override'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^app\.ai\.model=\$\{AI_MODEL:gpt-5\.6-sol\}$' \
+    'TC-CI-034 Nacos app AI model override'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^langchain4j\.open-ai\.chat-model\.base-url=\$\{AI_BASE_URL:http://ai\.tlb\.shcj-s\.com:8080/v1\}$' \
+    'TC-CI-034 Nacos LangChain4j base URL override'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^langchain4j\.open-ai\.chat-model\.model-name=\$\{AI_MODEL:gpt-5\.6-sol\}$' \
+    'TC-CI-034 Nacos LangChain4j model override'
+assert_text backend/ai-service/src/main/resources/application.yml \
+    '^    base-url: \$\{AI_BASE_URL:http://ai\.tlb\.shcj-s\.com:8080/v1\}$' \
+    'TC-CI-034 application chat model base URL fallback'
+assert_text backend/ai-service/src/main/resources/application.yml \
+    '^    model: \$\{AI_MODEL:gpt-5\.6-sol\}$' \
+    'TC-CI-034 application chat model name fallback'
+assert_no_text backend/ai-service/src/main/resources/application-local.yml \
+    'mimo-v2\.5-pro|token-plan-cn\.xiaomimimo\.com' \
+    'TC-CI-034 no legacy local chat model fallback'
+assert_text backend/ai-service/src/main/resources/application.yml \
+    '^    max-tokens: \$\{EMBEDDING_MAX_TOKENS:512\}$' \
+    'TC-CI-033 application embedding token limit fallback'
+assert_no_text backend/ai-service/src/main/resources/application.yml \
+    'EMBEDDING_MAX_CHARS' \
+    'TC-CI-033 no obsolete embedding character limit'
+
 assert_text .gitlab-ci.yml 'sh deploy/generate-test-env\.sh' 'TC-CI-005 test env generation'
 assert_text .gitlab-ci.yml 'docker compose .* config --quiet' 'TC-CI-005 compose validation'
 assert_no_text .gitlab-ci.yml \

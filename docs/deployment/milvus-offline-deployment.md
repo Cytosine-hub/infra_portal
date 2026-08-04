@@ -4,7 +4,7 @@
 
 本文档用于在无法访问外部网络的内网环境中部署 Milvus Standalone。目标环境已安装 Docker 和 docker-compose。
 
-本项目当前使用 `milvus-sdk-java 2.3.4`，因此部署包固定使用 Milvus `v2.3.4`，降低客户端兼容性风险。
+本项目当前使用 `milvus-sdk-java 2.5.10`，部署包固定使用 Milvus `v2.5.10`。知识库依赖稠密向量与 BM25 稀疏向量混合检索，不能降级到 2.3.x。
 
 ## 2. 结论
 
@@ -90,7 +90,7 @@ deploy/milvus-offline/dist/milvus-offline-package.tar.gz
 
 离线包包含：
 
-- `milvusdb/milvus:v2.3.4`
+- `milvusdb/milvus:v2.5.10`
 - `quay.io/coreos/etcd:v3.5.5`
 - `minio/minio:RELEASE.2023-03-20T20-16-18Z`
 - `docker-compose.yml`
@@ -370,7 +370,7 @@ VECTOR_TYPE=memory
 
 ## 12. 后续升级建议
 
-当前固定 Milvus `v2.3.4` 是为了匹配项目中的 Java SDK。后续如果要升级到 Milvus `2.5/2.6`，建议同步升级：
+当前固定 Milvus `v2.5.10` 是为了匹配项目中的 Java SDK 和 BM25 混合检索能力。后续如果要升级到 Milvus 2.6 或更高版本，建议同步验证：
 
 - `milvus-sdk-java`
 - 部署镜像版本

@@ -12,10 +12,7 @@ import com.middleware.manager.wiki.service.WikiSearchService;
 import com.middleware.manager.wiki.service.WikiSearchResult;
 import com.middleware.manager.knowledge.store.VectorStore;
 import com.middleware.manager.wiki.repository.WikiPagePermissionMapper;
-import com.middleware.manager.wiki.entity.IngestTask;
 import com.middleware.manager.wiki.entity.LintResult;
-import com.middleware.manager.wiki.repository.IngestTaskMapper;
-import com.middleware.manager.wiki.repository.WikiIngestLogMapper;
 import com.middleware.manager.wiki.entity.WikiLink;
 import com.middleware.manager.wiki.entity.WikiPage;
 import com.middleware.manager.wiki.entity.WikiSource;
@@ -24,9 +21,11 @@ import com.middleware.manager.wiki.repository.WikiAuditLogMapper;
 import com.middleware.manager.wiki.repository.WikiLinkMapper;
 import com.middleware.manager.wiki.repository.WikiPageMapper;
 import com.middleware.manager.wiki.repository.WikiSourceMapper;
-import com.middleware.manager.wiki.service.IngestAgent;
-import com.middleware.manager.wiki.service.IngestTaskService;
+import com.middleware.manager.constant.ErrorMessages;
+import com.middleware.manager.wiki.service.LinkResolver;
+import com.middleware.manager.wiki.web.dto.WikiPageSaveResponse;
 import com.middleware.manager.wiki.service.LintAgent;
+import com.middleware.manager.wiki.service.PageDraftService;
 import com.middleware.manager.wiki.entity.WikiPagePermission;
 import com.middleware.manager.wiki.service.WikiExportService;
 import com.middleware.manager.wiki.service.WikiGraphService;
@@ -46,17 +45,18 @@ import java.util.*;
 import lombok.extern.slf4j.Slf4j;
 
 @RestController
-@RequestMapping("/api/wiki")
+@RequestMapping("/api/knowledge")
 @Slf4j
 public class WikiController {
 
     private final WikiPageMapper pageMapper;
     private final WikiLinkMapper linkMapper;
     private final WikiSourceMapper sourceMapper;
-    private final IngestAgent ingestAgent;
     private final WikiExportService exportService;
     private final WikiImportService importService;
     private final WikiGraphService graphService;
+    private final PageDraftService pageDraftService;
+    private final LinkResolver linkResolver;
     private final List<DocumentLoader> documentLoaders;
     private final AdminAccountMapper adminAccountMapper;
     private final WikiAuditLogMapper auditLogMapper;
@@ -66,9 +66,6 @@ public class WikiController {
     @Autowired
     private WikiSearchService wikiSearchService;
     private final LintResultMapper lintResultMapper;
-    private final IngestTaskService taskService;
-    private final IngestTaskMapper taskMapper;
-    private final WikiIngestLogMapper ingestLogMapper;
     private final WikiPermissionService wikiPermissionService;
     private final WikiPagePermissionMapper pagePermissionMapper;
     private final Gson gson = new Gson();
@@ -76,10 +73,11 @@ public class WikiController {
     public WikiController(WikiPageMapper pageMapper,
                           WikiLinkMapper linkMapper,
                           WikiSourceMapper sourceMapper,
-                          IngestAgent ingestAgent,
                           WikiExportService exportService,
                           WikiImportService importService,
                           WikiGraphService graphService,
+                          PageDraftService pageDraftService,
+                          LinkResolver linkResolver,
                           List<DocumentLoader> documentLoaders,
                           AdminAccountMapper adminAccountMapper,
                           WikiAuditLogMapper auditLogMapper,
@@ -87,17 +85,15 @@ public class WikiController {
                           LintResultMapper lintResultMapper,
                           WikiPermissionService wikiPermissionService,
                           WikiPagePermissionMapper pagePermissionMapper,
-                          IngestTaskService taskService,
-                          IngestTaskMapper taskMapper,
-                          WikiIngestLogMapper ingestLogMapper,
                           VectorStore vectorStore) {
         this.pageMapper = pageMapper;
         this.linkMapper = linkMapper;
         this.sourceMapper = sourceMapper;
-        this.ingestAgent = ingestAgent;
         this.exportService = exportService;
         this.importService = importService;
         this.graphService = graphService;
+        this.pageDraftService = pageDraftService;
+        this.linkResolver = linkResolver;
         this.documentLoaders = documentLoaders;
         this.adminAccountMapper = adminAccountMapper;
         this.auditLogMapper = auditLogMapper;
@@ -106,9 +102,6 @@ public class WikiController {
         this.wikiPermissionService = wikiPermissionService;
         this.pagePermissionMapper = pagePermissionMapper;
         this.vectorStore = vectorStore;
-        this.taskService = taskService;
-        this.taskMapper = taskMapper;
-        this.ingestLogMapper = ingestLogMapper;
     }
 
     @GetMapping("/pages")
@@ -159,24 +152,33 @@ public class WikiController {
         return results;
     }
 
-    @PostMapping("/pages/reindex")
-    public ResponseEntity<Map<String, Object>> reindexPages() {
-        List<WikiSource> sources = sourceMapper.findByIngested(true);
-        int success = 0, failed = 0;
-        for (WikiSource source : sources) {
-            try {
-                ingestAgent.vectorizeSource(source);
-                success++;
-            } catch (Exception e) {
-                log.warn("Failed to vectorize source {}: {}", source.getId(), e.getMessage());
-                failed++;
-            }
+    /**
+     * 从一份源文档为指定主题起草经验页面。产出的是草稿，需人工修改确认后才保存，
+     * LLM 不进入内容层的真相链路。
+     */
+    @PostMapping("/pages/draft")
+    public ResponseEntity<Map<String, String>> draftPage(@RequestBody Map<String, String> body,
+                                                         Authentication authentication) {
+        if (!wikiPermissionService.isAdmin(authentication)
+                && wikiPermissionService.getManagedCategory(authentication) == null) {
+            return ResponseEntity.status(403).build();
         }
-        return ResponseEntity.ok(Map.of("total", sources.size(), "success", success, "failed", failed));
+        String rawSourceId = body.get("sourceId");
+        if (rawSourceId == null || rawSourceId.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        String draft = pageDraftService.draft(Long.valueOf(rawSourceId), body.get("topic"));
+        return ResponseEntity.ok(Map.of("content", draft));
     }
 
     @PutMapping("/pages-batch-category")
-    public ResponseEntity<Void> batchUpdateCategory(@RequestBody Map<String, Object> body) {
+    public ResponseEntity<Void> batchUpdateCategory(@RequestBody Map<String, Object> body,
+                                                    Authentication authentication) {
+        // 分类是权限边界（写权限按 category 判定），改分类等于改归属，必须是管理岗
+        if (!wikiPermissionService.isAdmin(authentication)
+                && wikiPermissionService.getManagedCategory(authentication) == null) {
+            return ResponseEntity.status(403).build();
+        }
         List<?> ids = (List<?>) body.get("ids");
         String category = (String) body.get("category");
         String software = (String) body.get("software");
@@ -191,14 +193,74 @@ public class WikiController {
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * 新建经验页面。编译流水线下线后页面只能由人书写，故补上创建入口。
+     * 一律先落为草稿，发布需另走 updatePage 并通过审核权限校验。
+     */
+    @PostMapping("/pages")
+    public ResponseEntity<WikiPageSaveResponse> createPage(@RequestBody WikiPage page,
+                                               Authentication authentication, HttpServletRequest request) {
+        if (!wikiPermissionService.isAdmin(authentication)
+                && wikiPermissionService.getManagedCategory(authentication) == null) {
+            return ResponseEntity.status(403).build();
+        }
+        if (page.getTitle() == null || page.getTitle().isBlank()
+                || page.getContent() == null || page.getContent().isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+
+        page.setId(null);
+        page.setStatus("DRAFT");
+        page.setPageType(page.getPageType() == null ? "EXPERIENCE" : page.getPageType());
+        page.setCompiledBy(authentication != null ? authentication.getName() : "system");
+        page.setCreatedAt(LocalDateTime.now());
+        page.setUpdatedAt(LocalDateTime.now());
+        pageMapper.insert(page);
+        WikiPageSaveResponse result = resolveLinks(page);
+
+        Long actorId = resolveActorId(authentication);
+        try {
+            auditLogMapper.insert("PAGE_CREATE", "PAGE", page.getId(), actorId,
+                    authentication != null ? authentication.getName() : "system",
+                    request.getRemoteAddr(), null);
+        } catch (Exception e) {
+            log.warn("Audit log write failed: {}", e.getMessage());
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 解析正文中的 [[页面标题]] 建边。图谱与检索的图扩展都依赖这一步。
+     * <p>建边失败不应影响页面保存本身——边可以稍后由 Lint 或下次编辑补上，
+     * 但页面内容丢失是不可接受的。
+     */
+    private WikiPageSaveResponse resolveLinks(WikiPage page) {
+        try {
+            int created = linkResolver.resolveLinks(List.of(page));
+            log.debug("页面 {} 解析出 {} 条关联", page.getId(), created);
+            return WikiPageSaveResponse.ok(page, created);
+        } catch (Exception e) {
+            // 保存本身已成功，页面内容不能因为建边失败而丢失；但失败必须让用户看见，
+            // 并可通过 POST /pages/{id}/relink 重试，而不是只留一行日志。
+            log.warn("页面 {} 的 wikilink 解析失败: {}", page.getId(), e.getMessage());
+            return WikiPageSaveResponse.withWarning(page, ErrorMessages.WIKI_LINK_RESOLVE_FAILED);
+        }
+    }
+
     @PutMapping("/pages/{id}")
-    public ResponseEntity<WikiPage> updatePage(@PathVariable Long id, @RequestBody WikiPage page,
+    public ResponseEntity<WikiPageSaveResponse> updatePage(@PathVariable Long id, @RequestBody WikiPage page,
                                                 Authentication authentication, HttpServletRequest request) {
         WikiPage existing = pageMapper.findById(id);
         if (existing == null) return ResponseEntity.notFound().build();
 
         String oldStatus = existing.getStatus();
         String newStatus = page.getStatus();
+
+        // 发布（-> ACTIVE）属审核动作，必须有审核权限
+        boolean publishing = "ACTIVE".equals(newStatus) && !"ACTIVE".equals(oldStatus);
+        if (publishing && !wikiPermissionService.isAdmin(authentication)) {
+            return ResponseEntity.status(403).build();
+        }
 
         if (page.getTitle() != null) existing.setTitle(page.getTitle());
         if (page.getContent() != null) existing.setContent(page.getContent());
@@ -224,6 +286,7 @@ public class WikiController {
 
         existing.setUpdatedAt(LocalDateTime.now());
         pageMapper.update(existing);
+        WikiPageSaveResponse result = resolveLinks(existing);
 
         // Audit log for status changes
         if (newStatus != null && !newStatus.equals(oldStatus)) {
@@ -243,7 +306,27 @@ public class WikiController {
             }
         }
 
-        return ResponseEntity.ok(existing);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 重建该页的关联（补救入口）。
+     * <p>保存时建边失败后，用户可据响应里的 linkWarning 手动重试，不必靠重新编辑
+     * 正文来触发。
+     */
+    @PostMapping("/pages/{id}/relink")
+    public ResponseEntity<WikiPageSaveResponse> relinkPage(@PathVariable Long id,
+                                                           Authentication authentication,
+                                                           HttpServletRequest request) {
+        if (!wikiPermissionService.isAdmin(authentication)
+                && wikiPermissionService.getManagedCategory(authentication) == null) {
+            return ResponseEntity.status(403).build();
+        }
+        WikiPage page = pageMapper.findById(id);
+        if (page == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(resolveLinks(page));
     }
 
     @DeleteMapping("/pages/{id}")
@@ -260,135 +343,7 @@ public class WikiController {
         return ResponseEntity.ok().build();
     }
 
-    @PostMapping("/ingest/upload")
-    public ResponseEntity<IngestTask> ingestUpload(@RequestParam("file") MultipartFile file,
-                                                    @RequestParam(required = false) String category,
-                                                    @RequestParam(required = false) String software,
-                                                    Authentication authentication) {
-        try {
-            Long operatorId = resolveActorId(authentication);
-            IngestTask task = taskService.createTask(file, category, software, operatorId);
-            taskService.executeTask(task.getId());
-            return ResponseEntity.ok(task);
-        } catch (Exception e) {
-            log.error("Ingest upload failed: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
-        }
-    }
-
-    @PostMapping("/ingest/text")
-    public ResponseEntity<IngestTask> ingestText(@RequestBody Map<String, String> body,
-                                                  Authentication authentication) {
-        try {
-            String title = body.getOrDefault("title", "未命名文档");
-            String content = body.get("content");
-            String category = body.get("category");
-            String software = body.get("software");
-
-            if (content == null || content.isBlank()) return ResponseEntity.badRequest().build();
-
-            Long operatorId = resolveActorId(authentication);
-            IngestTask task = taskService.createTextTask(title, content, category, software, operatorId);
-            taskService.executeTask(task.getId());
-            return ResponseEntity.ok(task);
-        } catch (Exception e) {
-            log.error("Ingest text failed: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
-        }
-    }
-
-    @GetMapping("/ingest/tasks")
-    public List<IngestTask> listTasks() {
-        return taskService.getAllTasks();
-    }
-
-    @GetMapping("/ingest/tasks/{id}")
-    public ResponseEntity<IngestTask> getTask(@PathVariable Long id) {
-        IngestTask task = taskService.getTask(id);
-        return task != null ? ResponseEntity.ok(task) : ResponseEntity.notFound().build();
-    }
-
-    @PostMapping("/ingest/tasks/{id}/recompile-compressed")
-    public ResponseEntity<Map<String, Object>> recompileCompressed(@PathVariable Long id,
-                                                                    Authentication authentication,
-                                                                    HttpServletRequest request) {
-        try {
-            if (!canAdministerTask(authentication, id)) {
-                recordAudit("ACCESS_DENIED", "TASK", id, authentication, request,
-                        taskAuditDetail("WIKI_RECOMPILE_COMPRESSED", id));
-                return ResponseEntity.status(403).build();
-            }
-            taskService.recompileCompressed(id);
-            recordAudit("WIKI_RECOMPILE_COMPRESSED", "TASK", id, authentication, request,
-                    taskAuditDetail(null, id));
-            return ResponseEntity.ok(Map.of("status", "started", "taskId", id));
-        } catch (Exception e) {
-            log.error("Recompile compressed failed for task {}: {}", id, e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
-        }
-    }
-
-    @PostMapping("/ingest/tasks/{id}/recompile-missing")
-    public ResponseEntity<Map<String, Object>> recompileMissing(@PathVariable Long id,
-                                                                 Authentication authentication,
-                                                                 HttpServletRequest request) {
-        try {
-            if (!canAdministerTask(authentication, id)) {
-                recordAudit("ACCESS_DENIED", "TASK", id, authentication, request,
-                        taskAuditDetail("WIKI_RECOMPILE_MISSING", id));
-                return ResponseEntity.status(403).build();
-            }
-            taskService.recompileMissing(id);
-            recordAudit("WIKI_RECOMPILE_MISSING", "TASK", id, authentication, request,
-                    taskAuditDetail(null, id));
-            return ResponseEntity.ok(Map.of("status", "started", "taskId", id));
-        } catch (Exception e) {
-            log.error("Recompile missing failed for task {}: {}", id, e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
-        }
-    }
-
-    @PostMapping("/ingest/tasks/{id}/pause")
-    public ResponseEntity<Map<String, Object>> pauseTask(@PathVariable Long id,
-                                                          Authentication authentication,
-                                                          HttpServletRequest request) {
-        try {
-            if (!canAdministerTask(authentication, id)) {
-                recordAudit("ACCESS_DENIED", "TASK", id, authentication, request,
-                        taskAuditDetail("WIKI_PAUSE_TASK", id));
-                return ResponseEntity.status(403).build();
-            }
-            taskService.pauseTask(id);
-            recordAudit("WIKI_PAUSE_TASK", "TASK", id, authentication, request,
-                    taskAuditDetail(null, id));
-            return ResponseEntity.ok(Map.of("status", "paused", "taskId", id));
-        } catch (Exception e) {
-            log.error("Pause task {} failed: {}", id, e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
-        }
-    }
-
-    @PostMapping("/ingest/tasks/{id}/resume")
-    public ResponseEntity<Map<String, Object>> resumeTask(@PathVariable Long id,
-                                                           Authentication authentication,
-                                                           HttpServletRequest request) {
-        try {
-            if (!canAdministerTask(authentication, id)) {
-                recordAudit("ACCESS_DENIED", "TASK", id, authentication, request,
-                        taskAuditDetail("WIKI_RESUME_TASK", id));
-                return ResponseEntity.status(403).build();
-            }
-            taskService.resumeTask(id);
-            recordAudit("WIKI_RESUME_TASK", "TASK", id, authentication, request,
-                    taskAuditDetail(null, id));
-            return ResponseEntity.ok(Map.of("status", "resumed", "taskId", id));
-        } catch (Exception e) {
-            log.error("Resume task {} failed: {}", id, e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
-        }
-    }
-
-    @GetMapping("/export")
+    @GetMapping("/pages/export")
     public ResponseEntity<byte[]> exportWiki(@RequestParam(required = false) String category,
                                               Authentication authentication, HttpServletRequest request) {
         try {
@@ -416,7 +371,7 @@ public class WikiController {
         }
     }
 
-    @PostMapping("/import")
+    @PostMapping("/pages/import")
     public ResponseEntity<WikiImportService.ImportResult> importWiki(@RequestParam("file") MultipartFile file,
                                                                       @RequestParam(defaultValue = "false") boolean dryRun,
                                                                       Authentication authentication, HttpServletRequest request) {
@@ -504,47 +459,8 @@ public class WikiController {
 
     @GetMapping("/sources")
     public List<WikiSource> listSources(Authentication authentication) {
-        List<WikiSource> sources = sourceMapper.findAll();
-        if (authentication == null || wikiPermissionService.isAdmin(authentication)) return sources;
-        String category = wikiPermissionService.getManagedCategory(authentication);
-        if (category == null) return Collections.emptyList();
-        return sources.stream()
-                .filter(source -> source.getCategory() == null || category.equals(source.getCategory()))
-                .toList();
-    }
-
-    @GetMapping("/sources/{id}")
-    public ResponseEntity<WikiSource> getSource(@PathVariable Long id, Authentication authentication,
-                                                HttpServletRequest request) {
-        WikiSource source = sourceMapper.findById(id);
-        if (source == null) return ResponseEntity.notFound().build();
-        if (!canViewSource(authentication, source)) {
-            recordAudit("ACCESS_DENIED", "SOURCE", id, authentication, request,
-                    "{\"reason\":\"wiki_source_view_denied\"}");
-            return ResponseEntity.status(403).build();
-        }
-        return ResponseEntity.ok(source);
-    }
-
-    @DeleteMapping("/sources/{id}")
-    public ResponseEntity<Void> deleteSource(@PathVariable Long id) {
-        sourceMapper.deleteById(id);
-        return ResponseEntity.ok().build();
-    }
-
-    @PostMapping("/sources/{id}/ingest")
-    public ResponseEntity<IngestTask> reingestSource(@PathVariable Long id, Authentication authentication) {
-        WikiSource source = sourceMapper.findById(id);
-        if (source == null) return ResponseEntity.notFound().build();
-        try {
-            Long operatorId = resolveActorId(authentication);
-            IngestTask task = taskService.createReingestTask(source.getId(), operatorId);
-            taskService.executeTask(task.getId());
-            return ResponseEntity.ok(task);
-        } catch (Exception e) {
-            log.error("Re-ingest failed: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError().build();
-        }
+        // 原始文档对所有已认证用户开放，与经验页面的查看权限保持一致
+        return sourceMapper.findAll();
     }
 
     // --- Lint endpoints ---
@@ -654,27 +570,6 @@ public class WikiController {
         if (category == null || category.isBlank()) return false;
         String managedCategory = wikiPermissionService.getManagedCategory(authentication);
         return category.equals(managedCategory);
-    }
-
-    private boolean canAdministerTask(Authentication authentication, Long taskId) {
-        if (authentication == null || !authentication.isAuthenticated()) {
-            return false;
-        }
-        IngestTask task = taskMapper.findById(taskId);
-        if (task == null) {
-            return false;
-        }
-        WikiSource source = sourceMapper.findById(task.getSourceId());
-        return source != null && canAdministerWiki(authentication, source.getCategory());
-    }
-
-    private String taskAuditDetail(String action, Long taskId) {
-        JsonObject detail = new JsonObject();
-        if (action != null) {
-            detail.addProperty("action", action);
-        }
-        detail.addProperty("taskId", taskId);
-        return gson.toJson(detail);
     }
 
     private void recordAudit(String action, String targetType, Long targetId,

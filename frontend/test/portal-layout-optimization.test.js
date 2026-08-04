@@ -159,7 +159,7 @@ describe('门户页面优化2验收用例（需求 #17 · Issue #10）', () => {
 
     expect(wrapper.find('.job-navigation').exists()).toBe(false)
     expect(wrapper.findComponent(JobNavigation).exists()).toBe(false)
-    expect(wrapper.find('.job-workspace-header').exists()).toBe(true)
+    expect(wrapper.find('.job-workspace-header').exists()).toBe(false)
 
     // 模拟刷新/直接访问 URL：重新挂载后表现一致，主体内容正常展示
     wrapper.unmount()
@@ -167,7 +167,7 @@ describe('门户页面优化2验收用例（需求 #17 · Issue #10）', () => {
     const reopened = track(mount(job.entryComponent, { props: { job, feature: null, context: {} } }))
     await flushPromises()
     expect(reopened.find('.job-navigation').exists()).toBe(false)
-    expect(reopened.find('.job-workspace-header').exists()).toBe(true)
+    expect(reopened.find('.job-workspace-header').exists()).toBe(false)
   })
 
   test('TC-04 主页去除"选择你的岗位空间"标题', async () => {
@@ -185,13 +185,13 @@ describe('门户页面优化2验收用例（需求 #17 · Issue #10）', () => {
     }
   })
 
-  test.each(jobModules)('TC-05 独立空间（$shortName）标题去除"岗位"并保留业务类别', async (job) => {
+  test.each(jobModules)('TC-05 独立空间（$shortName）不重复显示岗位标题带', async (job) => {
     const wrapper = track(mount(job.entryComponent, { props: { job, feature: null, context: {} } }))
     await flushPromises()
 
-    const headerText = wrapper.find('.job-workspace-header').text()
-    expect(headerText).toContain(`集成中心·${job.shortName}`)
-    expect(headerText).not.toContain('岗位')
+    expect(wrapper.find('.job-workspace-header').exists()).toBe(false)
+    expect(wrapper.find('.job-mark').exists()).toBe(false)
+    expect(wrapper.find('.job-feature-grid').exists()).toBe(true)
   })
 
   test('TC-06 主页与公共模块不显示区分公共区域和岗位区域的分区标题', async () => {
@@ -233,9 +233,8 @@ describe('门户页面优化2验收用例（需求 #17 · Issue #10）', () => {
     for (const job of jobModules) {
       const workspace = track(mount(job.entryComponent, { props: { job, feature: null, context: {} } }))
       await flushPromises()
-      const headerEl = workspace.find('.job-workspace-header')
-      expect(headerEl.find('.eyebrow').exists()).toBe(false)
-      expect(headerEl.text()).not.toContain(job.englishName)
+      expect(workspace.find('.job-workspace-header').exists()).toBe(false)
+      expect(workspace.text()).not.toContain(job.englishName)
     }
   })
 

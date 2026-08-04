@@ -9,6 +9,7 @@ public class KnowledgeSearchResult {
     private String software;
     private float score;
     private String source;
+    private String sectionPath;
 
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
@@ -26,4 +27,6 @@ public class KnowledgeSearchResult {
     public void setScore(float score) { this.score = score; }
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
+    public String getSectionPath() { return sectionPath; }
+    public void setSectionPath(String sectionPath) { this.sectionPath = sectionPath; }
 }

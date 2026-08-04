@@ -6,8 +6,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.middleware.manager.agent.web.ExportController;
 import com.middleware.manager.knowledge.web.KnowledgeController;
-import com.middleware.manager.knowledge.web.KnowledgeGraphController;
 import com.middleware.manager.repository.ApiAuditLogMapper;
+import com.middleware.manager.repository.KnowledgeImportSourceMapper;
 import com.middleware.manager.wiki.web.WikiController;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +17,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.env.Environment;
+import org.springframework.cloud.client.loadbalancer.LoadBalancerClient;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -39,7 +40,6 @@ class AiServiceApplicationTests {
     @DisplayName("TC-AI-001 默认 profile 独立加载 AI 集群且关闭 Nacos")
     void defaultProfileLoadsAiClusterWithNacosDisabled() {
         assertThat(applicationContext.getBean(KnowledgeController.class)).isNotNull();
-        assertThat(applicationContext.getBean(KnowledgeGraphController.class)).isNotNull();
         assertThat(applicationContext.getBean(
                 com.middleware.manager.knowledge.web.AgentController.class)).isNotNull();
         assertThat(applicationContext.getBean(WikiController.class)).isNotNull();
@@ -59,7 +59,7 @@ class AiServiceApplicationTests {
     void aiEndpointsRequireAuthentication() throws Exception {
         assertUnauthorized("/api/knowledge/search");
         assertUnauthorized("/api/agent/sessions");
-        assertUnauthorized("/api/wiki/pages");
+        assertUnauthorized("/api/knowledge/pages");
         assertUnauthorized("/api/ops-agent/sessions");
         assertUnauthorized("/api/ops-agent/export/zabbix");
     }
@@ -79,6 +79,25 @@ class AiServiceApplicationTests {
 
         assertThat(sqlSessionFactory.getConfiguration().hasStatement(statementId)).isTrue();
         assertThat(applicationContext.getBean(ApiAuditLogMapper.class)).isNotNull();
+    }
+
+    @Test
+    @DisplayName("TC-AI-005 AI 服务提供阻塞式负载均衡客户端供 catalog 调用")
+    void catalogClientHasLoadBalancerSupport() {
+        assertThat(applicationContext.getBeansOfType(LoadBalancerClient.class)).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("TC-AI-006 业务知识导入 Mapper 查询语句已绑定")
+    void knowledgeImportSourceStatementsAreBound() {
+        String standardStatement = KnowledgeImportSourceMapper.class.getName()
+                + ".findPublishedStandardDocument";
+        String forumStatement = KnowledgeImportSourceMapper.class.getName()
+                + ".findPublishedForumPost";
+
+        assertThat(sqlSessionFactory.getConfiguration().hasStatement(standardStatement)).isTrue();
+        assertThat(sqlSessionFactory.getConfiguration().hasStatement(forumStatement)).isTrue();
+        assertThat(applicationContext.getBean(KnowledgeImportSourceMapper.class)).isNotNull();
     }
 
     private void assertUnauthorized(String path) throws Exception {
