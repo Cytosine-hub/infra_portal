@@ -9,6 +9,12 @@ const ALLOWED_EXTENSIONS = new Set([
 ])
 
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif'])
+const CLIPBOARD_IMAGE_EXTENSIONS = new Map([
+  ['image/png', 'png'],
+  ['image/jpeg', 'jpg'],
+  ['image/webp', 'webp'],
+  ['image/gif', 'gif']
+])
 
 export const DIAGNOSTIC_ATTACHMENT_ACCEPT = Array.from(ALLOWED_EXTENSIONS)
   .map(extension => `.${extension}`)
@@ -17,6 +23,28 @@ export const DIAGNOSTIC_ATTACHMENT_ACCEPT = Array.from(ALLOWED_EXTENSIONS)
 function extensionOf(name) {
   const index = String(name || '').lastIndexOf('.')
   return index < 0 ? '' : name.slice(index + 1).toLowerCase()
+}
+
+function normalizeClipboardFile(file, index, timestamp) {
+  if (!file || extensionOf(file.name) || !CLIPBOARD_IMAGE_EXTENSIONS.has(file.type)) {
+    return file
+  }
+  const suffix = index === 0 ? '' : `-${index + 1}`
+  const extension = CLIPBOARD_IMAGE_EXTENSIONS.get(file.type)
+  return new File([file], `clipboard-image-${timestamp}${suffix}.${extension}`, {
+    type: file.type,
+    lastModified: file.lastModified
+  })
+}
+
+export function diagnosticFilesFromClipboard(clipboardData, timestamp = Date.now()) {
+  if (!clipboardData) return []
+  const itemFiles = Array.from(clipboardData.items || [])
+    .filter(item => item.kind === 'file')
+    .map(item => item.getAsFile?.())
+    .filter(Boolean)
+  const files = itemFiles.length ? itemFiles : Array.from(clipboardData.files || [])
+  return files.map((file, index) => normalizeClipboardFile(file, index, timestamp))
 }
 
 export function validateDiagnosticAttachments(existing, incoming) {
