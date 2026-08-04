@@ -61,28 +61,27 @@ stages:
       allow_failure: true
 
 # 静态门禁使用临时随机测试密钥，不读取受保护变量，也不启动或更新服务。
-# verify:deployment:
-#   stage: validate
-#   script:
-#     - trap 'rm -f deploy/compose.test.env deploy/services.test.env' EXIT
-#     - sh -n deploy/*.sh deploy/tests/*.sh
-#     - sh deploy/tests/ci-contract.sh
-#     - sh deploy/tests/compose-contract.sh
-#     - sh deploy/tests/nacos-init-test.sh
-#     - sh deploy/tests/image-maintenance-test.sh
-#     - sh deploy/generate-test-env.sh
-#     - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.yml config --quiet
-#     - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.dependencies.yml config --quiet
-#     - docker compose --file deploy/docker-compose.yml config --quiet
-#     - docker compose --file deploy/docker-compose.dependencies.yml config --quiet
-#   rules:
-#     - *skip-schedule
-#     - *web-manual
-#     - changes:
-#         - deploy/**/*
-#         - db/**/*
-#         - .gitignore
-#         - .gitlab-ci.yml
+verify:deployment:
+  stage: validate
+  script:
+    - trap 'rm -f deploy/compose.test.env deploy/services.test.env' EXIT
+    - sh -n deploy/*.sh deploy/tests/*.sh
+    - sh deploy/tests/ci-contract.sh
+    - sh deploy/tests/compose-contract.sh
+    - sh deploy/tests/nacos-init-test.sh
+    - sh deploy/tests/image-maintenance-test.sh
+    - sh deploy/tests/ai-auth-preflight-test.sh
+    - sh deploy/generate-test-env.sh
+    - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.yml config --quiet
+    - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.dependencies.yml config --quiet
+  rules:
+    - *skip-schedule
+    - *web-manual
+    - changes:
+        - deploy/**/*
+        - db/**/*
+        - .gitignore
+        - .gitlab-ci.yml
 
 # 服务构建模板：Docker 多阶段构建首次执行全量 Maven verify，后续服务镜像复用该层。
 # 镜像使用上海日期和 7 位提交 SHA 组成的不可变标签，并保留在 Runner 主机 Docker 守护进程中。
@@ -255,6 +254,7 @@ verify:security-service:
     - export IMAGE_TAG="$(sh deploy/image-tag.sh "$CI_COMMIT_SHA" "$CI_PIPELINE_CREATED_AT")"
     - ': "${DEPLOY_COMPOSE_ENV_FILE:?缺少 DEPLOY_COMPOSE_ENV_FILE（GitLab File 类型变量）}"'
     - ': "${DEPLOY_SERVICES_ENV_FILE:?缺少 DEPLOY_SERVICES_ENV_FILE（GitLab File 类型变量）}"'
+    - ': "${AI_API_KEY:?缺少 AI_API_KEY（GitLab Masked 变量）}"'
     - test -f "$DEPLOY_COMPOSE_ENV_FILE"
     - test -f "$DEPLOY_SERVICES_ENV_FILE"
     - |
@@ -268,11 +268,29 @@ verify:security-service:
     - export DEPLOY_COMPOSE_FILE="$DEPLOY_BUSINESS_DIR/compose.yml"
     - export DEPLOY_COMPOSE_ENV="$DEPLOY_BUSINESS_DIR/compose.env"
     - export DEPLOY_SERVICES_ENV="$DEPLOY_BUSINESS_DIR/services.env"
+    - umask 077
     - mkdir -p "$DEPLOY_BUSINESS_DIR" "$DEPLOY_DATA_ROOT"
     - chmod 700 "$DEPLOY_BUSINESS_DIR"
     - cp deploy/docker-compose.yml "$DEPLOY_COMPOSE_FILE"
     - cp "$DEPLOY_COMPOSE_ENV_FILE" "$DEPLOY_COMPOSE_ENV"
     - cp "$DEPLOY_SERVICES_ENV_FILE" "$DEPLOY_SERVICES_ENV"
+    - |
+      services_env_tmp="${DEPLOY_SERVICES_ENV}.tmp"
+      awk -v ai_api_key="$AI_API_KEY" '
+        BEGIN { replaced = 0 }
+        /^AI_API_KEY=/ {
+          if (!replaced) {
+            print "AI_API_KEY=" ai_api_key
+            replaced = 1
+          }
+          next
+        }
+        { print }
+        END {
+          if (!replaced) print "AI_API_KEY=" ai_api_key
+        }
+      ' "$DEPLOY_SERVICES_ENV" > "$services_env_tmp"
+      mv "$services_env_tmp" "$DEPLOY_SERVICES_ENV"
     - |
       if grep -q '^IMAGE_TAG=' "$DEPLOY_COMPOSE_ENV"; then
         sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" "$DEPLOY_COMPOSE_ENV"
@@ -352,6 +370,7 @@ verify:security-service:
           --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" \
           --file deploy/Dockerfile .
       fi
+    - if [ "$SVC" = "ai-service" ]; then sh deploy/validate-ai-auth.sh "$DEPLOY_SERVICES_ENV" "$IMAGE_NAMESPACE/ai-service:$IMAGE_TAG" "$DEPLOY_COMPOSE_ENV"; fi
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never "$SVC"
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps "$SVC"
 
@@ -395,6 +414,7 @@ deploy:all-backend-services:
             --file deploy/Dockerfile .
         fi
       done
+    - sh deploy/validate-ai-auth.sh "$DEPLOY_SERVICES_ENV" "$IMAGE_NAMESPACE/ai-service:$IMAGE_TAG" "$DEPLOY_COMPOSE_ENV"
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service
 
@@ -409,6 +429,7 @@ deploy:all-services:
         docker build --build-arg SERVICE="$SVC" --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
       done
     - docker build --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --file deploy/Dockerfile.frontend .
+    - sh deploy/validate-ai-auth.sh "$DEPLOY_SERVICES_ENV" "$IMAGE_NAMESPACE/ai-service:$IMAGE_TAG" "$DEPLOY_COMPOSE_ENV"
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/api/public/releases
@@ -458,6 +479,7 @@ deploy:full-stack:
         docker build --build-arg SERVICE="$SVC" --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/$SVC:$IMAGE_TAG" --file deploy/Dockerfile .
       done
     - docker build --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --file deploy/Dockerfile.frontend .
+    - sh deploy/validate-ai-auth.sh "$DEPLOY_SERVICES_ENV" "$IMAGE_NAMESPACE/ai-service:$IMAGE_TAG" "$DEPLOY_COMPOSE_ENV"
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/api/public/releases
