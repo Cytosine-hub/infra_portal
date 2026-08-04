@@ -33,7 +33,7 @@ services:
       NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-infra-portal-local-key}
       NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-infra-portal-local-value}
     ports:
-      - "127.0.0.1:${NACOS_PORT:-8848}:8848"
+      - "${NACOS_BIND_ADDRESS:-0.0.0.0}:${NACOS_PORT:-8848}:8848"
     volumes:
       - ${DEPLOY_DATA_DIR:-./data}/nacos/data:/home/nacos/data
       - ${DEPLOY_DATA_DIR:-./data}/nacos/logs:/home/nacos/logs
@@ -107,7 +107,7 @@ services:
 
   milvus:
     container_name: infra-portal-milvus
-    image: milvusdb/milvus:${MILVUS_VERSION:-v2.3.4}
+    image: milvusdb/milvus:${MILVUS_VERSION:-v2.5.10}
     restart: unless-stopped
     security_opt:
       - seccomp:unconfined

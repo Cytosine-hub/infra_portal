@@ -63,10 +63,24 @@ for service in api-gateway core-service ai-service community-service middleware-
     assert_file "deploy/nacos-config/$service.properties" "TC-DOCKER-010 $service"
 done
 
-assert_text deploy/nginx.conf 'proxy_pass http://api-gateway:8080' 'TC-DOCKER-011'
+assert_text deploy/nginx.conf '^    set \$api_gateway_upstream http://api-gateway:8080;$' \
+    'TC-DOCKER-011 dynamic Gateway upstream'
+assert_text deploy/nginx.conf '^        proxy_pass \$api_gateway_upstream;$' \
+    'TC-DOCKER-011 Gateway proxy usage'
 assert_text .gitignore '^/deploy/compose.env$' 'TC-DOCKER-012'
 assert_text deploy/docker-compose.yml 'http://127\.0\.0\.1/' 'TC-DOCKER-025'
 assert_text deploy/docker-compose.dependencies.yml '127\.0\.0\.1:\$\{MILVUS_PORT:-19530\}:19530' 'TC-DOCKER-027 milvus'
+assert_text deploy/docker-compose.dependencies.yml \
+    '\$\{NACOS_BIND_ADDRESS:-0\.0\.0\.0\}:\$\{NACOS_PORT:-8848\}:8848' \
+    'TC-DOCKER-037 Nacos LAN bind address'
+assert_text deploy/compose.env.example '^NACOS_BIND_ADDRESS=0\.0\.0\.0$' \
+    'TC-DOCKER-037 Nacos LAN bind env'
+assert_text deploy/docker-compose.dependencies.yml \
+    'milvusdb/milvus:\$\{MILVUS_VERSION:-v2\.5\.10\}' \
+    'TC-DOCKER-038 Milvus hybrid-search compatible version'
+assert_text deploy/milvus-offline/docker-compose.yml \
+    'milvusdb/milvus:\$\{MILVUS_VERSION:-v2\.5\.10\}' \
+    'TC-DOCKER-038 offline Milvus compatible version'
 assert_text deploy/docker-compose.yml '127\.0\.0\.1:\$\{COMMUNITY_SERVICE_PORT:-8082\}:8082' 'TC-DOCKER-027 community'
 assert_text deploy/docker-compose.yml '127\.0\.0\.1:\$\{AI_SERVICE_PORT:-8083\}:8083' 'TC-DOCKER-027 ai'
 assert_text deploy/docker-compose.yml '127\.0\.0\.1:\$\{CORE_SERVICE_PORT:-8084\}:8084' 'TC-DOCKER-027 core'

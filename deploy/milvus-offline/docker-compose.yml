@@ -46,7 +46,7 @@ services:
 
   standalone:
     container_name: milvus-standalone
-    image: milvusdb/milvus:${MILVUS_VERSION:-v2.3.4}
+    image: milvusdb/milvus:${MILVUS_VERSION:-v2.5.10}
     command: ["milvus", "run", "standalone"]
     restart: unless-stopped
     security_opt:

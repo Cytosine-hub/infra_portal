@@ -57,9 +57,9 @@ app:
   embedding:
     max-tokens: ${EMBEDDING_MAX_TOKENS:512}
   ai:
-    base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
+    base-url: ${AI_BASE_URL:http://ai.tlb.shcj-s.com:8080/v1}
     api-key: ${AI_API_KEY:}
-    model: ${AI_MODEL:mimo-v2.5-pro}
+    model: ${AI_MODEL:gpt-5.6-sol}
     max-tokens: ${AI_MAX_TOKENS:8192}
     temperature: ${AI_TEMPERATURE:0.1}
   vector:
@@ -85,9 +85,9 @@ app:
 langchain4j:
   open-ai:
     chat-model:
-      base-url: ${AI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
+      base-url: ${AI_BASE_URL:http://ai.tlb.shcj-s.com:8080/v1}
       api-key: ${AI_API_KEY:}
-      model-name: ${AI_MODEL:mimo-v2.5-pro}
+      model-name: ${AI_MODEL:gpt-5.6-sol}
       max-tokens: ${AI_MAX_TOKENS:8192}
       temperature: ${AI_TEMPERATURE:0.1}
       timeout: ${AI_TIMEOUT:PT600S}

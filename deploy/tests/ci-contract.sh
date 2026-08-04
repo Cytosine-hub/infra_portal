@@ -99,6 +99,31 @@ assert_text deploy/nacos-config/ai-service.properties \
 assert_text deploy/nacos-config/ai-service.properties \
     '^app\.embedding\.max-tokens=\$\{EMBEDDING_MAX_TOKENS:' \
     'TC-CI-032 Nacos embedding token limit override'
+assert_text deploy/services.env.example '^AI_BASE_URL=http://ai\.tlb\.shcj-s\.com:8080/v1$' \
+    'TC-CI-034 chat model base URL env'
+assert_text deploy/services.env.example '^AI_MODEL=gpt-5\.6-sol$' \
+    'TC-CI-034 chat model name env'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^app\.ai\.base-url=\$\{AI_BASE_URL:http://ai\.tlb\.shcj-s\.com:8080/v1\}$' \
+    'TC-CI-034 Nacos app AI base URL override'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^app\.ai\.model=\$\{AI_MODEL:gpt-5\.6-sol\}$' \
+    'TC-CI-034 Nacos app AI model override'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^langchain4j\.open-ai\.chat-model\.base-url=\$\{AI_BASE_URL:http://ai\.tlb\.shcj-s\.com:8080/v1\}$' \
+    'TC-CI-034 Nacos LangChain4j base URL override'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^langchain4j\.open-ai\.chat-model\.model-name=\$\{AI_MODEL:gpt-5\.6-sol\}$' \
+    'TC-CI-034 Nacos LangChain4j model override'
+assert_text backend/ai-service/src/main/resources/application.yml \
+    '^    base-url: \$\{AI_BASE_URL:http://ai\.tlb\.shcj-s\.com:8080/v1\}$' \
+    'TC-CI-034 application chat model base URL fallback'
+assert_text backend/ai-service/src/main/resources/application.yml \
+    '^    model: \$\{AI_MODEL:gpt-5\.6-sol\}$' \
+    'TC-CI-034 application chat model name fallback'
+assert_no_text backend/ai-service/src/main/resources/application-local.yml \
+    'mimo-v2\.5-pro|token-plan-cn\.xiaomimimo\.com' \
+    'TC-CI-034 no legacy local chat model fallback'
 assert_text backend/ai-service/src/main/resources/application.yml \
     '^    max-tokens: \$\{EMBEDDING_MAX_TOKENS:512\}$' \
     'TC-CI-033 application embedding token limit fallback'
