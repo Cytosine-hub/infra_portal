@@ -143,6 +143,8 @@ assert_no_text .gitlab-ci.yml \
 
 assert_text .gitlab-ci.yml 'DEPLOY_COMPOSE_ENV_FILE:\?缺少' 'TC-CI-006 compose file variable guard'
 assert_text .gitlab-ci.yml 'DEPLOY_SERVICES_ENV_FILE:\?缺少' 'TC-CI-006 services file variable guard'
+assert_text .gitlab-ci.yml 'AI_API_KEY:\?缺少 AI_API_KEY（GitLab Masked 变量）' \
+    'TC-CI-039 dedicated masked AI key guard'
 assert_text .gitlab-ci.yml 'export BUSINESS_ENV_FILE=\./services\.env' 'TC-CI-006 services file path override'
 assert_text .gitlab-ci.yml '旧变量 COMPOSE_PROJECT_NAME' \
     'TC-CI-006 reserved Compose project variable guard'
@@ -155,6 +157,10 @@ assert_text .gitlab-ci.yml '^  DEPLOY_DATA_ROOT: "/app/infra-portal/data"$' \
     'TC-CI-011 separated data root'
 assert_text .gitlab-ci.yml 'cp deploy/docker-compose\.yml "\$DEPLOY_COMPOSE_FILE"' \
     'TC-CI-011 persisted compose file'
+assert_text .gitlab-ci.yml 'awk -v ai_api_key="\$AI_API_KEY"' \
+    'TC-CI-039 masked AI key injection'
+assert_text .gitlab-ci.yml 'print "AI_API_KEY=" ai_api_key' \
+    'TC-CI-039 services env AI key replacement'
 assert_text .gitlab-ci.yml \
     'cp deploy/docker-compose\.dependencies\.yml "\$DEPLOY_DEPENDENCIES_COMPOSE_FILE"' \
     'TC-CI-011 persisted dependency compose file'
@@ -178,6 +184,9 @@ assert_text .gitlab-ci.yml '^  - validate ' 'TC-CI-013 validate stage'
 assert_text .gitlab-ci.yml 'sh deploy/tests/ci-contract\.sh' 'TC-CI-013 CI contract gate'
 assert_text .gitlab-ci.yml 'sh deploy/tests/compose-contract\.sh' 'TC-CI-013 Compose contract gate'
 assert_text .gitlab-ci.yml 'sh deploy/tests/nacos-init-test\.sh' 'TC-CI-013 Nacos contract gate'
+assert_text .gitlab-ci.yml '^verify:deployment:' 'TC-CI-038 active deployment contract gate'
+assert_text .gitlab-ci.yml 'sh deploy/tests/ai-auth-preflight-test\.sh' \
+    'TC-CI-038 AI authentication preflight test gate'
 
 assert_text .gitlab-ci.yml 'CI_OPEN_MERGE_REQUESTS.*CI_PIPELINE_SOURCE.*push' \
     'TC-CI-014 duplicate pipeline guard'
@@ -266,5 +275,17 @@ printf '%s\n' "$full_stack_job" | grep -Eq '\$DEPLOY_COMPOSE_FILE' \
 printf '%s\n' "$full_stack_job" | grep -Eq 'frontend' \
     || fail 'TC-CI-025 full-stack deployment must include frontend'
 pass 'TC-CI-025 dependency and business full-stack deployment mode'
+
+deploy_template=$(extract_job .deploy-tpl)
+printf '%s\n' "$deploy_template" | grep -Eq \
+    'validate-ai-auth\.sh.*DEPLOY_SERVICES_ENV.*ai-service.*DEPLOY_COMPOSE_ENV' \
+    || fail 'TC-CI-038 single ai-service deployment lacks authentication preflight'
+for deploy_job in deploy:all-backend-services deploy:all-services deploy:full-stack; do
+    job_body=$(extract_job "$deploy_job")
+    printf '%s\n' "$job_body" | grep -Eq \
+        'validate-ai-auth\.sh.*DEPLOY_SERVICES_ENV.*ai-service.*DEPLOY_COMPOSE_ENV' \
+        || fail "TC-CI-038 $deploy_job lacks authentication preflight"
+done
+pass 'TC-CI-038 all ai-service deployment paths require authentication preflight'
 
 printf '%s\n' '* Task complete: GitLab CI contract'
