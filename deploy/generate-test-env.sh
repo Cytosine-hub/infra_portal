@@ -56,7 +56,9 @@ cp "$COMPOSE_TEMPLATE" "$COMPOSE_OUTPUT"
 cp "$SERVICES_TEMPLATE" "$SERVICES_OUTPUT"
 chmod 600 "$COMPOSE_OUTPUT" "$SERVICES_OUTPUT"
 
-set_env_value "$COMPOSE_OUTPUT" COMPOSE_PROJECT_NAME infra-portal-test
+set_env_value "$COMPOSE_OUTPUT" COMPOSE_BUSINESS_PROJECT_NAME infra-portal-test
+set_env_value "$COMPOSE_OUTPUT" COMPOSE_DEPENDENCIES_PROJECT_NAME infra-portal-dependencies-test
+set_env_value "$COMPOSE_OUTPUT" COMPOSE_NETWORK_NAME infra-portal-test-network
 set_env_value "$COMPOSE_OUTPUT" IMAGE_TAG test
 set_env_value "$COMPOSE_OUTPUT" BUSINESS_ENV_FILE "./$(basename "$SERVICES_OUTPUT")"
 set_env_value "$COMPOSE_OUTPUT" DEPLOY_DATA_DIR /app/infra-portal-test

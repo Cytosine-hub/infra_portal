@@ -115,7 +115,7 @@ sequenceDiagram
 
 ## 后续待办
 
-- 注册 GitLab Runner，并补全 `integration:e2e` 的真实 Nacos/MySQL 多进程验证。
+- 在预发环境补充真实的 Nacos/MySQL 多进程与认证越权验证；完成前不设置只打印 TODO 的占位 CI 作业。
 - 按服务物理拆库，建立跨服务事件与对账机制。
 - 引入 OpenTelemetry 指标、日志与链路追踪。
 - database/host/network/security 岗位新增业务端点时补精确网关路由、鉴权和契约测试。

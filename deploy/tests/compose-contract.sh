@@ -30,17 +30,30 @@ assert_no_text() {
 }
 
 printf '%s\n' '+ Task start: Docker Compose contract'
-assert_file deploy/compose.env.example 'TC-DOCKER-001'
-assert_file deploy/Dockerfile.frontend 'TC-DOCKER-002'
-assert_file deploy/nginx.conf 'TC-DOCKER-003'
-assert_file deploy/nacos-init.sh 'TC-DOCKER-004'
+assert_no_text deploy/compose.env.example '^COMPOSE_PROJECT_NAME=' \
+    'TC-DOCKER-036 reserved Compose project variable excluded'
 assert_text deploy/Dockerfile.nacos-init '^COPY deploy/nacos-config /config$' 'TC-DOCKER-029'
-assert_no_text deploy/docker-compose.yml 'nacos-config:/config' 'TC-DOCKER-030'
+assert_no_text deploy/docker-compose.dependencies.yml 'nacos-config:/config' 'TC-DOCKER-030'
 assert_text deploy/docker-compose.yml '^  frontend:' 'TC-DOCKER-005'
-assert_text deploy/docker-compose.yml '^  nacos-init:' 'TC-DOCKER-006'
-assert_text deploy/docker-compose.yml 'condition: service_completed_successfully' 'TC-DOCKER-007'
-assert_text deploy/docker-compose.yml '../db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro' 'TC-DOCKER-008'
-assert_text deploy/docker-compose.yml '../db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro' 'TC-DOCKER-009'
+assert_no_text deploy/docker-compose.yml '^  (mysql|nacos|nacos-init|etcd|minio|milvus):' \
+    'TC-DOCKER-032 business compose excludes dependencies'
+assert_text deploy/docker-compose.dependencies.yml '^  nacos-init:' 'TC-DOCKER-006'
+assert_no_text deploy/docker-compose.dependencies.yml \
+    '^  (api-gateway|core-service|ai-service|community-service|middleware-service|database-service|host-service|network-service|security-service|frontend):' \
+    'TC-DOCKER-032 dependency compose excludes business services'
+assert_text deploy/docker-compose.dependencies.yml 'condition: service_healthy' 'TC-DOCKER-007'
+assert_text deploy/docker-compose.dependencies.yml '../db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro' 'TC-DOCKER-008'
+assert_text deploy/docker-compose.dependencies.yml '../db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro' 'TC-DOCKER-009'
+assert_text deploy/docker-compose.dependencies.yml 'name: \$\{COMPOSE_NETWORK_NAME:-infra-portal-network\}' \
+    'TC-DOCKER-033 dependency shared network'
+assert_text deploy/docker-compose.yml \
+    '^name: \$\{COMPOSE_BUSINESS_PROJECT_NAME:-infra-portal\}$' \
+    'TC-DOCKER-036 independent business project name'
+assert_text deploy/docker-compose.yml 'external: true' 'TC-DOCKER-033 business external network'
+assert_no_text deploy/docker-compose.yml '\$\{[^}]+:\?' 'TC-DOCKER-034 business interpolation defaults'
+assert_no_text deploy/docker-compose.dependencies.yml '\$\{[^}]+:\?' \
+    'TC-DOCKER-034 dependency interpolation defaults'
+assert_text deploy/docker-compose.yml 'required: false' 'TC-DOCKER-035 optional business env file'
 assert_text db/init.sql '^SET NAMES utf8mb4;$' 'TC-DOCKER-031 init SQL character set'
 assert_text db/seed.sql '^SET NAMES utf8mb4;$' 'TC-DOCKER-031 seed SQL character set'
 assert_text db/init.sql '^CREATE TABLE `api_audit_log` \($' 'TC-DOCKER-033 API audit table'
@@ -53,8 +66,7 @@ done
 assert_text deploy/nginx.conf 'proxy_pass http://api-gateway:8080' 'TC-DOCKER-011'
 assert_text .gitignore '^/deploy/compose.env$' 'TC-DOCKER-012'
 assert_text deploy/docker-compose.yml 'http://127\.0\.0\.1/' 'TC-DOCKER-025'
-assert_text deploy/smoke-test.sh 'entrypoint jq' 'TC-DOCKER-026'
-assert_text deploy/docker-compose.yml '127\.0\.0\.1:\$\{MILVUS_PORT:-19530\}:19530' 'TC-DOCKER-027 milvus'
+assert_text deploy/docker-compose.dependencies.yml '127\.0\.0\.1:\$\{MILVUS_PORT:-19530\}:19530' 'TC-DOCKER-027 milvus'
 assert_text deploy/docker-compose.yml '127\.0\.0\.1:\$\{COMMUNITY_SERVICE_PORT:-8082\}:8082' 'TC-DOCKER-027 community'
 assert_text deploy/docker-compose.yml '127\.0\.0\.1:\$\{AI_SERVICE_PORT:-8083\}:8083' 'TC-DOCKER-027 ai'
 assert_text deploy/docker-compose.yml '127\.0\.0\.1:\$\{CORE_SERVICE_PORT:-8084\}:8084' 'TC-DOCKER-027 core'
