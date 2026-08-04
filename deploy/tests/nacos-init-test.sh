@@ -107,10 +107,53 @@ esac
 EOF
 chmod +x "$TMP_ROOT/bin/curl"
 
+if ! command -v jq >/dev/null 2>&1; then
+    cat > "$TMP_ROOT/bin/jq" <<'EOF'
+#!/bin/sh
+set -eu
+
+namespace=
+expression=
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --arg)
+            [ "$2" = namespace ] || exit 2
+            namespace=$3
+            shift 3
+            ;;
+        -*)
+            shift
+            ;;
+        *)
+            expression=$1
+            shift
+            ;;
+    esac
+done
+
+input=$(cat)
+case "$expression" in
+    *accessToken*)
+        printf '%s\n' "$input" | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p'
+        ;;
+    *namespace*)
+        case "$input" in
+            *"\"namespace\":\"$namespace\""*) exit 0 ;;
+            *) exit 1 ;;
+        esac
+        ;;
+    *)
+        exit 2
+        ;;
+esac
+EOF
+    chmod +x "$TMP_ROOT/bin/jq"
+fi
+
 run_initializer() {
     output_file=$1
     shift
-    env \
+    if ! env \
         PATH="$TMP_ROOT/bin:$PATH" \
         MOCK_CURL_LOG="$TMP_ROOT/curl.log" \
         NACOS_URL=http://nacos:8848 \
@@ -120,7 +163,10 @@ run_initializer() {
         NACOS_CONFIG_GROUP=DEFAULT_GROUP \
         NACOS_CONFIG_DIR="$TMP_ROOT/config" \
         "$@" \
-        sh "$SCRIPT" > "$output_file" 2>&1
+        sh "$SCRIPT" > "$output_file" 2>&1; then
+        cat "$output_file" >&2
+        return 1
+    fi
 }
 
 printf '%s\n' '+ Task start: Nacos initializer'
