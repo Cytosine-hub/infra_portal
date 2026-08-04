@@ -22,6 +22,11 @@ assert_text() {
     pass "$3"
 }
 
+assert_fixed_text() {
+    grep -Fq "$2" "$ROOT_DIR/$1" || fail "$3 missing text $2"
+    pass "$3"
+}
+
 assert_no_text() {
     if grep -Eq "$2" "$ROOT_DIR/$1"; then
         fail "$3 unexpected pattern $2"
@@ -42,8 +47,8 @@ assert_no_text deploy/docker-compose.dependencies.yml \
     '^  (api-gateway|core-service|ai-service|community-service|middleware-service|database-service|host-service|network-service|security-service|frontend):' \
     'TC-DOCKER-032 dependency compose excludes business services'
 assert_text deploy/docker-compose.dependencies.yml 'condition: service_healthy' 'TC-DOCKER-007'
-assert_text deploy/docker-compose.dependencies.yml '\${MYSQL_INIT_DIR:-../db}/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro' 'TC-DOCKER-008'
-assert_text deploy/docker-compose.dependencies.yml '\${MYSQL_INIT_DIR:-../db}/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro' 'TC-DOCKER-009'
+assert_fixed_text deploy/docker-compose.dependencies.yml '${MYSQL_INIT_DIR:-../db}/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro' 'TC-DOCKER-008'
+assert_fixed_text deploy/docker-compose.dependencies.yml '${MYSQL_INIT_DIR:-../db}/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro' 'TC-DOCKER-009'
 assert_text deploy/docker-compose.dependencies.yml 'name: \$\{COMPOSE_NETWORK_NAME:-infra-portal-network\}' \
     'TC-DOCKER-033 dependency shared network'
 assert_text deploy/docker-compose.yml \
@@ -58,11 +63,11 @@ assert_text deploy/compose.env.example '^DEPLOY_DATA_ROOT=/app/infra-portal/data
     'TC-DOCKER-037 separated data root'
 assert_no_text deploy/compose.env.example '^DEPLOY_DATA_DIR=' \
     'TC-DOCKER-037 retired data directory variable'
-assert_text deploy/docker-compose.dependencies.yml \
-    '\${DEPLOY_DATA_ROOT:-./data}/dependencies/mysql:/var/lib/mysql' \
+assert_fixed_text deploy/docker-compose.dependencies.yml \
+    '${DEPLOY_DATA_ROOT:-./data}/dependencies/mysql:/var/lib/mysql' \
     'TC-DOCKER-037 dependency data hierarchy'
-assert_text deploy/docker-compose.yml \
-    '\${DEPLOY_DATA_ROOT:-./data}/business/core-service/storage:/app/storage' \
+assert_fixed_text deploy/docker-compose.yml \
+    '${DEPLOY_DATA_ROOT:-./data}/business/core-service/storage:/app/storage' \
     'TC-DOCKER-037 business data hierarchy'
 assert_text db/init.sql '^SET NAMES utf8mb4;$' 'TC-DOCKER-031 init SQL character set'
 assert_text db/seed.sql '^SET NAMES utf8mb4;$' 'TC-DOCKER-031 seed SQL character set'
