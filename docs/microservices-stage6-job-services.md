@@ -158,7 +158,7 @@ mvn clean verify
 - `deploy:all-services`：在一个 job 中构建并部署 9 个 Java 服务和前端，不操作依赖组件，执行前必须确保依赖栈已就绪；
 - `deploy:full-stack`：用于初始化或全量部署，先初始化或更新依赖栈并执行 Nacos 配置初始化，再构建和部署完整业务栈。
 
-`deploy/docker-compose.yml` 定义前端和 9 个 Java 业务服务，`deploy/docker-compose.dependencies.yml` 定义 MySQL、Nacos、Nacos 初始化以及 Milvus/etcd/MinIO。两个 Compose 项目通过固定共享网络通信并独立启停；所有有状态数据均通过宿主机目录挂载，根目录由 `DEPLOY_DATA_DIR` 控制。首次创建 `${DEPLOY_DATA_DIR}/mysql` 时，MySQL 会执行 `db/init.sql` 和 `db/seed.sql`；已有目录不会重复初始化。
+`deploy/docker-compose.yml` 定义前端和 9 个 Java 业务服务，`deploy/docker-compose.dependencies.yml` 定义 MySQL、Nacos、Nacos 初始化以及 Milvus/etcd/MinIO。两个 Compose 项目通过固定共享网络通信并独立启停；CI 将清单分别持久化到 `/app/infra-portal/compose/business` 和 `/app/infra-portal/compose/dependencies`。所有有状态数据均挂载到 `DEPLOY_DATA_ROOT=/app/infra-portal/data`，并在其下按 `business` 与 `dependencies` 分层；首次创建 `${DEPLOY_DATA_ROOT}/dependencies/mysql` 时，MySQL 才会执行初始化脚本，已有目录不会重复初始化。
 
 CI 依赖部署只要求受保护的 File 变量 `DEPLOY_COMPOSE_ENV_FILE`，其内容基于 `deploy/compose.env.example`，负责 Compose 插值、基础组件和数据目录；业务部署另外要求 `DEPLOY_SERVICES_ENV_FILE`，其内容基于 `deploy/services.env.example`，只包含注入 Java 容器的业务密钥。业务配置由 `deploy/nacos-config/*.properties` 初始化到 Nacos；`nacos-init` 只创建缺失的 namespace/Data ID，不覆盖已有配置。
 

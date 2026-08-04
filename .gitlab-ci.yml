@@ -39,8 +39,9 @@ default:
 variables:
   DOCKER_BUILDKIT: "1"
   IMAGE_NAMESPACE: "infra-portal"
-  # 部署清单持久化到 Runner 宿主机挂载目录，避免 Job 清理 /builds 后无法手动管理。
-  DEPLOY_STATE_DIR: "/app/infra-portal/deploy"
+  # Compose 清单与运行数据分别持久化，避免 Job 清理 /builds 后无法手动管理。
+  DEPLOY_COMPOSE_ROOT: "/app/infra-portal/compose"
+  DEPLOY_DATA_ROOT: "/app/infra-portal/data"
 
 stages:
   - validate      # Shell/CI/Compose 契约门禁
@@ -263,11 +264,12 @@ verify:security-service:
       fi
     - export BUSINESS_ENV_FILE="$DEPLOY_SERVICES_ENV_FILE"
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV_FILE" --file deploy/docker-compose.yml config --quiet
-    - export DEPLOY_COMPOSE_FILE="$DEPLOY_STATE_DIR/docker-compose.yml"
-    - export DEPLOY_COMPOSE_ENV="$DEPLOY_STATE_DIR/compose.env"
-    - export DEPLOY_SERVICES_ENV="$DEPLOY_STATE_DIR/services.env"
-    - mkdir -p "$DEPLOY_STATE_DIR"
-    - chmod 700 "$DEPLOY_STATE_DIR"
+    - export DEPLOY_BUSINESS_DIR="$DEPLOY_COMPOSE_ROOT/business"
+    - export DEPLOY_COMPOSE_FILE="$DEPLOY_BUSINESS_DIR/compose.yml"
+    - export DEPLOY_COMPOSE_ENV="$DEPLOY_BUSINESS_DIR/compose.env"
+    - export DEPLOY_SERVICES_ENV="$DEPLOY_BUSINESS_DIR/services.env"
+    - mkdir -p "$DEPLOY_BUSINESS_DIR" "$DEPLOY_DATA_ROOT"
+    - chmod 700 "$DEPLOY_BUSINESS_DIR"
     - cp deploy/docker-compose.yml "$DEPLOY_COMPOSE_FILE"
     - cp "$DEPLOY_COMPOSE_ENV_FILE" "$DEPLOY_COMPOSE_ENV"
     - cp "$DEPLOY_SERVICES_ENV_FILE" "$DEPLOY_SERVICES_ENV"
@@ -281,6 +283,12 @@ verify:security-service:
         sed -i 's|^BUSINESS_ENV_FILE=.*|BUSINESS_ENV_FILE=./services.env|' "$DEPLOY_COMPOSE_ENV"
       else
         printf '\nBUSINESS_ENV_FILE=./services.env\n' >> "$DEPLOY_COMPOSE_ENV"
+      fi
+      sed -i '/^DEPLOY_DATA_DIR=/d' "$DEPLOY_COMPOSE_ENV"
+      if grep -q '^DEPLOY_DATA_ROOT=' "$DEPLOY_COMPOSE_ENV"; then
+        sed -i "s|^DEPLOY_DATA_ROOT=.*|DEPLOY_DATA_ROOT=$DEPLOY_DATA_ROOT|" "$DEPLOY_COMPOSE_ENV"
+      else
+        printf '\nDEPLOY_DATA_ROOT=%s\n' "$DEPLOY_DATA_ROOT" >> "$DEPLOY_COMPOSE_ENV"
       fi
     - chmod 600 "$DEPLOY_COMPOSE_ENV" "$DEPLOY_SERVICES_ENV"
     - chmod 644 "$DEPLOY_COMPOSE_FILE"
@@ -299,22 +307,35 @@ verify:security-service:
         exit 1
       fi
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV_FILE" --file deploy/docker-compose.dependencies.yml config --quiet
-    - export DEPLOY_DEPENDENCIES_COMPOSE_FILE="$DEPLOY_STATE_DIR/docker-compose.dependencies.yml"
-    - export DEPLOY_DEPENDENCIES_COMPOSE_ENV="$DEPLOY_STATE_DIR/dependencies.env"
-    - mkdir -p "$DEPLOY_STATE_DIR" "$DEPLOY_STATE_DIR/../db"
-    - chmod 700 "$DEPLOY_STATE_DIR"
+    - export DEPLOY_DEPENDENCIES_DIR="$DEPLOY_COMPOSE_ROOT/dependencies"
+    - export DEPLOY_DEPENDENCIES_COMPOSE_FILE="$DEPLOY_DEPENDENCIES_DIR/compose.yml"
+    - export DEPLOY_DEPENDENCIES_COMPOSE_ENV="$DEPLOY_DEPENDENCIES_DIR/compose.env"
+    - export DEPLOY_MYSQL_INIT_DIR="$DEPLOY_DEPENDENCIES_DIR/initdb"
+    - mkdir -p "$DEPLOY_DEPENDENCIES_DIR" "$DEPLOY_MYSQL_INIT_DIR" "$DEPLOY_DATA_ROOT"
+    - chmod 700 "$DEPLOY_DEPENDENCIES_DIR"
     - cp deploy/docker-compose.dependencies.yml "$DEPLOY_DEPENDENCIES_COMPOSE_FILE"
     - cp "$DEPLOY_COMPOSE_ENV_FILE" "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
-    - cp db/init.sql "$DEPLOY_STATE_DIR/../db/init.sql"
-    - cp db/seed.sql "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - cp db/init.sql "$DEPLOY_MYSQL_INIT_DIR/init.sql"
+    - cp db/seed.sql "$DEPLOY_MYSQL_INIT_DIR/seed.sql"
     - |
       if grep -q '^IMAGE_TAG=' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"; then
         sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
       else
         printf '\nIMAGE_TAG=%s\n' "$IMAGE_TAG" >> "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
       fi
+      sed -i '/^DEPLOY_DATA_DIR=/d' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      if grep -q '^DEPLOY_DATA_ROOT=' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"; then
+        sed -i "s|^DEPLOY_DATA_ROOT=.*|DEPLOY_DATA_ROOT=$DEPLOY_DATA_ROOT|" "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      else
+        printf '\nDEPLOY_DATA_ROOT=%s\n' "$DEPLOY_DATA_ROOT" >> "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      fi
+      if grep -q '^MYSQL_INIT_DIR=' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"; then
+        sed -i 's|^MYSQL_INIT_DIR=.*|MYSQL_INIT_DIR=./initdb|' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      else
+        printf '\nMYSQL_INIT_DIR=./initdb\n' >> "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      fi
     - chmod 600 "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
-    - chmod 644 "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" "$DEPLOY_STATE_DIR/../db/init.sql" "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - chmod 644 "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" "$DEPLOY_MYSQL_INIT_DIR/init.sql" "$DEPLOY_MYSQL_INIT_DIR/seed.sql"
     - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" config --quiet
 
 .deploy-tpl:
@@ -399,21 +420,35 @@ deploy:full-stack:
   environment:
     name: staging/full-stack
   script:
-    - export DEPLOY_DEPENDENCIES_COMPOSE_FILE="$DEPLOY_STATE_DIR/docker-compose.dependencies.yml"
-    - export DEPLOY_DEPENDENCIES_COMPOSE_ENV="$DEPLOY_STATE_DIR/dependencies.env"
-    - mkdir -p "$DEPLOY_STATE_DIR/../db"
+    - export DEPLOY_DEPENDENCIES_DIR="$DEPLOY_COMPOSE_ROOT/dependencies"
+    - export DEPLOY_DEPENDENCIES_COMPOSE_FILE="$DEPLOY_DEPENDENCIES_DIR/compose.yml"
+    - export DEPLOY_DEPENDENCIES_COMPOSE_ENV="$DEPLOY_DEPENDENCIES_DIR/compose.env"
+    - export DEPLOY_MYSQL_INIT_DIR="$DEPLOY_DEPENDENCIES_DIR/initdb"
+    - mkdir -p "$DEPLOY_DEPENDENCIES_DIR" "$DEPLOY_MYSQL_INIT_DIR" "$DEPLOY_DATA_ROOT"
+    - chmod 700 "$DEPLOY_DEPENDENCIES_DIR"
     - cp deploy/docker-compose.dependencies.yml "$DEPLOY_DEPENDENCIES_COMPOSE_FILE"
     - cp "$DEPLOY_COMPOSE_ENV_FILE" "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
-    - cp db/init.sql "$DEPLOY_STATE_DIR/../db/init.sql"
-    - cp db/seed.sql "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - cp db/init.sql "$DEPLOY_MYSQL_INIT_DIR/init.sql"
+    - cp db/seed.sql "$DEPLOY_MYSQL_INIT_DIR/seed.sql"
     - |
       if grep -q '^IMAGE_TAG=' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"; then
         sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
       else
         printf '\nIMAGE_TAG=%s\n' "$IMAGE_TAG" >> "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
       fi
+      sed -i '/^DEPLOY_DATA_DIR=/d' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      if grep -q '^DEPLOY_DATA_ROOT=' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"; then
+        sed -i "s|^DEPLOY_DATA_ROOT=.*|DEPLOY_DATA_ROOT=$DEPLOY_DATA_ROOT|" "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      else
+        printf '\nDEPLOY_DATA_ROOT=%s\n' "$DEPLOY_DATA_ROOT" >> "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      fi
+      if grep -q '^MYSQL_INIT_DIR=' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"; then
+        sed -i 's|^MYSQL_INIT_DIR=.*|MYSQL_INIT_DIR=./initdb|' "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      else
+        printf '\nMYSQL_INIT_DIR=./initdb\n' >> "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
+      fi
     - chmod 600 "$DEPLOY_DEPENDENCIES_COMPOSE_ENV"
-    - chmod 644 "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" "$DEPLOY_STATE_DIR/../db/init.sql" "$DEPLOY_STATE_DIR/../db/seed.sql"
+    - chmod 644 "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" "$DEPLOY_MYSQL_INIT_DIR/init.sql" "$DEPLOY_MYSQL_INIT_DIR/seed.sql"
     - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" config --quiet
     - docker build --tag "$IMAGE_NAMESPACE/nacos-init:$IMAGE_TAG" --file deploy/Dockerfile.nacos-init .
     - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" up --detach --wait --no-build --pull missing mysql nacos etcd minio milvus

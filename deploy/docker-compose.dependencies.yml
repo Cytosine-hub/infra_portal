@@ -11,9 +11,9 @@ services:
     ports:
       - "127.0.0.1:${MYSQL_PORT:-3306}:3306"
     volumes:
-      - ${DEPLOY_DATA_DIR:-./data}/mysql:/var/lib/mysql
-      - ../db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
-      - ../db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+      - ${DEPLOY_DATA_ROOT:-./data}/dependencies/mysql:/var/lib/mysql
+      - ${MYSQL_INIT_DIR:-../db}/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ${MYSQL_INIT_DIR:-../db}/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
@@ -33,10 +33,10 @@ services:
       NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-infra-portal-local-key}
       NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-infra-portal-local-value}
     ports:
-      - "127.0.0.1:${NACOS_PORT:-8848}:8848"
+      - "${NACOS_BIND_ADDRESS:-127.0.0.1}:${NACOS_PORT:-8848}:8848"
     volumes:
-      - ${DEPLOY_DATA_DIR:-./data}/nacos/data:/home/nacos/data
-      - ${DEPLOY_DATA_DIR:-./data}/nacos/logs:/home/nacos/logs
+      - ${DEPLOY_DATA_ROOT:-./data}/dependencies/nacos/data:/home/nacos/data
+      - ${DEPLOY_DATA_ROOT:-./data}/dependencies/nacos/logs:/home/nacos/logs
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8848/nacos/actuator/health >/dev/null"]
       interval: 10s
@@ -77,7 +77,7 @@ services:
       --listen-client-urls=http://0.0.0.0:2379
       --data-dir=/etcd
     volumes:
-      - ${DEPLOY_DATA_DIR:-./data}/milvus/etcd:/etcd
+      - ${DEPLOY_DATA_ROOT:-./data}/dependencies/milvus/etcd:/etcd
     healthcheck:
       test: ["CMD", "etcdctl", "endpoint", "health"]
       interval: 10s
@@ -98,7 +98,7 @@ services:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - ${DEPLOY_DATA_DIR:-./data}/milvus/minio:/minio_data
+      - ${DEPLOY_DATA_ROOT:-./data}/dependencies/milvus/minio:/minio_data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -123,7 +123,7 @@ services:
       - "127.0.0.1:${MILVUS_PORT:-19530}:19530"
       - "127.0.0.1:${MILVUS_WEBUI_PORT:-9091}:9091"
     volumes:
-      - ${DEPLOY_DATA_DIR:-./data}/milvus/data:/var/lib/milvus
+      - ${DEPLOY_DATA_ROOT:-./data}/dependencies/milvus/data:/var/lib/milvus
     depends_on:
       etcd:
         condition: service_healthy
