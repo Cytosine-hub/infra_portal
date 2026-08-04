@@ -4,13 +4,13 @@ import com.middleware.manager.domain.AdminAccount;
 import com.middleware.manager.exception.NotFoundException;
 import com.middleware.manager.knowledge.agent.ChatSession;
 import com.middleware.manager.knowledge.agent.ChatSessionMapper;
+import com.middleware.manager.knowledge.agent.DiagnosticAttachmentService;
 import com.middleware.manager.repository.AdminAccountMapper;
 import com.middleware.manager.security.GatewayAuthenticationToken;
 import com.middleware.manager.security.PermissionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.core.Authentication;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -62,11 +62,8 @@ class AgentControllerSecurityTest {
     }
 
     private AgentController controller(InMemorySessionMapper sessions) {
-        AgentController controller = new AgentController();
-        ReflectionTestUtils.setField(controller, "chatSessionMapper", sessions);
-        ReflectionTestUtils.setField(controller, "adminAccountMapper", new StubAdminAccountMapper());
-        ReflectionTestUtils.setField(controller, "permissionService", new PermissionService());
-        return controller;
+        return new AgentController(null, sessions, new StubAdminAccountMapper(),
+                new PermissionService(), new DiagnosticAttachmentService(List.of()));
     }
 
     private static ChatSession session(Long id, Long createdBy, String mode) {

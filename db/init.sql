@@ -56,6 +56,7 @@ CREATE TABLE `chat_messages` (
   `role` varchar(20) NOT NULL COMMENT '角色：user / assistant / system',
   `content` text NOT NULL COMMENT '消息内容',
   `references_text` text COMMENT '引用的知识来源JSON',
+  `attachments_text` text COMMENT '附件元数据JSON，不包含文件正文',
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_session` (`session_id`)

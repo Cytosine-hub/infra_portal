@@ -11,6 +11,8 @@ import com.middleware.manager.knowledge.agent.ChatMessage;
 import com.middleware.manager.knowledge.agent.ChatMessageMapper;
 import com.middleware.manager.knowledge.agent.ChatSession;
 import com.middleware.manager.knowledge.agent.ChatSessionMapper;
+import com.middleware.manager.knowledge.agent.DiagnosticAttachmentService;
+import com.middleware.manager.knowledge.agent.DiagnosticAttachment;
 import com.middleware.manager.repository.AdminAccountMapper;
 import com.middleware.manager.security.GatewayAuthenticationToken;
 import com.middleware.manager.security.PermissionService;
@@ -99,7 +101,8 @@ class OpsAgentControllerSecurityTest {
     private AgentController controller(CountingSessionMapper sessions, SkillLoader skillLoader,
                                        AgentService agentService) {
         return new AgentController(agentService, skillLoader, sessions, new NoopMessageMapper(),
-                new StubAdminAccountMapper(), new PermissionService());
+                new StubAdminAccountMapper(), new PermissionService(),
+                new DiagnosticAttachmentService(List.of()));
     }
 
     private static Authentication ordinaryAuth(String username) {
@@ -128,7 +131,7 @@ class OpsAgentControllerSecurityTest {
 
     private static class StubAgentService extends AgentService {
         StubAgentService() {
-            super(null, null, List.of());
+            super(null, null, List.of(), null, new DiagnosticAttachmentService(List.of()));
         }
 
         @Override
@@ -141,6 +144,14 @@ class OpsAgentControllerSecurityTest {
         public Map<String, Object> chat(String userMessage, Map<String, String> context,
                                         Consumer<String> onRetry, Long sessionId, Long actorId,
                                         Consumer<AgentEvent> onEvent) {
+            return response();
+        }
+
+        @Override
+        public Map<String, Object> chat(String userMessage, Map<String, String> context,
+                                        Consumer<String> onRetry, Long sessionId, Long actorId,
+                                        Consumer<AgentEvent> onEvent,
+                                        List<DiagnosticAttachment> attachments) {
             return response();
         }
 

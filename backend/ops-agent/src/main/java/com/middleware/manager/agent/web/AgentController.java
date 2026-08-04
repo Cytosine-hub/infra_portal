@@ -1,5 +1,6 @@
 package com.middleware.manager.agent.web;
 
+import com.google.gson.Gson;
 import com.middleware.manager.agent.service.AgentService;
 import com.middleware.manager.agent.service.AgentEvent;
 import com.middleware.manager.agent.skill.Skill;
@@ -15,12 +16,15 @@ import com.middleware.manager.knowledge.agent.ChatMessage;
 import com.middleware.manager.knowledge.agent.ChatMessageMapper;
 import com.middleware.manager.knowledge.agent.ChatSession;
 import com.middleware.manager.knowledge.agent.ChatSessionMapper;
+import com.middleware.manager.knowledge.agent.DiagnosticAttachment;
+import com.middleware.manager.knowledge.agent.DiagnosticAttachmentService;
 import org.springframework.http.MediaType;
 import com.middleware.manager.repository.AdminAccountMapper;
 import com.middleware.manager.security.PermissionService;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.multipart.MultipartFile;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -42,32 +46,56 @@ public class AgentController {
     private final ChatMessageMapper chatMessageMapper;
     private final AdminAccountMapper adminAccountMapper;
     private final PermissionService permissionService;
+    private final DiagnosticAttachmentService attachmentService;
+    private final Gson gson = new Gson();
     private final ExecutorService sseExecutor = Executors.newCachedThreadPool();
 
     public AgentController(AgentService agentService, SkillLoader skillLoader,
                            ChatSessionMapper chatSessionMapper,
                            ChatMessageMapper chatMessageMapper,
                            AdminAccountMapper adminAccountMapper,
-                           PermissionService permissionService) {
+                           PermissionService permissionService,
+                           DiagnosticAttachmentService attachmentService) {
         this.agentService = agentService;
         this.skillLoader = skillLoader;
         this.chatSessionMapper = chatSessionMapper;
         this.chatMessageMapper = chatMessageMapper;
         this.adminAccountMapper = adminAccountMapper;
         this.permissionService = permissionService;
+        this.attachmentService = attachmentService;
     }
 
-    @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping(value = "/chat", consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter chat(@RequestBody ChatRequest req, Authentication authentication) {
+        return startChat(req.getSessionId(), requireMessage(req.getMessage(), false),
+                req.getContext(), List.of(), authentication);
+    }
+
+    @PostMapping(value = "/chat", consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chatMultipart(@RequestParam(required = false) Long sessionId,
+                                    @RequestParam(required = false) String message,
+                                    @RequestPart(name = "attachments", required = false)
+                                    List<MultipartFile> files,
+                                    Authentication authentication) {
+        List<DiagnosticAttachment> attachments = attachmentService.prepare(files);
+        return startChat(sessionId, requireMessage(message, !attachments.isEmpty()),
+                Map.of(), attachments, authentication);
+    }
+
+    private SseEmitter startChat(Long requestedSessionId, String message,
+                                 Map<String, String> context,
+                                 List<DiagnosticAttachment> attachments,
+                                 Authentication authentication) {
         SseEmitter emitter = new SseEmitter(300_000L);
         AtomicBoolean clientOpen = new AtomicBoolean(true);
 
         sseExecutor.submit(() -> {
             try {
-                String message = requireMessage(req.getMessage());
                 Long actorId = resolveActorId(authentication);
                 // 创建或获取会话
-                Long sessionId = req.getSessionId();
+                Long sessionId = requestedSessionId;
                 ChatSession session;
                 if (sessionId != null) {
                     session = requireSessionForMode(sessionId, authentication, "ops");
@@ -80,15 +108,19 @@ public class AgentController {
                 userMsg.setSessionId(session.getId());
                 userMsg.setRole("user");
                 userMsg.setContent(message);
+                if (!attachments.isEmpty()) {
+                    userMsg.setAttachmentsText(gson.toJson(attachmentService.metadata(attachments)));
+                }
                 chatMessageMapper.insert(userMsg);
 
                 // 调用 Agent（带重试回调）
                 Map<String, Object> result;
                 try {
                     ToolContextHolder.setAuthentication(authentication);
-                    result = agentService.chat(message, req.getContext(), retryMsg -> {
+                    result = agentService.chat(message, context, retryMsg -> {
                         safeSend(emitter, clientOpen, "retry", Map.of("message", retryMsg));
-                    }, session.getId(), actorId, event -> sendAgentEvent(emitter, clientOpen, event));
+                    }, session.getId(), actorId, event -> sendAgentEvent(emitter, clientOpen, event),
+                            attachments);
                 } finally {
                     ToolContextHolder.clear();
                 }
@@ -269,9 +301,12 @@ public class AgentController {
         public void setSeverity(String severity) { this.severity = severity; }
     }
 
-    private String requireMessage(String message) {
+    private String requireMessage(String message, boolean hasAttachments) {
         if (message == null || message.isBlank()) {
-            throw new BusinessException(ErrorCode.PARAM_INVALID, "消息不能为空");
+            if (hasAttachments) {
+                return ErrorMessages.DIAGNOSTIC_ATTACHMENT_PROMPT;
+            }
+            throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.DIAGNOSTIC_MESSAGE_REQUIRED);
         }
         return message.trim();
     }

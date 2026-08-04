@@ -49,14 +49,7 @@ public class MimoChatModel implements ChatModel {
         body.addProperty("temperature", 0.1);
         body.addProperty("max_tokens", 4096);
 
-        JsonArray msgs = new JsonArray();
-        for (Message msg : messages) {
-            JsonObject m = new JsonObject();
-            m.addProperty("role", msg.role());
-            m.addProperty("content", msg.content());
-            msgs.add(m);
-        }
-        body.add("messages", msgs);
+        body.add("messages", toJsonMessages(messages));
 
         okhttp3.RequestBody requestBody = okhttp3.RequestBody.create(
                 gson.toJson(body), okhttp3.MediaType.parse("application/json"));
@@ -103,6 +96,35 @@ public class MimoChatModel implements ChatModel {
             log.error("[Agent] LLM API exhausted retries", lastException);
         }
         throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
+    }
+
+    static JsonArray toJsonMessages(List<Message> messages) {
+        JsonArray msgs = new JsonArray();
+        for (Message msg : messages) {
+            JsonObject m = new JsonObject();
+            m.addProperty("role", msg.role());
+            if (msg.images().isEmpty()) {
+                m.addProperty("content", msg.content());
+            } else {
+                JsonArray content = new JsonArray();
+                JsonObject text = new JsonObject();
+                text.addProperty("type", "text");
+                text.addProperty("text", msg.content());
+                content.add(text);
+                for (ChatModel.ImagePayload image : msg.images()) {
+                    JsonObject imageItem = new JsonObject();
+                    imageItem.addProperty("type", "image_url");
+                    JsonObject imageUrl = new JsonObject();
+                    imageUrl.addProperty("url", "data:" + image.contentType()
+                            + ";base64," + image.base64Data());
+                    imageItem.add("image_url", imageUrl);
+                    content.add(imageItem);
+                }
+                m.add("content", content);
+            }
+            msgs.add(m);
+        }
+        return msgs;
     }
 
     private boolean isRetryableStatus(int statusCode) {

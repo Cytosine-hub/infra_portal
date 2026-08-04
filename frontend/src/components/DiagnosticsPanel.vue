@@ -246,6 +246,21 @@
                 <div v-if="msg.role === 'assistant' && msg.skill" class="skill-tag">
                   <span class="skill-badge">Skill: {{ msg.skill }}</span>
                 </div>
+                <div v-if="msg.role === 'user' && msg.attachments?.length" class="message-attachments">
+                  <div v-for="attachment in msg.attachments" :key="attachment.id || attachment.name" class="sent-attachment">
+                    <img
+                      v-if="attachment.kind === 'image' && attachment.previewUrl"
+                      :src="attachment.previewUrl"
+                      :alt="attachment.name"
+                      class="attachment-thumbnail"
+                    />
+                    <span v-else class="attachment-type-icon" aria-hidden="true">{{ attachment.kind === 'image' ? '🖼' : '📄' }}</span>
+                    <span class="attachment-info">
+                      <span class="attachment-name">{{ attachment.name }}</span>
+                      <span class="attachment-size">{{ formatAttachmentSize(attachment.size) }}</span>
+                    </span>
+                  </div>
+                </div>
                 <div class="message-text" v-html="renderMarkdown(msg.content)"></div>
                 <!-- Agent 模式：显示使用的工具 -->
                 <div v-if="msg.role === 'assistant' && msg.tools && msg.tools.length > 0" class="tools-tag">
@@ -288,6 +303,28 @@
           <!-- 输入区 -->
           <div class="chat-input-area">
             <div class="input-box">
+              <div v-if="selectedAttachments.length" class="pending-attachments">
+                <div v-for="attachment in selectedAttachments" :key="attachment.id" class="pending-attachment">
+                  <img
+                    v-if="attachment.previewUrl"
+                    :src="attachment.previewUrl"
+                    :alt="attachment.name"
+                    class="attachment-thumbnail"
+                  />
+                  <span v-else class="attachment-type-icon" aria-hidden="true">📄</span>
+                  <span class="attachment-info">
+                    <span class="attachment-name">{{ attachment.name }}</span>
+                    <span class="attachment-size">{{ formatAttachmentSize(attachment.size) }}</span>
+                  </span>
+                  <button
+                    type="button"
+                    class="attachment-remove-btn"
+                    :aria-label="`移除附件 ${attachment.name}`"
+                    title="移除附件"
+                    @click="removeAttachment(attachment.id)"
+                  >×</button>
+                </div>
+              </div>
               <textarea
                 ref="inputRef"
                 v-model="inputMessage"
@@ -298,6 +335,21 @@
                 @keydown.stop="handleKeydown"
               ></textarea>
               <div class="input-bottom-bar">
+                <input
+                  ref="attachmentInput"
+                  class="attachment-input"
+                  type="file"
+                  :accept="DIAGNOSTIC_ATTACHMENT_ACCEPT"
+                  multiple
+                  @change="handleAttachmentSelection"
+                />
+                <button
+                  type="button"
+                  class="attachment-add-btn"
+                  title="添加图片或附件"
+                  aria-label="添加图片或附件"
+                  @click="attachmentInput?.click()"
+                >📎</button>
                 <button
                   :class="['agent-toggle-btn', { active: agentMode === 'ops' }]"
                   @click="toggleAgentMode"
@@ -308,7 +360,7 @@
               </div>
             </div>
             <button v-if="sending" class="stop-btn" @click="stopSending">停止</button>
-            <button v-else :disabled="!inputMessage.trim()" @click="sendMessage">发送</button>
+            <button v-else :disabled="!canSendMessage" @click="sendMessage">发送</button>
           </div>
         </template>
       </template>
@@ -317,13 +369,20 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, nextTick } from 'vue'
-import { request, getSavedAuth, handleUnauthorized } from '../api'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { request, authorizedFetch } from '../api'
+import {
+  DIAGNOSTIC_ATTACHMENT_ACCEPT,
+  createDiagnosticAttachment,
+  formatAttachmentSize,
+  parseAttachmentMetadata,
+  validateDiagnosticAttachments
+} from '../utils/diagnosticAttachments'
 import MarkdownIt from 'markdown-it'
 
 const props = defineProps({
   auth: Object,
-  notify: { type: Function, default: (msg) => alert(msg) }
+  notify: { type: Function, required: true }
 })
 
 const md = new MarkdownIt({
@@ -341,6 +400,8 @@ const isComposing = ref(false)
 const agentMode = ref('rag')
 const chatContainer = ref(null)
 const inputRef = ref(null)
+const attachmentInput = ref(null)
+const selectedAttachments = ref([])
 const expandedRefs = ref({})
 const readyToSend = ref(false)
 let abortController = null
@@ -375,10 +436,19 @@ const canManageSkills = computed(() => {
   return role === '系统管理员' || role.endsWith('管理员')
 })
 
+const canSendMessage = computed(() => {
+  return Boolean(inputMessage.value.trim() || selectedAttachments.value.length)
+})
+
 onMounted(() => {
   loadSessions()
   loadSkills()
   loadAvailableTools()
+})
+
+onBeforeUnmount(() => {
+  revokeAttachmentPreviews(selectedAttachments.value)
+  revokeMessagePreviews(messages.value)
 })
 
 async function loadSessions() {
@@ -398,6 +468,8 @@ function openKnowledgePage() {
 
 async function switchSession(sessionId) {
   if (currentSessionId.value === sessionId) return
+  clearPendingAttachments()
+  revokeMessagePreviews(messages.value)
   currentSessionId.value = sessionId
   messages.value = []
   expandedRefs.value = {}
@@ -412,7 +484,8 @@ async function loadMessages(sessionId) {
 
     // 两个 API 共享同一条数据，用哪个都行，统一用 /api/agent/sessions/{id}
     const result = await request(`/api/agent/sessions/${sessionId}`)
-    messages.value = Array.isArray(result) ? result : (result?.messages || result?.data || [])
+    const loaded = Array.isArray(result) ? result : (result?.messages || result?.data || [])
+    messages.value = loaded.map(normalizeMessage)
 
     // 切换底部 Agent 按钮状态
     agentMode.value = isOps ? 'ops' : 'rag'
@@ -451,6 +524,8 @@ async function toggleAgentMode() {
 }
 
 function createSession() {
+  clearPendingAttachments()
+  revokeMessagePreviews(messages.value)
   currentSessionId.value = null
   messages.value = []
   expandedRefs.value = {}
@@ -459,11 +534,18 @@ function createSession() {
 }
 
 async function sendMessage() {
+  const attachments = selectedAttachments.value.slice()
   const text = inputMessage.value.trim()
+    || (attachments.length ? '请分析附件内容并给出排查结论' : '')
   if (!text || sending.value) return
 
-  messages.value.push({ role: 'user', content: text })
+  messages.value.push({
+    role: 'user',
+    content: text,
+    attachments: attachments.map(({ file, ...metadata }) => metadata)
+  })
   inputMessage.value = ''
+  selectedAttachments.value = []
   sending.value = true
   scrollToBottom()
 
@@ -491,24 +573,31 @@ async function sendMessage() {
 
   try {
     const url = agentMode.value === 'ops' ? '/api/ops-agent/chat' : '/api/agent/chat'
-    const body = agentMode.value === 'ops'
-      ? { sessionId: currentSessionId.value, message: text, context: {} }
-      : { sessionId: currentSessionId.value, message: text }
+    let body
+    let headers
+    if (attachments.length) {
+      body = new FormData()
+      if (currentSessionId.value) body.append('sessionId', String(currentSessionId.value))
+      body.append('message', text)
+      for (const attachment of attachments) {
+        body.append('attachments', attachment.file, attachment.name)
+      }
+    } else {
+      body = JSON.stringify(agentMode.value === 'ops'
+        ? { sessionId: currentSessionId.value, message: text, context: {} }
+        : { sessionId: currentSessionId.value, message: text })
+      headers = { 'Content-Type': 'application/json' }
+    }
 
-    const auth = getSavedAuth()
-    const headers = { 'Content-Type': 'application/json' }
-    if (auth?.token) headers['Authorization'] = `Bearer ${auth.token}`
-
-    const response = await fetch(url, {
+    const response = await authorizedFetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body),
+      body,
       signal: abortController.signal
     })
 
     if (!response.ok) {
       if (response.status === 401) {
-        handleUnauthorized()
         return
       }
       let errMsg = response.statusText
@@ -671,6 +760,52 @@ async function sendMessage() {
     sending.value = false
     abortController = null
     scrollToBottom()
+  }
+}
+
+function handleAttachmentSelection(event) {
+  const files = Array.from(event.target.files || [])
+  try {
+    validateDiagnosticAttachments(selectedAttachments.value, files)
+    selectedAttachments.value.push(...files.map(createDiagnosticAttachment))
+  } catch (error) {
+    props.notify?.(error.message, 'error')
+  } finally {
+    event.target.value = ''
+  }
+}
+
+function removeAttachment(id) {
+  const index = selectedAttachments.value.findIndex(attachment => attachment.id === id)
+  if (index < 0) return
+  const [removed] = selectedAttachments.value.splice(index, 1)
+  if (removed.previewUrl) URL.revokeObjectURL(removed.previewUrl)
+}
+
+function clearPendingAttachments() {
+  revokeAttachmentPreviews(selectedAttachments.value)
+  selectedAttachments.value = []
+}
+
+function revokeAttachmentPreviews(attachments) {
+  for (const attachment of attachments || []) {
+    if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl)
+  }
+}
+
+function revokeMessagePreviews(messageList) {
+  for (const message of messageList || []) {
+    revokeAttachmentPreviews(message.attachments)
+  }
+}
+
+function normalizeMessage(message) {
+  return {
+    ...message,
+    references: message.references
+      || (message.role === 'assistant' ? parseAttachmentMetadata(message.referencesText) : []),
+    attachments: message.attachments
+      || (message.role === 'user' ? parseAttachmentMetadata(message.attachmentsText) : [])
   }
 }
 
@@ -1229,6 +1364,174 @@ async function submitSaveExperience() {
 .chat-input-area button { padding: 10px 24px; white-space: nowrap; }
 .stop-btn { background: #ef4444; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
 .stop-btn:hover { background: #dc2626; }
+
+.message-attachments,
+.pending-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.message-attachments { margin-bottom: var(--space-sm); }
+
+.pending-attachments {
+  padding: var(--space-sm);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.sent-attachment,
+.pending-attachment {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-width: 0;
+  max-width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
+.sent-attachment {
+  background: var(--color-inverse-subtle);
+  border: 1px solid var(--color-inverse-muted);
+}
+
+.pending-attachment {
+  flex: 0 1 calc(50% - var(--space-xs));
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  box-sizing: border-box;
+}
+
+.attachment-thumbnail,
+.attachment-type-icon {
+  width: calc(var(--space-xl) + var(--space-lg));
+  height: calc(var(--space-xl) + var(--space-lg));
+  flex: 0 0 calc(var(--space-xl) + var(--space-lg));
+  border-radius: var(--radius-sm);
+}
+
+.attachment-thumbnail {
+  object-fit: cover;
+  background: var(--color-bg-tertiary);
+}
+
+.attachment-type-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg-tertiary);
+  font-size: var(--text-lg);
+}
+
+.attachment-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: var(--leading-tight);
+}
+
+.attachment-name {
+  overflow: hidden;
+  color: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-size {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.sent-attachment .attachment-size { color: var(--color-inverse-text); }
+
+.attachment-input { display: none; }
+
+.input-bottom-bar { gap: var(--space-xs); }
+
+.chat-input-area .attachment-add-btn,
+.chat-input-area .attachment-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+}
+
+.chat-input-area .attachment-add-btn {
+  width: var(--space-2xl);
+  height: var(--space-2xl);
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-lg);
+  border-radius: var(--radius-sm);
+}
+
+.chat-input-area .attachment-add-btn:hover { background: var(--color-bg-tertiary); }
+
+.chat-input-area .attachment-remove-btn {
+  width: var(--space-xl);
+  height: var(--space-xl);
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--text-lg);
+  border-radius: var(--radius-sm);
+}
+
+.chat-input-area .attachment-remove-btn:hover {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+@media (max-width: 720px) {
+  .diagnostics-panel { flex-direction: column; }
+
+  .session-sidebar {
+    width: 100%;
+    min-width: 0;
+    max-height: 180px;
+    flex: 0 0 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .session-header { padding: var(--space-sm) var(--space-md); }
+
+  .session-list {
+    display: flex;
+    flex: 0 0 52px;
+    min-height: 52px;
+    padding: var(--space-xs);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .session-item {
+    flex: 0 0 200px;
+    padding: var(--space-sm);
+  }
+
+  .session-list .empty-hint {
+    width: 100%;
+    margin: 0;
+    padding: var(--space-sm);
+  }
+
+  .session-sidebar .skill-section { max-height: none; }
+  .chat-main { width: 100%; }
+  .chat-input-area { padding: var(--space-sm); }
+  .chat-messages { padding: var(--space-sm); }
+  .message-bubble { max-width: 90%; }
+  .pending-attachment { flex-basis: 100%; }
+  .attachment-name { max-width: 40vw; }
+}
 
 /* ========== Skill 管理 - 左侧列表 ========== */
 .skill-section {

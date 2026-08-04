@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     role VARCHAR(20) NOT NULL COMMENT '角色：user / assistant / system',
     content TEXT NOT NULL COMMENT '消息内容',
     references_text TEXT COMMENT '引用的知识来源JSON',
+    attachments_text TEXT COMMENT '附件元数据JSON，不包含文件正文',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_session (session_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI对话消息';
