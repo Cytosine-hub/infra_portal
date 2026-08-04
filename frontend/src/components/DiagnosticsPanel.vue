@@ -1494,8 +1494,10 @@ async function submitSaveExperience() {
   .session-sidebar {
     width: 100%;
     min-width: 0;
-    max-height: 148px;
+    max-height: 180px;
     flex: 0 0 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
     border-right: none;
     border-bottom: 1px solid var(--color-border);
   }
@@ -1504,6 +1506,7 @@ async function submitSaveExperience() {
 
   .session-list {
     display: flex;
+    flex: 0 0 52px;
     min-height: 52px;
     padding: var(--space-xs);
     overflow-x: auto;
@@ -1521,7 +1524,7 @@ async function submitSaveExperience() {
     padding: var(--space-sm);
   }
 
-  .skill-section { display: none; }
+  .session-sidebar .skill-section { max-height: none; }
   .chat-main { width: 100%; }
   .chat-input-area { padding: var(--space-sm); }
   .chat-messages { padding: var(--space-sm); }
