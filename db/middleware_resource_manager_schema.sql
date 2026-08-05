@@ -233,7 +233,7 @@ CREATE TABLE `forum_tags` (
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_forum_tag_category_name` (`category`,`name`),
+  UNIQUE KEY `uk_forum_tag_name` (`name`),
   KEY `idx_forum_tag_category` (`category`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;

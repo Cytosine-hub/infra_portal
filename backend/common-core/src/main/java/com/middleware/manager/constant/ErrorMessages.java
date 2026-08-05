@@ -21,7 +21,7 @@ public final class ErrorMessages {
     public static final String STATUS_CONFLICT = "当前状态不允许此操作";
     public static final String FORUM_TAG_NOT_FOUND = "论坛标签不存在";
     public static final String FORUM_TAG_NAME_INVALID = "标签名称不能为空且不能超过50个字符";
-    public static final String FORUM_TAG_DUPLICATE = "该岗位组已存在同名标签";
+    public static final String FORUM_TAG_DUPLICATE = "标签名称已存在";
 
     // 文件操作
     public static final String FILE_TOO_LARGE = "上传文件超过大小限制";

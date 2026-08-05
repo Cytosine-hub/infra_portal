@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 class ForumTagMigrationTest {
 
     @Test
-    @DisplayName("TC-FORUM-TAG-010（TC-07）标签迁移应先回填空类别再设置非空唯一约束")
+    @DisplayName("TC-FORUM-TAG-010（TC-07）标签迁移应先回填空类别再设置名称全局唯一约束")
     void migrationBackfillsCategoryBeforeAddingNotNullConstraint() throws IOException {
         String migration = resource("db/migration/V20260805__forum_tag_management.sql");
 
@@ -19,15 +19,17 @@ class ForumTagMigrationTest {
         int notNullIndex = migration.indexOf("MODIFY COLUMN category VARCHAR(100) NOT NULL");
         assertThat(backfillIndex).isGreaterThanOrEqualTo(0);
         assertThat(notNullIndex).isGreaterThan(backfillIndex);
-        assertThat(migration).contains("UNIQUE KEY uk_forum_tag_category_name (category, name)");
+        assertThat(migration)
+                .contains("UNIQUE KEY uk_forum_tag_name (name)")
+                .doesNotContain("UNIQUE KEY uk_forum_tag_category_name (category, name)");
     }
 
     @Test
-    @DisplayName("TC-FORUM-TAG-011 发帖标签查询应始终限定明确类别")
-    void mapperDoesNotExposeGlobalSingleTagLookup() throws IOException {
+    @DisplayName("TC-FORUM-TAG-011（TC-07）管理查重使用全局名称查询且发帖查询保留类别限定")
+    void mapperSupportsGlobalDuplicateCheckAndCategoryScopedPostLookup() throws IOException {
         String mapper = resource("mapper/ForumTagMapper.xml");
 
-        assertThat(mapper).doesNotContain("id=\"findByNameIgnoreCase\"")
+        assertThat(mapper).contains("id=\"findByNameIgnoreCase\"")
                 .contains("id=\"findByNameIgnoreCaseAndCategory\"")
                 .contains("AND category = #{category}");
     }

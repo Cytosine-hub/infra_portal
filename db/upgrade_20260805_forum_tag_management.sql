@@ -8,5 +8,5 @@ UPDATE forum_tags SET category = '未分组' WHERE category IS NULL OR TRIM(cate
 
 ALTER TABLE forum_tags
     MODIFY COLUMN category VARCHAR(100) NOT NULL,
-    ADD UNIQUE KEY uk_forum_tag_category_name (category, name),
+    ADD UNIQUE KEY uk_forum_tag_name (name),
     ADD KEY idx_forum_tag_category (category);

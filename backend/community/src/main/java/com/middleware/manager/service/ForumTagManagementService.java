@@ -42,7 +42,7 @@ public class ForumTagManagementService {
             throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.PARAM_INVALID);
         }
         String normalizedCategory = normalizeCategory(category);
-        ensureUnique(name, normalizedCategory, null);
+        ensureUnique(name, null);
         ForumTag tag = new ForumTag();
         tag.setName(name);
         tag.setCategory(normalizedCategory);
@@ -59,7 +59,7 @@ public class ForumTagManagementService {
         ForumTag tag = requirePersonalTag(id, username);
         String name = validateName(rawName);
         String category = normalizeCategory(tag.getCategory());
-        ensureUnique(name, category, id);
+        ensureUnique(name, id);
         if (tagMapper.hasAssociationsOutsideAuthor(id, username)) {
             ForumTag replacement = new ForumTag();
             replacement.setName(name);
@@ -97,7 +97,7 @@ public class ForumTagManagementService {
         ForumTag tag = requireAdminTag(id, managedCategory, systemAdmin);
         String name = validateName(rawName);
         String category = normalizeCategory(tag.getCategory());
-        ensureUnique(name, category, id);
+        ensureUnique(name, id);
         tag.setName(name);
         tag.setCategory(category);
         tag.setUpdatedAt(LocalDateTime.now());
@@ -148,8 +148,8 @@ public class ForumTagManagementService {
         return name;
     }
 
-    private void ensureUnique(String name, String category, Long currentId) {
-        ForumTag duplicate = tagMapper.findByNameIgnoreCaseAndCategory(name, category);
+    private void ensureUnique(String name, Long currentId) {
+        ForumTag duplicate = tagMapper.findByNameIgnoreCase(name);
         if (duplicate != null && !duplicate.getId().equals(currentId)) {
             throw new BusinessException(ErrorCode.FORUM_TAG_DUPLICATE, ErrorMessages.FORUM_TAG_DUPLICATE);
         }

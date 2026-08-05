@@ -51,7 +51,7 @@ class ForumTagManagementServiceTest {
         when(tagMapper.findById(1L)).thenReturn(redis);
         when(tagMapper.isUsedByAuthor(1L, "user-a")).thenReturn(true);
         when(tagMapper.hasAssociationsOutsideAuthor(1L, "user-a")).thenReturn(true);
-        when(tagMapper.findByNameIgnoreCaseAndCategory("Redis缓存", "中间件")).thenReturn(null);
+        when(tagMapper.findByNameIgnoreCase("Redis缓存")).thenReturn(null);
         doAnswer(invocation -> {
             ForumTag inserted = invocation.getArgument(0);
             inserted.setId(10L);
@@ -94,8 +94,8 @@ class ForumTagManagementServiceTest {
     @DisplayName("TC-04 超级管理员可查看并管理所有论坛标签")
     void systemAdminCanManageAllTags() {
         when(tagMapper.findAllByOrderByPostCountDesc()).thenReturn(List.of(tag(1L, "网关", "中间件"), tag(2L, "监控", "主机")));
-        when(tagMapper.findByNameIgnoreCaseAndCategory("Java", "中间件")).thenReturn(null);
-        when(tagMapper.findByNameIgnoreCaseAndCategory("可观测", "主机")).thenReturn(null);
+        when(tagMapper.findByNameIgnoreCase("Java")).thenReturn(null);
+        when(tagMapper.findByNameIgnoreCase("可观测")).thenReturn(null);
         when(tagMapper.findById(2L)).thenReturn(tag(2L, "监控", "主机"));
 
         assertEquals(2, service.listAdmin(null, true).size());
@@ -116,7 +116,7 @@ class ForumTagManagementServiceTest {
         when(tagMapper.findByCategory("中间件")).thenReturn(List.of(gateway));
         when(tagMapper.findById(1L)).thenReturn(gateway);
         when(tagMapper.findById(2L)).thenReturn(tag(2L, "监控", "主机"));
-        when(tagMapper.findByNameIgnoreCaseAndCategory("API网关", "中间件")).thenReturn(null);
+        when(tagMapper.findByNameIgnoreCase("API网关")).thenReturn(null);
 
         assertEquals(1, service.listAdmin("中间件", false).size());
         service.renameAdmin(1L, "API网关", "中间件", false);
@@ -129,12 +129,23 @@ class ForumTagManagementServiceTest {
     @DisplayName("TC-07 新增或编辑标签应拒绝空白、重复和超长名称")
     void invalidTagNamesAreRejected() {
         ForumTag java = tag(1L, "Java", "中间件");
-        when(tagMapper.findByNameIgnoreCaseAndCategory("Java", "中间件")).thenReturn(java);
+        when(tagMapper.findByNameIgnoreCase("Java")).thenReturn(java);
 
         assertThrows(BusinessException.class, () -> service.createAdmin("", "中间件", "admin"));
         assertThrows(BusinessException.class, () -> service.createAdmin("   ", "中间件", "admin"));
         assertThrows(BusinessException.class, () -> service.createAdmin("Java", "中间件", "admin"));
         assertThrows(BusinessException.class, () -> service.createAdmin("x".repeat(51), "中间件", "admin"));
+        verify(tagMapper, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("TC-FORUM-TAG-012（TC-07）跨岗位组新增同名标签应被拒绝")
+    void duplicateNameInAnotherCategoryIsRejected() {
+        ForumTag java = tag(1L, "Java", "中间件");
+        when(tagMapper.findByNameIgnoreCase("Java")).thenReturn(java);
+
+        assertThrows(BusinessException.class, () -> service.createAdmin("Java", "数据库", "root"));
+
         verify(tagMapper, never()).insert(any());
     }
 
@@ -145,7 +156,7 @@ class ForumTagManagementServiceTest {
         ForumTag duplicate = tag(2L, "Java", "未分组");
         when(tagMapper.findById(1L)).thenReturn(legacyTag);
         when(tagMapper.isUsedByAuthor(1L, "user-a")).thenReturn(true);
-        when(tagMapper.findByNameIgnoreCaseAndCategory("Java", "未分组")).thenReturn(duplicate);
+        when(tagMapper.findByNameIgnoreCase("Java")).thenReturn(duplicate);
 
         assertThrows(BusinessException.class, () -> service.renamePersonal(1L, "Java", "user-a"));
 
