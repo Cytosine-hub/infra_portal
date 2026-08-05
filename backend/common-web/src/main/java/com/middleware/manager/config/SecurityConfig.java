@@ -59,7 +59,9 @@ public class SecurityConfig {
                         // 文件下载与图片：对所有人公开，无需登录
                         .requestMatchers("/files/**").permitAll()
                         // 论坛：个人中心需认证，其余读公开，写需登录
-                        .requestMatchers("/api/forum/my-posts").authenticated()
+                        .requestMatchers("/api/forum/my-posts", "/api/forum/my-tags", "/api/forum/my-tags/**").authenticated()
+                        .requestMatchers("/api/forum/admin/**").hasAnyRole("SYS_ADMIN", "MIDDLEWARE_ADMIN",
+                                "DATABASE_ADMIN", "HOST_ADMIN", "NETWORK_ADMIN", "SECURITY_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/forum/**").permitAll()
                         .requestMatchers("/api/forum/**").authenticated()
                         // 公开接口

@@ -1,5 +1,6 @@
-package com.middleware.manager.domain;
+package com.middleware.manager.web.api.dto;
 
+import com.middleware.manager.domain.ForumTag;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -9,7 +10,7 @@ import java.time.LocalDateTime;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class ForumTag {
+public class ForumTagResponse {
     private Long id;
     private String name;
     private int postCount;
@@ -17,6 +18,9 @@ public class ForumTag {
     private String createdBy;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    /** 仅在批量查询 findByPostIds 时填充，用于按帖子分组 */
-    private Long postId;
+
+    public static ForumTagResponse from(ForumTag tag) {
+        return new ForumTagResponse(tag.getId(), tag.getName(), tag.getPostCount(), tag.getCategory(),
+                tag.getCreatedBy(), tag.getCreatedAt(), tag.getUpdatedAt());
+    }
 }

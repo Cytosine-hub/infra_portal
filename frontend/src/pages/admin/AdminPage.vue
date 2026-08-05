@@ -30,7 +30,8 @@ import { computed } from 'vue'
 
 const props = defineProps({
   section: { type: String, default: 'files' },
-  isSysAdmin: { type: Boolean, default: false }
+  isSysAdmin: { type: Boolean, default: false },
+  isForumAdmin: { type: Boolean, default: false }
 })
 defineEmits(['switchSection', 'showPassword', 'logout'])
 
@@ -40,11 +41,12 @@ const allSections = [
   { key: 'standardPublish', label: '参数标准', sysAdmin: false },
   { key: 'documentMaintenance', label: '标准文档', sysAdmin: false },
   { key: 'reviews', label: '审核管理', sysAdmin: false },
+  { key: 'forumTags', label: '论坛管理', forumAdmin: true },
   { key: 'users', label: '用户管理', sysAdmin: true },
   { key: 'settings', label: '系统设置', sysAdmin: true }
 ]
 
-const visibleSections = computed(() => allSections.filter(s => !s.sysAdmin || props.isSysAdmin))
+const visibleSections = computed(() => allSections.filter(s => (!s.sysAdmin || props.isSysAdmin) && (!s.forumAdmin || props.isForumAdmin)))
 </script>
 
 <style scoped>

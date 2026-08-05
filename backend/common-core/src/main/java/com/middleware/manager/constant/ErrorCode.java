@@ -19,6 +19,9 @@ public final class ErrorCode {
     public static final String NOT_FOUND = "NOT_FOUND";
     public static final String DUPLICATE = "DUPLICATE";
     public static final String STATUS_CONFLICT = "STATUS_CONFLICT";
+    public static final String FORUM_TAG_NOT_FOUND = "FORUM_TAG_NOT_FOUND";
+    public static final String FORUM_TAG_NAME_INVALID = "FORUM_TAG_NAME_INVALID";
+    public static final String FORUM_TAG_DUPLICATE = "FORUM_TAG_DUPLICATE";
 
     // 文件操作
     public static final String FILE_TOO_LARGE = "FILE_TOO_LARGE";

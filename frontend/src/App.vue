@@ -117,6 +117,7 @@
         <ForumPersonalCenter
           :auth="auth"
           :notify="notify"
+          :confirm="confirmAction"
           @back="navigate('forum')"
           @open-post="(id) => navigate('forum/post/' + id, { from: 'forum/mine' })"
           @edit-post="(id) => navigate('forum/edit/' + id)"
@@ -149,6 +150,7 @@
           <AdminPage
             :section="adminSection"
             :isSysAdmin="isSysAdmin"
+            :isForumAdmin="isSysAdmin || isCategoryAdmin"
             @switchSection="switchAdminSection"
             @showPassword="showPassword = !showPassword"
             @logout="logout()"
@@ -240,6 +242,10 @@
               <SettingsSection v-else-if="adminSection === 'settings'"
                 :settings="systemSettings" @save="saveSystemSettings"
               />
+              <ForumTagsSection v-else-if="adminSection === 'forumTags'"
+                :isSysAdmin="isSysAdmin" :managedCategory="managedCategory"
+                :notify="notify" :confirm="confirmAction"
+              />
           </AdminPage>
         </template>
       </section>
@@ -292,6 +298,7 @@ import ReviewsSection from './pages/admin/ReviewsSection.vue'
 import UsersSection from './pages/admin/UsersSection.vue'
 import DocumentsSection from './pages/admin/DocumentsSection.vue'
 import SettingsSection from './pages/admin/SettingsSection.vue'
+import ForumTagsSection from './pages/admin/ForumTagsSection.vue'
 import Toast from './components/ui/Toast.vue'
 import ConfirmDialog from './components/ui/ConfirmDialog.vue'
 import FormModal from './components/ui/FormModal.vue'

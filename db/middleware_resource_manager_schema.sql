@@ -228,9 +228,13 @@ CREATE TABLE `forum_tags` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
   `post_count` int DEFAULT '0',
+  `category` varchar(100) DEFAULT NULL,
+  `created_by` varchar(100) DEFAULT NULL,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `name` (`name`)
+  UNIQUE KEY `uk_forum_tag_category_name` (`category`,`name`),
+  KEY `idx_forum_tag_category` (`category`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
