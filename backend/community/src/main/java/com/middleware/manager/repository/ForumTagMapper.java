@@ -11,8 +11,6 @@ public interface ForumTagMapper {
 
     List<ForumTag> findAllByOrderByPostCountDesc();
 
-    ForumTag findByNameIgnoreCase(String name);
-
     ForumTag findByNameIgnoreCaseAndCategory(@Param("name") String name, @Param("category") String category);
 
     List<ForumTag> findByAuthorUsername(String username);

@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ForumService {
     private static final String STATUS_PUBLISHED = "PUBLISHED";
+    private static final String DEFAULT_TAG_CATEGORY = "未分组";
     private static final int MAX_PAGE_SIZE = 50;
     private static final int INITIAL_TAG_COUNT = 0;
 
@@ -265,14 +266,13 @@ public class ForumService {
 
     private ForumTag getOrCreateTag(String name, String category, String username) {
         String trimmed = name.trim();
-        ForumTag tag = StringUtils.hasText(category)
-                ? tagMapper.findByNameIgnoreCaseAndCategory(trimmed, category)
-                : tagMapper.findByNameIgnoreCase(trimmed);
+        String normalizedCategory = normalizeTagCategory(category);
+        ForumTag tag = tagMapper.findByNameIgnoreCaseAndCategory(trimmed, normalizedCategory);
         if (tag == null) {
             tag = new ForumTag();
             tag.setName(trimmed);
             tag.setPostCount(INITIAL_TAG_COUNT);
-            tag.setCategory(category);
+            tag.setCategory(normalizedCategory);
             tag.setCreatedBy(username);
             tag.setCreatedAt(LocalDateTime.now());
             tag.setUpdatedAt(LocalDateTime.now());
@@ -282,6 +282,10 @@ public class ForumService {
         tag.setUpdatedAt(LocalDateTime.now());
         tagMapper.update(tag);
         return tag;
+    }
+
+    private String normalizeTagCategory(String category) {
+        return StringUtils.hasText(category) ? category.trim() : DEFAULT_TAG_CATEGORY;
     }
 
     private String sanitizeFulltext(String keyword) {

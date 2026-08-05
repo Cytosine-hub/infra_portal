@@ -138,6 +138,20 @@ class ForumTagManagementServiceTest {
         verify(tagMapper, never()).insert(any());
     }
 
+    @Test
+    @DisplayName("TC-FORUM-TAG-009（TC-07）历史未分组标签重命名时应拒绝重复名称")
+    void legacyNullCategoryRenameRejectsDuplicateName() {
+        ForumTag legacyTag = tag(1L, "旧标签", null);
+        ForumTag duplicate = tag(2L, "Java", "未分组");
+        when(tagMapper.findById(1L)).thenReturn(legacyTag);
+        when(tagMapper.isUsedByAuthor(1L, "user-a")).thenReturn(true);
+        when(tagMapper.findByNameIgnoreCaseAndCategory("Java", "未分组")).thenReturn(duplicate);
+
+        assertThrows(BusinessException.class, () -> service.renamePersonal(1L, "Java", "user-a"));
+
+        verify(tagMapper, never()).update(any());
+    }
+
     private ForumTag tag(Long id, String name, String category) {
         ForumTag tag = new ForumTag();
         tag.setId(id);

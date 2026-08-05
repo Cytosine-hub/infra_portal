@@ -19,6 +19,7 @@ import java.util.List;
 @Slf4j
 public class ForumTagManagementService {
     public static final int MAX_TAG_NAME_LENGTH = 50;
+    private static final String DEFAULT_TAG_CATEGORY = "未分组";
 
     private final ForumTagMapper tagMapper;
 
@@ -40,10 +41,11 @@ public class ForumTagManagementService {
         if (!StringUtils.hasText(category)) {
             throw new BusinessException(ErrorCode.PARAM_INVALID, ErrorMessages.PARAM_INVALID);
         }
-        ensureUnique(name, category, null);
+        String normalizedCategory = normalizeCategory(category);
+        ensureUnique(name, normalizedCategory, null);
         ForumTag tag = new ForumTag();
         tag.setName(name);
-        tag.setCategory(category.trim());
+        tag.setCategory(normalizedCategory);
         tag.setCreatedBy(username);
         tag.setCreatedAt(LocalDateTime.now());
         tag.setUpdatedAt(LocalDateTime.now());
@@ -56,11 +58,12 @@ public class ForumTagManagementService {
     public ForumTag renamePersonal(Long id, String rawName, String username) {
         ForumTag tag = requirePersonalTag(id, username);
         String name = validateName(rawName);
-        ensureUnique(name, tag.getCategory(), id);
+        String category = normalizeCategory(tag.getCategory());
+        ensureUnique(name, category, id);
         if (tagMapper.hasAssociationsOutsideAuthor(id, username)) {
             ForumTag replacement = new ForumTag();
             replacement.setName(name);
-            replacement.setCategory(tag.getCategory());
+            replacement.setCategory(category);
             replacement.setCreatedBy(username);
             replacement.setCreatedAt(LocalDateTime.now());
             replacement.setUpdatedAt(LocalDateTime.now());
@@ -71,6 +74,7 @@ public class ForumTagManagementService {
             return replacement;
         }
         tag.setName(name);
+        tag.setCategory(category);
         tag.setUpdatedAt(LocalDateTime.now());
         tagMapper.update(tag);
         return tag;
@@ -92,8 +96,10 @@ public class ForumTagManagementService {
     public ForumTag renameAdmin(Long id, String rawName, String managedCategory, boolean systemAdmin) {
         ForumTag tag = requireAdminTag(id, managedCategory, systemAdmin);
         String name = validateName(rawName);
-        ensureUnique(name, tag.getCategory(), id);
+        String category = normalizeCategory(tag.getCategory());
+        ensureUnique(name, category, id);
         tag.setName(name);
+        tag.setCategory(category);
         tag.setUpdatedAt(LocalDateTime.now());
         tagMapper.update(tag);
         return tag;
@@ -147,5 +153,9 @@ public class ForumTagManagementService {
         if (duplicate != null && !duplicate.getId().equals(currentId)) {
             throw new BusinessException(ErrorCode.FORUM_TAG_DUPLICATE, ErrorMessages.FORUM_TAG_DUPLICATE);
         }
+    }
+
+    private String normalizeCategory(String category) {
+        return StringUtils.hasText(category) ? category.trim() : DEFAULT_TAG_CATEGORY;
     }
 }

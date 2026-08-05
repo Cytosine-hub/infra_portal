@@ -228,7 +228,7 @@ CREATE TABLE `forum_tags` (
   `id` bigint NOT NULL AUTO_INCREMENT,
   `name` varchar(100) NOT NULL,
   `post_count` int DEFAULT '0',
-  `category` varchar(100) DEFAULT NULL,
+  `category` varchar(100) NOT NULL,
   `created_by` varchar(100) DEFAULT NULL,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
