@@ -84,6 +84,18 @@ class GatewayAuthenticationFilterTest {
     }
 
     @Test
+    @DisplayName("TC-GATEWAY-012 个人论坛标签列表必须认证并注入身份头（验收 TC-01）")
+    void myTagsRequiresAuthentication() {
+        assertForumTagPathRequiresAuthentication("/api/forum/my-tags");
+    }
+
+    @Test
+    @DisplayName("TC-GATEWAY-013 后台论坛标签列表必须认证并注入身份头（验收 TC-04、TC-05）")
+    void adminTagsRequiresAuthentication() {
+        assertForumTagPathRequiresAuthentication("/api/forum/admin/tags");
+    }
+
+    @Test
     @DisplayName("TC-GATEWAY-005 有效 Token 注入完整身份头并生成正确签名")
     void validTokenInjectsCorrectlySignedIdentity() {
         GatewayAuthenticationFilter filter = filter(token -> Mono.just(validIdentity()));
@@ -184,6 +196,38 @@ class GatewayAuthenticationFilterTest {
 
     private GatewayAuthenticationFilter filter(GatewayIntrospectionClient client) {
         return new GatewayAuthenticationFilter(client, signatureService, Duration.ofSeconds(15), 100);
+    }
+
+    private void assertForumTagPathRequiresAuthentication(String path) {
+        AtomicInteger introspections = new AtomicInteger();
+        AtomicInteger unauthenticatedChainCalls = new AtomicInteger();
+        GatewayAuthenticationFilter filter = filter(token -> {
+            introspections.incrementAndGet();
+            return Mono.just(validIdentity());
+        });
+        MockServerWebExchange unauthenticatedExchange = MockServerWebExchange.from(
+                MockServerHttpRequest.get(path));
+
+        filter.filter(unauthenticatedExchange, ignored -> {
+            unauthenticatedChainCalls.incrementAndGet();
+            return Mono.empty();
+        }).block();
+
+        assertThat(unauthenticatedExchange.getResponse().getStatusCode())
+                .isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(unauthenticatedChainCalls).hasValue(0);
+
+        MockServerWebExchange exchange = MockServerWebExchange.from(MockServerHttpRequest
+                .get(path)
+                .header("Authorization", "Bearer valid-token"));
+        AtomicReference<ServerHttpRequest> forwarded = new AtomicReference<>();
+
+        filter.filter(exchange, capture(forwarded)).block();
+
+        assertThat(introspections).hasValue(1);
+        assertThat(forwarded.get().getHeaders().getFirst(GatewayIdentityHeaders.USER))
+                .isEqualTo(IdentityHeaderCodec.encode("alice"));
+        assertThat(forwarded.get().getHeaders().getFirst(GatewayIdentityHeaders.SIGNATURE)).isNotBlank();
     }
 
     private GatewayFilterChain capture(AtomicReference<ServerHttpRequest> request) {

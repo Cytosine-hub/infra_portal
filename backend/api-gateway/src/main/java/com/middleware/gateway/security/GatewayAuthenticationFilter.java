@@ -31,6 +31,10 @@ public class GatewayAuthenticationFilter implements GlobalFilter, Ordered {
     private static final PathPattern PUBLIC_API = PATH_PATTERN_PARSER.parse("/api/public/**");
     private static final PathPattern FILES = PATH_PATTERN_PARSER.parse("/files/**");
     private static final PathPattern FORUM = PATH_PATTERN_PARSER.parse("/api/forum/**");
+    private static final PathPattern FORUM_MY_TAGS =
+            PATH_PATTERN_PARSER.parse("/api/forum/my-tags/**");
+    private static final PathPattern FORUM_ADMIN =
+            PATH_PATTERN_PARSER.parse("/api/forum/admin/**");
     private static final PathPattern MIDDLEWARE_COMMANDS =
             PATH_PATTERN_PARSER.parse("/api/middleware-commands/**");
     private static final String FORUM_MY_POSTS = "/api/forum/my-posts";
@@ -145,7 +149,9 @@ public class GatewayAuthenticationFilter implements GlobalFilter, Ordered {
             return true;
         }
         if (HttpMethod.GET.equals(method) && FORUM.matches(pathContainer)
-                && !FORUM_MY_POSTS.equals(path)) {
+                && !FORUM_MY_POSTS.equals(path)
+                && !FORUM_MY_TAGS.matches(pathContainer)
+                && !FORUM_ADMIN.matches(pathContainer)) {
             return true;
         }
         if (HttpMethod.GET.equals(method) && MIDDLEWARE_COMMANDS.matches(pathContainer)
