@@ -43,27 +43,12 @@ variables:
   DEPLOY_COMPOSE_ROOT: "/app/infra-portal/compose"
   DEPLOY_DATA_ROOT: "/app/infra-portal/data"
   DEPLOY_ROLLBACK_STATE_ROOT: "/app/infra-portal/compose/rollback"
-  ROLLBACK_TARGET:
-    value: "all-services"
-    options:
-      - "all-services"
-      - "all-backend-services"
-      - "frontend"
-      - "api-gateway"
-      - "core-service"
-      - "ai-service"
-      - "community-service"
-      - "middleware-service"
-      - "database-service"
-      - "host-service"
-      - "network-service"
-      - "security-service"
-    description: "rollback:manual 的回滚范围"
 
 stages:
   - validate      # Shell/CI/Compose 契约门禁
   - build         # 单元测试 + 编译 + 镜像构建（按路径增量）
   - deploy        # 全部门禁通过后部署受影响服务
+  - rollback      # 手动恢复上一成功业务版本
   - cleanup       # 定时清理 Runner 主机上的过期业务镜像
 
 # 复用 Web 流水线中的非阻断手动作业规则。
@@ -631,13 +616,12 @@ deploy:frontend:
       fi
     - DEPLOY_NO_DEPS=true DEPLOY_VERIFY_MODE=frontend sh deploy/rollback.sh deploy frontend
 
-# 手动回滚只读取 Runner 上持久化的运行清单和成功部署历史，不覆盖业务密钥。
-rollback:manual:
-  stage: deploy
+# 手动回滚只读取 Runner 上持久化的运行清单和成功部署历史，不覆盖业务密钥，
+# 也不依赖 AUTO_ROLLBACK_ENABLED。每个服务作为独立手动作业展示。
+.rollback-common:
+  stage: rollback
   resource_group: staging-infra-portal
   interruptible: false
-  environment:
-    name: staging/rollback
   before_script:
     - export DEPLOY_BUSINESS_DIR="$DEPLOY_COMPOSE_ROOT/business"
     - export COMPOSE_FILE="$DEPLOY_BUSINESS_DIR/compose.yml"
@@ -648,30 +632,73 @@ rollback:manual:
     - test -f "$DEPLOY_BUSINESS_DIR/services.env"
     - export BUSINESS_ENV_FILE=./services.env
     - docker compose --env-file "$COMPOSE_ENV_FILE" --file "$COMPOSE_FILE" config --quiet
-  script:
-    - |
-      case "$ROLLBACK_TARGET" in
-        all-services)
-          rollback_services='api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend'
-          ;;
-        all-backend-services)
-          rollback_services='api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service'
-          ;;
-        frontend|api-gateway|core-service|ai-service|community-service|middleware-service|database-service|host-service|network-service|security-service)
-          rollback_services=$ROLLBACK_TARGET
-          ;;
-        *)
-          echo "不支持的 ROLLBACK_TARGET：$ROLLBACK_TARGET"
-          exit 1
-          ;;
-      esac
-      sh deploy/rollback.sh manual $rollback_services
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: never
-    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - *skip-schedule
+    - *web-manual
+    - if: '$CI_COMMIT_REF_NAME == "master"'
       when: manual
       allow_failure: true
+
+.rollback-tpl:
+  extends: .rollback-common
+  environment:
+    name: "staging/rollback/$SVC"
+  script:
+    - sh deploy/rollback.sh manual "$SVC"
+
+rollback:api-gateway:
+  extends: .rollback-tpl
+  variables: { SVC: api-gateway }
+
+rollback:core-service:
+  extends: .rollback-tpl
+  variables: { SVC: core-service }
+
+rollback:ai-service:
+  extends: .rollback-tpl
+  variables: { SVC: ai-service }
+
+rollback:community-service:
+  extends: .rollback-tpl
+  variables: { SVC: community-service }
+
+rollback:middleware-service:
+  extends: .rollback-tpl
+  variables: { SVC: middleware-service }
+
+rollback:database-service:
+  extends: .rollback-tpl
+  variables: { SVC: database-service }
+
+rollback:host-service:
+  extends: .rollback-tpl
+  variables: { SVC: host-service }
+
+rollback:network-service:
+  extends: .rollback-tpl
+  variables: { SVC: network-service }
+
+rollback:security-service:
+  extends: .rollback-tpl
+  variables: { SVC: security-service }
+
+rollback:frontend:
+  extends: .rollback-tpl
+  variables: { SVC: frontend }
+
+rollback:all-backend-services:
+  extends: .rollback-common
+  environment:
+    name: staging/rollback/all-backend-services
+  script:
+    - sh deploy/rollback.sh manual api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service
+
+rollback:all-services:
+  extends: .rollback-common
+  environment:
+    name: staging/rollback/all-services
+  script:
+    - sh deploy/rollback.sh manual api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend
 
 # GitLab Pipeline Schedule 每日触发；只清理 10 个业务服务的新格式标签。
 # 每个服务按镜像创建时间保留最近 3 个，旧 SHA 标签和依赖镜像不在清理范围内。

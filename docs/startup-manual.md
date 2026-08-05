@@ -94,7 +94,7 @@ GitLab 流水线中的 `verify:deployment` 会执行 Shell 语法检查、CI/Com
 
 所有业务部署入口在启动容器前都会记录受影响服务的实际运行镜像。`AUTO_ROLLBACK_ENABLED` 只从 GitLab 项目 **Settings > CI/CD > Variables** 获取，仓库不定义默认值；设为 `true` 时，Compose 健康等待或前端连通检查失败后按服务恢复部署前快照，即使恢复成功，部署 job 仍返回失败；设为 `false` 时保留失败现场。修改项目变量即可调整开关，无需提交代码。变量缺失或值不是 `true`/`false` 时，业务部署会在更新容器前失败。依赖栈是有状态组件，不参与自动回滚。
 
-手动回滚不读取 `AUTO_ROLLBACK_ENABLED`，该变量缺失时仍可执行。需在 GitLab **Run pipeline** 页面选择 `ROLLBACK_TARGET`，创建流水线后点击 `rollback:manual`。目标支持单个业务服务、`all-backend-services` 和 `all-services`。作业先检查所有目标历史和镜像都存在，再执行回滚；成功后交换当前/上一镜像记录，后续可再次执行切回。首次成功部署前没有上一版本记录，手动回滚会安全失败且不更新容器。
+手动回滚不读取 `AUTO_ROLLBACK_ENABLED`，该变量缺失时仍可执行，也不需要在创建流水线时选择目标。独立 `rollback` stage 会列出 10 个 `rollback:<service>` 单服务作业，以及 `rollback:all-backend-services`、`rollback:all-services` 两个聚合作业；直接点击所需作业即可回滚其他服务。作业先检查所有目标历史和镜像都存在，再执行回滚；成功后交换当前/上一镜像记录，后续可再次执行切回。首次成功部署前没有上一版本记录，手动回滚会安全失败且不更新容器。
 
 部署 job 读取到的 File 变量值是 GitLab 临时文件路径。业务部署持久化到 `$DEPLOY_COMPOSE_ROOT/business`，依赖部署持久化到 `$DEPLOY_COMPOSE_ROOT/dependencies`，MySQL 初始化脚本放在依赖目录的 `initdb` 中；回滚历史写入 `$DEPLOY_ROLLBACK_STATE_ROOT`。环境文件中的 `IMAGE_TAG` 会同步为实际部署标签，`DEPLOY_DATA_ROOT` 固定为 `/app/infra-portal/data`，业务 `BUSINESS_ENV_FILE` 固定为 `./services.env`，依赖 `MYSQL_INIT_DIR` 固定为 `./initdb`。密钥文件和回滚状态文件权限为 `0600`。
 

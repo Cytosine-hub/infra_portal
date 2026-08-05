@@ -181,6 +181,7 @@ assert_text .gitlab-ci.yml \
     'TC-CI-011 deployment uses persisted dependency compose file'
 
 assert_text .gitlab-ci.yml '^  - validate ' 'TC-CI-013 validate stage'
+assert_text .gitlab-ci.yml '^  - rollback ' 'TC-CI-050 rollback stage'
 assert_text .gitlab-ci.yml 'sh deploy/tests/ci-contract\.sh' 'TC-CI-013 CI contract gate'
 assert_text .gitlab-ci.yml 'sh deploy/tests/compose-contract\.sh' 'TC-CI-013 Compose contract gate'
 assert_text .gitlab-ci.yml 'sh deploy/tests/nacos-init-test\.sh' 'TC-CI-013 Nacos contract gate'
@@ -197,10 +198,10 @@ assert_text .gitlab-ci.yml \
 assert_text .gitlab-ci.yml \
     '^  DEPLOY_ROLLBACK_STATE_ROOT: "/app/infra-portal/compose/rollback"$' \
     'TC-CI-045 persistent rollback state root'
-assert_text .gitlab-ci.yml '^rollback:manual:' \
-    'TC-CI-045 manual rollback job'
-assert_text .gitlab-ci.yml 'ROLLBACK_TARGET' \
-    'TC-CI-045 selectable manual rollback target'
+assert_no_text .gitlab-ci.yml 'ROLLBACK_TARGET' \
+    'TC-CI-045 rollback target must not be selected when creating a pipeline'
+assert_no_text .gitlab-ci.yml '^rollback:manual:' \
+    'TC-CI-045 retired aggregate manual rollback job'
 
 assert_text .gitlab-ci.yml 'CI_OPEN_MERGE_REQUESTS.*CI_PIPELINE_SOURCE.*push' \
     'TC-CI-014 duplicate pipeline guard'
@@ -313,11 +314,35 @@ for deploy_job in deploy:all-backend-services deploy:all-services deploy:full-st
 done
 pass 'TC-CI-046 all business deployment paths use rollback wrapper'
 
-manual_rollback_job=$(extract_job rollback:manual)
-printf '%s\n' "$manual_rollback_job" | grep -Eq 'AUTO_ROLLBACK_ENABLED' \
+rollback_common=$(extract_job .rollback-common)
+printf '%s\n' "$rollback_common" | grep -Eq '^  stage: rollback$' \
+    || fail 'TC-CI-050 manual rollback jobs must use rollback stage'
+printf '%s\n' "$rollback_common" | grep -Eq 'AUTO_ROLLBACK_ENABLED' \
     && fail 'TC-CI-049 manual rollback must not require automatic rollback variable'
-printf '%s\n' "$manual_rollback_job" | grep -Eq 'rollback\.sh manual' \
-    || fail 'TC-CI-049 manual rollback command is missing'
 pass 'TC-CI-049 manual rollback remains available without automatic rollback variable'
+
+rollback_template=$(extract_job .rollback-tpl)
+printf '%s\n' "$rollback_template" | grep -Eq 'rollback\.sh manual.*\$SVC' \
+    || fail 'TC-CI-051 single-service rollback template is missing'
+for service_name in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend; do
+    rollback_job=$(extract_job "rollback:$service_name")
+    printf '%s\n' "$rollback_job" | grep -Eq 'extends: \.rollback-tpl' \
+        || fail "TC-CI-051 rollback:$service_name must use the rollback template"
+    printf '%s\n' "$rollback_job" | grep -Eq "SVC: $service_name" \
+        || fail "TC-CI-051 rollback:$service_name has an invalid service target"
+done
+pass 'TC-CI-051 independent single-service rollback jobs'
+
+rollback_all_backend=$(extract_job rollback:all-backend-services)
+printf '%s\n' "$rollback_all_backend" | grep -Eq \
+    'api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service' \
+    || fail 'TC-CI-052 all-backend rollback scope is incomplete'
+printf '%s\n' "$rollback_all_backend" | grep -Eq 'frontend' \
+    && fail 'TC-CI-052 all-backend rollback must not include frontend'
+rollback_all_services=$(extract_job rollback:all-services)
+printf '%s\n' "$rollback_all_services" | grep -Eq \
+    'api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend' \
+    || fail 'TC-CI-052 all-services rollback scope is incomplete'
+pass 'TC-CI-052 independent aggregate rollback jobs'
 
 printf '%s\n' '* Task complete: GitLab CI contract'

@@ -135,7 +135,7 @@ curl -i http://127.0.0.1:8080/api/middleware-commands/types
 
 ## 7. CI/CD
 
-`.gitlab-ci.yml` 使用 `validate → build → deploy` 三阶段。`verify:deployment` 先执行 Shell 语法检查、CI/Compose/Nacos 初始化契约测试和 Compose 静态解析；任一门禁失败时不进入构建或部署。每个岗位服务仍有独立 verify/deploy 作业，verify 的路径触发由服务目录、自身 `job-*` 目录和扇出段组成；扇出段为 `common-*`、父 POM 与 `.gitlab-ci.yml`。
+`.gitlab-ci.yml` 使用 `validate → build → deploy → rollback → cleanup` 五阶段，手动回滚与部署作业分属独立阶段。`verify:deployment` 先执行 Shell 语法检查、CI/Compose/Nacos 初始化契约测试和 Compose 静态解析；任一门禁失败时不进入构建或部署。每个岗位服务仍有独立 verify/deploy 作业，verify 的路径触发由服务目录、自身 `job-*` 目录和扇出段组成；扇出段为 `common-*`、父 POM 与 `.gitlab-ci.yml`。
 
 后端镜像的公共构建层统一执行：
 
@@ -157,9 +157,9 @@ mvn clean verify
 - `deploy:all-backend-services`：部署全部 9 个 Java 后端服务，不构建或重启前端，不操作依赖组件；
 - `deploy:all-services`：在一个 job 中构建并部署 9 个 Java 服务和前端，不操作依赖组件，执行前必须确保依赖栈已就绪；
 - `deploy:full-stack`：用于初始化或全量部署，先初始化或更新依赖栈并执行 Nacos 配置初始化，再构建和部署完整业务栈。
-- `rollback:manual`：按 `ROLLBACK_TARGET` 回滚单服务、全部后端或全部业务服务，只在 Web 流水线中手动触发。
+- `rollback:<service>`：位于独立 `rollback` stage，10 个业务服务各有一个可单独点击的手动回滚作业；另提供 `rollback:all-backend-services` 和 `rollback:all-services`，无需在创建流水线时选择目标。
 
-业务部署的 `AUTO_ROLLBACK_ENABLED` 只从 GitLab 项目 CI/CD Variables 获取，仓库不定义默认值；`true` 开启自动回滚，`false` 保留失败现场，修改项目变量无需提交代码。变量缺失或值非法时，部署在更新容器前失败。每次启动前按服务快照运行中容器的实际镜像，Compose 健康等待或前端连通检查失败后自动恢复快照，同时保留部署 job 的失败状态。成功部署会把每服务当前/上一镜像写入 `/app/infra-portal/compose/rollback`，供 `rollback:manual` 使用；手动回滚不读取该变量，变量缺失时仍可执行，成功后两者交换。定时镜像清理不会删除这些记录引用的镜像。依赖栈和数据库结构不参与自动或手动镜像回滚。
+业务部署的 `AUTO_ROLLBACK_ENABLED` 只从 GitLab 项目 CI/CD Variables 获取，仓库不定义默认值；`true` 开启自动回滚，`false` 保留失败现场，修改项目变量无需提交代码。变量缺失或值非法时，部署在更新容器前失败。每个部署作业只快照并自动恢复该作业实际更新的服务，同时保留部署 job 的失败状态。成功部署会把每服务当前/上一镜像写入 `/app/infra-portal/compose/rollback`；各独立手动回滚作业不读取该变量，变量缺失时仍可按需回滚其他服务，成功后当前/上一镜像交换。定时镜像清理不会删除这些记录引用的镜像。依赖栈和数据库结构不参与自动或手动镜像回滚。
 
 `deploy/docker-compose.yml` 定义前端和 9 个 Java 业务服务，`deploy/docker-compose.dependencies.yml` 定义 MySQL、Nacos、Nacos 初始化以及 Milvus/etcd/MinIO。两个 Compose 项目通过固定共享网络通信并独立启停；CI 将清单分别持久化到 `/app/infra-portal/compose/business` 和 `/app/infra-portal/compose/dependencies`。所有有状态数据均挂载到 `DEPLOY_DATA_ROOT=/app/infra-portal/data`，并在其下按 `business` 与 `dependencies` 分层；首次创建 `${DEPLOY_DATA_ROOT}/dependencies/mysql` 时，MySQL 才会执行初始化脚本，已有目录不会重复初始化。
 

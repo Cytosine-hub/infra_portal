@@ -97,7 +97,7 @@ CI 构建镜像统一命名为 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-
 
 CI 中 `verify:all-backend-services` 只验证并构建 9 个后端镜像，不执行部署。手动部署入口按范围分为：`deploy:all-backend-services` 部署全部后端服务，`deploy:all-services` 部署前端和全部后端服务，`deploy:full-stack` 先初始化或更新 MySQL、Nacos、Milvus 等依赖，再部署完整业务栈。`deploy:dependencies` 仍可单独初始化或更新依赖栈，且仅要求 `DEPLOY_COMPOSE_ENV_FILE`。
 
-业务部署的失败自动回滚开关只从 GitLab 项目 **Settings > CI/CD > Variables** 中的 `AUTO_ROLLBACK_ENABLED` 读取，仓库不提供默认值；设置为 `true` 开启，设置为 `false` 关闭，修改后无需提交代码。部署前会按服务读取运行中容器的实际镜像，`docker compose up --wait` 或前端连通检查失败时恢复该快照；恢复成功后原部署 job 仍保持失败，便于告警和排查。手动回滚不依赖该变量：即使变量缺失，仍可选择 `ROLLBACK_TARGET`（单服务、`all-backend-services` 或 `all-services`），创建 Web 流水线后点击 `rollback:manual`；成功后当前/上一版本会交换，可再次执行切回。回滚只覆盖前端和 9 个无状态业务服务，不回滚 MySQL、Nacos、Milvus 等依赖或数据库结构。
+业务部署的失败自动回滚开关只从 GitLab 项目 **Settings > CI/CD > Variables** 中的 `AUTO_ROLLBACK_ENABLED` 读取，仓库不提供默认值；设置为 `true` 开启，设置为 `false` 关闭，修改后无需提交代码。部署前会按服务读取运行中容器的实际镜像，失败时只恢复当前部署作业实际更新的服务；恢复成功后原部署 job 仍保持失败，便于告警和排查。手动回滚不依赖该变量，也无需在创建流水线时选择目标：在独立 `rollback` stage 直接点击对应的 `rollback:<service>`、`rollback:all-backend-services` 或 `rollback:all-services` 作业即可；成功后当前/上一版本会交换，可再次执行切回。回滚只覆盖前端和 9 个无状态业务服务，不回滚 MySQL、Nacos、Milvus 等依赖或数据库结构。
 
 部署 job 将运行清单和数据分别持久化到 Runner 宿主机 `/app/infra-portal/compose` 与 `/app/infra-portal/data`。业务清单保存在 `compose/business`，依赖清单及 MySQL 初始化脚本保存在 `compose/dependencies`，每服务的当前/上一成功镜像记录保存在 `compose/rollback`；两个 Compose 项目和两类数据均可独立管理。Job 结束后可在宿主机分别操作：
 
