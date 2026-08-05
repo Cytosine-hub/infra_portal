@@ -125,31 +125,71 @@
     <!-- 列表页 -->
     <template v-else>
       <div class="standards-grid">
+        <header class="standards-overview-head">
+          <div class="standards-overview-title">
+            <h1>标准文档总览</h1>
+            <p>按类别、软件与版本聚合展示已发布标准，点击标准名称或标准文档即可查看详情。</p>
+          </div>
+          <div class="standards-summary">
+            <div v-for="metric in summaryMetrics" :key="metric.label" class="standards-metric">
+              <strong>{{ metric.value }}</strong>
+              <span>{{ metric.label }}</span>
+            </div>
+          </div>
+        </header>
+
+        <div class="standards-toolbar">
+          <input v-model.trim="keyword" type="search" class="standards-search"
+            aria-label="搜索标准" placeholder="搜索软件、标准名称、标准文档或版本" />
+          <select v-model="sortBy" class="standards-sort" aria-label="标准排序方式">
+            <option value="recent">按最近更新</option>
+            <option value="documents">按文档数量</option>
+            <option value="name">按标准名称</option>
+          </select>
+        </div>
+
         <section v-for="group in standardGroups" :key="group.category" class="standard-category-section">
           <div class="standard-category-head">
-            <div>
+            <div class="standard-category-title">
               <h2>{{ group.category }}</h2>
+              <span class="standard-category-badge">{{ group.standards.length }} 项标准 · {{ group.documentCount }} 份文档</span>
             </div>
-            <span>{{ group.standards.length }} 项标准</span>
+            <p class="standard-category-meta">{{ group.softwareSummary }}</p>
           </div>
-          <div class="standard-list">
-            <article v-for="standard in group.standards" :key="standard.id" class="standard-row">
-              <div class="standard-row-main">
-                <button type="button" class="standard-title-link" @click="openStandardDetail(standard.id)">
-                  {{ standard.software || '-' }} / {{ displayTitle(standard) }}
+          <div class="standard-card-grid">
+            <article v-for="standard in group.standards" :key="standard.id" class="standard-row standard-card">
+              <div class="standard-card-head">
+                <button type="button" class="standard-title-link" :title="displayTitle(standard)"
+                  @click="openStandardDetail(standard.id)">
+                  {{ displayTitle(standard) }}
                 </button>
-                <div class="manual-list">
-                  <button v-for="doc in standard.relatedDocuments" :key="doc.id" type="button"
-                    class="ghost related-document-link" @click="openDocFromList(standard, doc.id)">
-                    {{ doc.title }}
-                  </button>
-                  <span v-if="!standard.relatedDocuments?.length" class="muted">暂无已发布标准文档</span>
+                <span v-if="standard.softwareVersion" class="standard-card-version">{{ standard.softwareVersion }}</span>
+              </div>
+              <dl class="standard-card-meta">
+                <div v-for="field in metaFields(standard)" :key="field.label" class="standard-card-meta-item">
+                  <dt>{{ field.label }}</dt>
+                  <dd>{{ field.value }}</dd>
                 </div>
+              </dl>
+              <div class="standard-card-docs">
+                <button v-for="doc in visibleDocuments(standard)" :key="doc.id" type="button"
+                  class="related-document-link" :title="doc.title || '未命名文档'"
+                  @click="openDocFromList(standard, doc.id)">
+                  {{ doc.title || '未命名文档' }}
+                </button>
+                <p v-if="!publishedDocuments(standard).length" class="standard-card-docs-empty">暂无已发布标准文档</p>
+              </div>
+              <div class="standard-card-actions">
+                <span>共 {{ publishedDocuments(standard).length }} 份标准文档</span>
+                <button v-if="publishedDocuments(standard).length > DOC_PREVIEW_LIMIT" type="button"
+                  class="standard-card-more" @click="toggleDocs(standard.id)">
+                  {{ docsExpanded[standard.id] ? '收起' : '查看更多' }}
+                </button>
               </div>
             </article>
           </div>
         </section>
-        <EmptyState v-if="filteredStandards.length === 0" message="当前类别暂无已发布标准，可切换其他类别查看。" />
+        <EmptyState v-if="standardGroups.length === 0" :message="emptyMessage" />
       </div>
     </template>
       </div>
@@ -169,11 +209,22 @@ import MarkdownDocumentPreview from '../components/previews/MarkdownDocumentPrev
 import JobNavigation from '../shared/jobs/JobNavigation.vue'
 import { filterItemsByJob } from '../shared/jobs/jobFilter.js'
 import { useJobFilter } from '../shared/jobs/useJobFilter.js'
+import { useNotify } from '../composables/useNotify'
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
+// 列表卡片默认只展示前若干份标准文档，其余通过「查看更多」展开，避免大量数据时页面被拉长
+const DOC_PREVIEW_LIMIT = 3
+const UNCATEGORIZED = '未分类'
+const SOFTWARE_SUMMARY_LIMIT = 5
+
+const { notify } = useNotify()
+
 // State
 const standards = ref([])
+const keyword = ref('')
+const sortBy = ref('recent')
+const docsExpanded = reactive({})
 const selectedStandard = ref(null)
 const selectedDoc = ref(null)
 const activeTocId = ref('')
@@ -205,16 +256,45 @@ const relatedDocs = computed(() => {
   if (!selectedStandard.value) return []
   return (selectedStandard.value.relatedDocuments || []).filter(d => d.status === 'PUBLISHED')
 })
+const filteredStandards = computed(() => filterItemsByJob(standards.value, selectedJob.value, (standard) => standard.category))
+// 关键字过滤 + 排序后的标准，概览指标与分类分区都以它为准，保证「看到什么就统计什么」
+const visibleStandards = computed(() => {
+  const query = keyword.value.toLowerCase()
+  const matched = query
+    ? filteredStandards.value.filter((standard) => searchText(standard).includes(query))
+    : [...filteredStandards.value]
+  return matched.sort(compareStandards)
+})
 const standardGroups = computed(() => {
   const groups = new Map()
-  for (const s of filteredStandards.value) {
-    const cat = s.category || '未分类'
-    if (!groups.has(cat)) groups.set(cat, { category: cat, standards: [] })
-    groups.get(cat).standards.push(s)
+  for (const standard of visibleStandards.value) {
+    const category = standard.category || UNCATEGORIZED
+    if (!groups.has(category)) groups.set(category, { category, standards: [], documentCount: 0, softwareSummary: '' })
+    const group = groups.get(category)
+    group.standards.push(standard)
+    group.documentCount += publishedDocuments(standard).length
+  }
+  for (const group of groups.values()) {
+    const names = [...new Set(group.standards.map((standard) => standard.software).filter(Boolean))]
+    group.softwareSummary = names.slice(0, SOFTWARE_SUMMARY_LIMIT).join('、') + (names.length > SOFTWARE_SUMMARY_LIMIT ? ' 等' : '')
   }
   return [...groups.values()]
 })
-const filteredStandards = computed(() => filterItemsByJob(standards.value, selectedJob.value, (standard) => standard.category))
+const summaryMetrics = computed(() => {
+  const list = visibleStandards.value
+  const documentCount = list.reduce((total, standard) => total + publishedDocuments(standard).length, 0)
+  const categories = new Set(list.map((standard) => standard.category || UNCATEGORIZED))
+  const latest = list.map(standardTimestamp).filter(Boolean).sort().at(-1)
+  return [
+    { label: '标准总数', value: list.length },
+    { label: '标准文档', value: documentCount },
+    { label: '标准类别', value: categories.size },
+    { label: '最近更新', value: formatDate(latest) }
+  ]
+})
+const emptyMessage = computed(() => (keyword.value
+  ? '未找到匹配的标准，请调整搜索关键字或切换其他类别查看。'
+  : '暂无已发布标准，可切换其他类别查看。'))
 const docHtml = computed(() => {
   const doc = selectedDoc.value || selectedStandard.value
   if (!doc) return ''
@@ -265,6 +345,52 @@ function toggleExpand(id) {
   expanded[id] = !expanded[id]
 }
 
+function publishedDocuments(standard) {
+  return (standard?.relatedDocuments || []).filter((doc) => !doc.status || doc.status === 'PUBLISHED')
+}
+function visibleDocuments(standard) {
+  const docs = publishedDocuments(standard)
+  return docsExpanded[standard.id] ? docs : docs.slice(0, DOC_PREVIEW_LIMIT)
+}
+function toggleDocs(id) {
+  docsExpanded[id] = !docsExpanded[id]
+}
+function standardTimestamp(standard) {
+  return standard.publishedAt || standard.updatedAt || standard.createdAt || ''
+}
+function formatDate(value) {
+  if (!value) return '-'
+  const matched = String(value).match(/^\d{4}-\d{2}-\d{2}/)
+  return matched ? matched[0] : String(value)
+}
+function metaFields(standard) {
+  return [
+    { label: '类别', value: standard.category || UNCATEGORIZED },
+    { label: '软件', value: standard.software || '-' },
+    { label: '软件版本', value: standard.softwareVersion || '-' },
+    { label: '标准版本', value: standard.version || '-' },
+    { label: '发布时间', value: formatDate(standardTimestamp(standard)) }
+  ]
+}
+function searchText(standard) {
+  return [
+    displayTitle(standard),
+    standard.category,
+    standard.software,
+    standard.softwareVersion,
+    standard.version,
+    ...publishedDocuments(standard).map((doc) => doc.title)
+  ].filter(Boolean).join(' ').toLowerCase()
+}
+function compareStandards(left, right) {
+  if (sortBy.value === 'name') return displayTitle(left).localeCompare(displayTitle(right), 'zh-Hans-CN')
+  if (sortBy.value === 'documents') {
+    const gap = publishedDocuments(right).length - publishedDocuments(left).length
+    if (gap !== 0) return gap
+  }
+  return standardTimestamp(right).localeCompare(standardTimestamp(left))
+}
+
 function handleJobChange(jobId) {
   selectJob(jobId)
   if (selectedStandard.value && !filterItemsByJob([selectedStandard.value], jobId, (standard) => standard.category).length) {
@@ -276,9 +402,13 @@ async function loadStandards() {
   try {
     const data = await request('/api/public/parameter-standards?size=100', { token: null })
     standards.value = (Array.isArray(data) ? data : (data?.content ?? []))
-  } catch { standards.value = [] }
+  } catch (error) {
+    standards.value = []
+    notify(error.message, 'error')
+  }
 }
 
+// 详情加载失败时统一提示并停留在列表页，避免出现空白详情或无响应
 async function openStandardDetail(id) {
   loading.value = true
   selectedDoc.value = null
@@ -288,7 +418,9 @@ async function openStandardDetail(id) {
     expanded[id] = true
     await nextTick()
     initScrollSpy()
-  } catch { /* ignore */ }
+  } catch (error) {
+    notify(error.message, 'error')
+  }
   finally { loading.value = false }
 }
 
@@ -304,7 +436,11 @@ async function openDocDetail(id) {
     selectedDoc.value = doc
     await nextTick()
     initScrollSpy()
-  } catch { /* ignore */ }
+    return true
+  } catch (error) {
+    notify(error.message, 'error')
+    return false
+  }
   finally { loading.value = false }
 }
 
@@ -336,11 +472,14 @@ function destroyScrollSpy() {
   if (scrollHandler) { window.removeEventListener('scroll', scrollHandler); scrollHandler = null }
 }
 
-// 从列表直接点文档：先建立标准上下文，再加载文档
+// 从列表直接点文档：先建立标准上下文，再加载文档；文档加载失败则回退到原上下文
 async function openDocFromList(standard, docId) {
+  const previousStandard = selectedStandard.value
   selectedStandard.value = standard
   expanded[standard.id] = true
-  await openDocDetail(docId)
+  if (!await openDocDetail(docId)) {
+    selectedStandard.value = previousStandard
+  }
 }
 
 onMounted(loadStandards)
@@ -348,8 +487,132 @@ onBeforeUnmount(destroyScrollSpy)
 </script>
 
 <style scoped>
-.public-module-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 6fr); gap: var(--space-xl); padding-top: var(--space-xl); }
+.public-module-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--space-xl); padding-top: var(--space-xl); }
 .public-module-content { min-width: 0; }
+
+/* ===== 标准发布列表：概览 + 工具栏 + 分类分区 ===== */
+.standards-grid { display: grid; gap: var(--space-lg); align-items: start; }
+.standards-overview-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--space-xl);
+  border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+  padding: var(--space-xl); background: var(--color-bg); box-shadow: var(--shadow-sm);
+}
+.standards-overview-title { min-width: 0; }
+.standards-overview-title h1 { margin: 0 0 var(--space-sm); font-size: var(--text-3xl); line-height: 1.25; }
+.standards-overview-title p { margin: 0; color: var(--color-text-secondary); font-size: var(--text-base); }
+.standards-summary {
+  display: grid; grid-template-columns: repeat(4, minmax(96px, 1fr)); gap: var(--space-sm);
+  flex: 1 1 420px; max-width: 520px;
+}
+.standards-metric {
+  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  padding: var(--space-md); background: var(--color-bg-secondary); text-align: left;
+}
+.standards-metric strong { display: block; font-size: var(--text-2xl); line-height: 1.1; color: var(--color-text); }
+.standards-metric span { display: block; margin-top: var(--space-xs); font-size: var(--text-xs); color: var(--color-text-secondary); }
+
+.standards-toolbar {
+  display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: var(--space-md);
+  border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+  padding: var(--space-md) var(--space-lg); background: var(--color-bg); box-shadow: var(--shadow-sm);
+}
+.standards-search, .standards-sort {
+  min-height: 40px; border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  padding: 0 var(--space-md); background: var(--color-bg);
+  color: var(--color-text); font-size: var(--text-base); outline: none;
+}
+.standards-search:focus, .standards-sort:focus {
+  border-color: var(--color-border-focus); box-shadow: 0 0 0 3px var(--color-primary-ring);
+}
+.standards-search::placeholder { color: var(--color-text-tertiary); }
+
+.standard-category-section {
+  display: flex; flex-direction: column; gap: var(--space-lg);
+  border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+  padding: var(--space-xl); background: var(--color-bg); box-shadow: var(--shadow-sm);
+}
+.standard-category-head {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: var(--space-sm) var(--space-lg);
+  padding-bottom: var(--space-md); border-bottom: 1px solid var(--color-border);
+}
+.standard-category-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-sm); min-width: 0; }
+.standard-category-title h2 { margin: 0; font-size: var(--text-2xl); letter-spacing: 0; }
+.standard-category-badge {
+  display: inline-flex; align-items: center; border-radius: var(--radius-full);
+  padding: var(--space-2xs) var(--space-sm);
+  background: var(--color-primary-light); color: var(--color-primary);
+  font-size: var(--text-xs); font-weight: 700; white-space: nowrap;
+}
+.standard-category-meta {
+  margin: 0; min-width: 0; color: var(--color-text-secondary); font-size: var(--text-sm);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.standard-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-lg); }
+.standard-card {
+  display: flex; flex-direction: column; gap: var(--space-md); min-width: 0;
+  border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+  padding: var(--space-lg); background: var(--color-bg);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.standard-card:hover { border-color: var(--color-primary-100); box-shadow: var(--shadow-md); }
+.standard-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-sm); }
+.standard-title-link {
+  flex: 1; min-width: 0; justify-self: start;
+  min-height: auto; padding: 0; border: none;
+  color: var(--color-text); background: transparent;
+  font-size: var(--text-lg); font-weight: 700; line-height: 1.4; text-align: left;
+  overflow-wrap: anywhere; word-break: break-word; cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.standard-title-link:hover { color: var(--color-primary); background: transparent; }
+.standard-card-version {
+  flex: 0 0 auto; display: inline-flex; align-items: center;
+  border-radius: var(--radius-sm); padding: var(--space-2xs) var(--space-sm);
+  background: var(--color-success-light); color: var(--color-success);
+  font-size: var(--text-xs); font-weight: 700; white-space: nowrap;
+}
+.standard-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-xs) var(--space-md); margin: 0; }
+.standard-card-meta-item { display: flex; gap: var(--space-2xs); min-width: 0; font-size: var(--text-xs); }
+.standard-card-meta-item dt { color: var(--color-text-tertiary); }
+.standard-card-meta-item dt::after { content: '：'; }
+.standard-card-meta-item dd { margin: 0; color: var(--color-text-secondary); overflow-wrap: anywhere; }
+
+.standard-card-docs { display: flex; flex-direction: column; gap: var(--space-sm); }
+.related-document-link {
+  display: block; width: 100%; min-height: 34px; border: none;
+  border-radius: var(--radius-sm); padding: var(--space-sm) var(--space-md);
+  background: var(--color-primary-light); color: var(--color-primary);
+  font-size: var(--text-base); font-weight: 600; line-height: 1.4; text-align: left;
+  overflow-wrap: anywhere; word-break: break-word; cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.related-document-link:hover { background: var(--color-primary-50); text-decoration: underline; }
+.standard-card-docs-empty { margin: 0; color: var(--color-text-tertiary); font-size: var(--text-sm); }
+.standard-card-actions {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
+  margin-top: auto; padding-top: var(--space-sm); border-top: 1px solid var(--color-border);
+  color: var(--color-text-tertiary); font-size: var(--text-xs);
+}
+.standard-card-more {
+  border: 1px solid var(--color-primary-100); border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-md);
+  background: var(--color-bg); color: var(--color-primary);
+  font-size: var(--text-xs); font-weight: 700; white-space: nowrap; cursor: pointer;
+}
+.standard-card-more:hover { background: var(--color-primary-light); }
+
+@media (max-width: 1120px) {
+  .standards-summary { grid-template-columns: repeat(2, minmax(96px, 1fr)); }
+}
+@media (max-width: 760px) {
+  .standards-overview-head, .standard-category-section { padding: var(--space-lg); }
+  .standards-toolbar { grid-template-columns: 1fr; }
+  .standard-card-grid { grid-template-columns: 1fr; }
+  .standard-category-meta { white-space: normal; }
+}
 .standards-tree {
   width: 260px; border-right: 1px solid var(--color-border);
   display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
