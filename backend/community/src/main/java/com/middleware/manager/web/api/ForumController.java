@@ -48,7 +48,10 @@ public class ForumController {
     public Map<String, Object> detail(@PathVariable Long id, Authentication auth) {
         ForumPost post = forumService.getPost(id);
         forumService.incrementViewCount(id);
-        Map<String, Object> result = toDetail(post);
+        List<String> tags = forumService.getTagsByPostId(id).stream()
+                .map(ForumTag::getName)
+                .collect(Collectors.toList());
+        Map<String, Object> result = toDetail(post, tags);
         result.put("liked", auth != null && forumService.hasUserLiked(id, auth.getName()));
         result.put("comments", forumService.getComments(id).stream().map(this::toCommentMap).collect(Collectors.toList()));
         return result;
@@ -60,7 +63,7 @@ public class ForumController {
         if (req.content == null || req.content.trim().isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "内容不能为空");
         ForumPost post = forumService.createPost(req.title, req.content, req.tags,
                 auth.getName(), getDisplayName(auth));
-        return toDetail(post);
+        return toDetail(post, req.tags);
     }
 
     @PutMapping("/posts/{id}")
@@ -68,7 +71,7 @@ public class ForumController {
         if (req.title == null || req.title.trim().length() < 2) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "标题不能为空");
         if (req.content == null || req.content.trim().isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "内容不能为空");
         ForumPost post = forumService.updatePost(id, req.title, req.content, req.tags, auth.getName());
-        return toDetail(post);
+        return toDetail(post, req.tags);
     }
 
     @DeleteMapping("/posts/{id}")
@@ -143,8 +146,9 @@ public class ForumController {
         return m;
     }
 
-    private Map<String, Object> toDetail(ForumPost p) {
-        Map<String, Object> m = toSummary(p, Collections.emptyMap());
+    private Map<String, Object> toDetail(ForumPost p, List<String> tags) {
+        List<String> responseTags = tags != null ? tags : Collections.emptyList();
+        Map<String, Object> m = toSummary(p, Collections.singletonMap(p.getId(), responseTags));
         m.remove("summary"); m.put("content", p.getContent());
         m.put("authorUsername", p.getAuthorUsername());
         m.put("updatedAt", p.getUpdatedAt());
