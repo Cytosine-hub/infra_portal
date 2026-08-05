@@ -9,6 +9,8 @@ import EmptyState from '../src/components/ui/EmptyState.vue'
 import { useNotify } from '../src/composables/useNotify'
 // 以 Vite ?raw 导入源码文本做静态检查，避免在 jsdom 下无法计算真实布局时漏掉样式约束
 import standardsPageSource from '../src/pages/StandardsPage.vue?raw'
+import categorySectionSource from '../src/components/standards/StandardCategorySection.vue?raw'
+import overviewPanelSource from '../src/components/standards/StandardsOverviewPanel.vue?raw'
 
 const LONG_TITLE = '浙江泰隆商业银行生产环境中间件与数据库统一部署运维超长标准文档名称用于验证边界展示-202608版'
 
@@ -22,10 +24,10 @@ const localStorageMock = {
 }
 
 const redisDocs = [
-  { id: 101, title: 'Redis 监控模板 v1', version: '1.0', status: 'PUBLISHED' },
-  { id: 102, title: '浙江泰隆商业银行 Redis 应急处理手册', version: '1.1', status: 'PUBLISHED' },
-  { id: 103, title: 'Redis 部署标准-202502版', version: '2.0', status: 'PUBLISHED' },
-  { id: 104, title: 'Redis 容量评估标准', version: '1.0', status: 'PUBLISHED' }
+  { id: 101, title: 'Redis 监控模板 v1', version: '1.0', status: 'PUBLISHED', publishedAt: '2026-07-28T09:00:00' },
+  { id: 102, title: '浙江泰隆商业银行 Redis 应急处理手册', version: '1.1', status: 'PUBLISHED', publishedAt: '2026-07-20T09:00:00' },
+  { id: 103, title: 'Redis 部署标准-202502版', standardVersion: '2.0', status: 'PUBLISHED', updatedAt: '2026-06-18T09:00:00' },
+  { id: 104, title: 'Redis 容量评估标准', version: '1.0', status: 'PUBLISHED', publishedAt: '2026-05-06T09:00:00' }
 ]
 
 const standards = [
@@ -146,6 +148,18 @@ describe('标准发布页面优化验收', () => {
     expect(metaText).toContain('1.2')
     expect(metaText).toContain('2026-08-01')
 
+    // 关联标准文档同样要展示版本与发布时间，不能只有标题
+    const docLinks = redisCard.findAll('.related-document-link')
+    const monitorDoc = docLinks.find((link) => link.text().includes('Redis 监控模板 v1'))
+    expect(monitorDoc.find('.related-document-meta').text()).toContain('1.0')
+    expect(monitorDoc.find('.related-document-meta').text()).toContain('2026-07-28')
+    // 缺少 version/publishedAt 时回退到 standardVersion/updatedAt
+    await redisCard.find('.standard-card-more').trigger('click')
+    const fallbackDoc = cardOf(wrapper, 'Redis 部署标准').findAll('.related-document-link')
+      .find((link) => link.text().includes('Redis 部署标准-202502版'))
+    expect(fallbackDoc.find('.related-document-meta').text()).toContain('2.0')
+    expect(fallbackDoc.find('.related-document-meta').text()).toContain('2026-06-18')
+
     // 概览指标：标准总数 / 标准文档 / 标准类别 / 最近更新
     const metrics = wrapper.findAll('.standards-metric')
     expect(metrics).toHaveLength(4)
@@ -187,6 +201,10 @@ describe('标准发布页面优化验收', () => {
     await flushPromises()
     expect(wrapper.find('.standards-detail-layout').exists()).toBe(true)
     expect(wrapper.find('.standard-detail-head h2').text()).toBe('Redis 部署标准')
+    // 详情页的标准文档卡片同样带版本与发布时间
+    const detailDoc = wrapper.findAll('.doc-card').find((card) => card.text().includes('Redis 监控模板 v1'))
+    expect(detailDoc.find('.doc-card-meta').text()).toContain('1.0')
+    expect(detailDoc.find('.doc-card-meta').text()).toContain('2026-07-28')
 
     await wrapper.find('.tree-header button').trigger('click')
     await flushPromises()
@@ -231,6 +249,18 @@ describe('标准发布页面优化验收', () => {
     expect(wrapper.text()).not.toContain('Redis 部署标准')
   })
 
+  test('TC-STANDARDS-008 (TC-04) 列表结构拆分为子组件，单个组件不超过 500 行', async () => {
+    const wrapper = await mountPage()
+
+    // 总览面板与分类分区由独立子组件渲染，页面只负责数据编排
+    expect(wrapper.findComponent({ name: 'StandardsOverviewPanel' }).exists()).toBe(true)
+    expect(wrapper.findAllComponents({ name: 'StandardCategorySection' })).toHaveLength(3)
+
+    for (const source of [standardsPageSource, categorySectionSource, overviewPanelSource]) {
+      expect(source.split('\n').length).toBeLessThanOrEqual(500)
+    }
+  })
+
   test('TC-STANDARDS-005 (TC-05) 超长标准名称不破坏布局且可正常进入详情', async () => {
     const wrapper = await mountPage()
 
@@ -238,8 +268,8 @@ describe('标准发布页面优化验收', () => {
     const titleLink = longCard.find('.standard-title-link')
     expect(titleLink.attributes('title')).toBe(LONG_TITLE)
     // 长文本必须允许换行截断，避免撑破卡片
-    expect(standardsPageSource).toMatch(/\.standard-title-link\s*\{[^}]*overflow-wrap:\s*anywhere/)
-    expect(standardsPageSource).toMatch(/\.related-document-link\s*\{[^}]*overflow-wrap:\s*anywhere/)
+    expect(categorySectionSource).toMatch(/\.standard-title-link\s*\{[^}]*overflow-wrap:\s*anywhere/)
+    expect(categorySectionSource).toMatch(/\.related-document-title\s*\{[^}]*overflow-wrap:\s*anywhere/)
 
     await titleLink.trigger('click')
     await flushPromises()
