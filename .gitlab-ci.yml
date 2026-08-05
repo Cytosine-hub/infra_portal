@@ -42,11 +42,13 @@ variables:
   # Compose 清单与运行数据分别持久化，避免 Job 清理 /builds 后无法手动管理。
   DEPLOY_COMPOSE_ROOT: "/app/infra-portal/compose"
   DEPLOY_DATA_ROOT: "/app/infra-portal/data"
+  DEPLOY_ROLLBACK_STATE_ROOT: "/app/infra-portal/compose/rollback"
 
 stages:
   - validate      # Shell/CI/Compose 契约门禁
   - build         # 单元测试 + 编译 + 镜像构建（按路径增量）
   - deploy        # 全部门禁通过后部署受影响服务
+  - rollback      # 手动恢复上一成功业务版本
   - cleanup       # 定时清理 Runner 主机上的过期业务镜像
 
 # 复用 Web 流水线中的非阻断手动作业规则。
@@ -71,6 +73,7 @@ verify:deployment:
     - sh deploy/tests/nacos-init-test.sh
     - sh deploy/tests/image-maintenance-test.sh
     - sh deploy/tests/ai-auth-preflight-test.sh
+    - sh deploy/tests/rollback-test.sh
     - sh deploy/generate-test-env.sh
     - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.yml config --quiet
     - docker compose --env-file deploy/compose.test.env --file deploy/docker-compose.dependencies.yml config --quiet
@@ -255,6 +258,7 @@ verify:security-service:
     - ': "${DEPLOY_COMPOSE_ENV_FILE:?缺少 DEPLOY_COMPOSE_ENV_FILE（GitLab File 类型变量）}"'
     - ': "${DEPLOY_SERVICES_ENV_FILE:?缺少 DEPLOY_SERVICES_ENV_FILE（GitLab File 类型变量）}"'
     - ': "${AI_API_KEY:?缺少 AI_API_KEY（GitLab Masked 变量）}"'
+    - ': "${AUTO_ROLLBACK_ENABLED:?缺少 AUTO_ROLLBACK_ENABLED（GitLab CI/CD Variable，值必须为 true 或 false）}"'
     - test -f "$DEPLOY_COMPOSE_ENV_FILE"
     - test -f "$DEPLOY_SERVICES_ENV_FILE"
     - |
@@ -311,6 +315,9 @@ verify:security-service:
     - chmod 600 "$DEPLOY_COMPOSE_ENV" "$DEPLOY_SERVICES_ENV"
     - chmod 644 "$DEPLOY_COMPOSE_FILE"
     - export BUSINESS_ENV_FILE=./services.env
+    - export COMPOSE_ENV_FILE="$DEPLOY_COMPOSE_ENV"
+    - export COMPOSE_FILE="$DEPLOY_COMPOSE_FILE"
+    - export ROLLBACK_STATE_ROOT="$DEPLOY_ROLLBACK_STATE_ROOT"
     - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" config --quiet
 
 .deploy-dependencies-common:
@@ -371,8 +378,7 @@ verify:security-service:
           --file deploy/Dockerfile .
       fi
     - if [ "$SVC" = "ai-service" ]; then sh deploy/validate-ai-auth.sh "$DEPLOY_SERVICES_ENV" "$IMAGE_NAMESPACE/ai-service:$IMAGE_TAG" "$DEPLOY_COMPOSE_ENV"; fi
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never "$SVC"
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps "$SVC"
+    - sh deploy/rollback.sh deploy "$SVC"
 
 # 单独部署依赖组件。MySQL 首次创建数据卷时会执行 db/init.sql 和 db/seed.sql；
 # 后续部署不会重放初始化脚本。
@@ -415,8 +421,7 @@ deploy:all-backend-services:
         fi
       done
     - sh deploy/validate-ai-auth.sh "$DEPLOY_SERVICES_ENV" "$IMAGE_NAMESPACE/ai-service:$IMAGE_TAG" "$DEPLOY_COMPOSE_ENV"
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service
+    - sh deploy/rollback.sh deploy api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service
 
 # 部署完整业务栈：9 个后端服务加前端，不操作依赖组件。
 deploy:all-services:
@@ -430,10 +435,7 @@ deploy:all-services:
       done
     - docker build --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --file deploy/Dockerfile.frontend .
     - sh deploy/validate-ai-auth.sh "$DEPLOY_SERVICES_ENV" "$IMAGE_NAMESPACE/ai-service:$IMAGE_TAG" "$DEPLOY_COMPOSE_ENV"
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/api/public/releases
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps --all
+    - DEPLOY_VERIFY_MODE=full sh deploy/rollback.sh deploy api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend
 
 # 初始化或全量部署：先初始化/更新依赖栈，再构建并部署完整业务栈。
 deploy:full-stack:
@@ -480,11 +482,8 @@ deploy:full-stack:
       done
     - docker build --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --file deploy/Dockerfile.frontend .
     - sh deploy/validate-ai-auth.sh "$DEPLOY_SERVICES_ENV" "$IMAGE_NAMESPACE/ai-service:$IMAGE_TAG" "$DEPLOY_COMPOSE_ENV"
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-build --pull never
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/api/public/releases
+    - DEPLOY_VERIFY_MODE=full sh deploy/rollback.sh deploy api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend
     - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" ps --all mysql nacos nacos-init etcd minio milvus
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps --all
 
 # ----------------------------------------------------------------------------
 # 单服务自动部署（增量 CD）：master 上仅当该服务自身/能力模块/共享库变更时，
@@ -615,9 +614,91 @@ deploy:frontend:
           --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" \
           --file deploy/Dockerfile.frontend .
       fi
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" up --detach --wait --no-deps --no-build --pull never frontend
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" exec -T frontend wget --quiet --output-document=/dev/null http://127.0.0.1/
-    - docker compose --env-file "$DEPLOY_COMPOSE_ENV" --file "$DEPLOY_COMPOSE_FILE" ps frontend
+    - DEPLOY_NO_DEPS=true DEPLOY_VERIFY_MODE=frontend sh deploy/rollback.sh deploy frontend
+
+# 手动回滚只读取 Runner 上持久化的运行清单和成功部署历史，不覆盖业务密钥，
+# 也不依赖 AUTO_ROLLBACK_ENABLED。每个服务作为独立手动作业展示。
+.rollback-common:
+  stage: rollback
+  resource_group: staging-infra-portal
+  interruptible: false
+  before_script:
+    - export DEPLOY_BUSINESS_DIR="$DEPLOY_COMPOSE_ROOT/business"
+    - export COMPOSE_FILE="$DEPLOY_BUSINESS_DIR/compose.yml"
+    - export COMPOSE_ENV_FILE="$DEPLOY_BUSINESS_DIR/compose.env"
+    - export ROLLBACK_STATE_ROOT="$DEPLOY_ROLLBACK_STATE_ROOT"
+    - test -f "$COMPOSE_FILE"
+    - test -f "$COMPOSE_ENV_FILE"
+    - test -f "$DEPLOY_BUSINESS_DIR/services.env"
+    - export BUSINESS_ENV_FILE=./services.env
+    - docker compose --env-file "$COMPOSE_ENV_FILE" --file "$COMPOSE_FILE" config --quiet
+  rules:
+    - *skip-schedule
+    - *web-manual
+    - if: '$CI_COMMIT_REF_NAME == "master"'
+      when: manual
+      allow_failure: true
+
+.rollback-tpl:
+  extends: .rollback-common
+  environment:
+    name: "staging/rollback/$SVC"
+  script:
+    - sh deploy/rollback.sh manual "$SVC"
+
+rollback:api-gateway:
+  extends: .rollback-tpl
+  variables: { SVC: api-gateway }
+
+rollback:core-service:
+  extends: .rollback-tpl
+  variables: { SVC: core-service }
+
+rollback:ai-service:
+  extends: .rollback-tpl
+  variables: { SVC: ai-service }
+
+rollback:community-service:
+  extends: .rollback-tpl
+  variables: { SVC: community-service }
+
+rollback:middleware-service:
+  extends: .rollback-tpl
+  variables: { SVC: middleware-service }
+
+rollback:database-service:
+  extends: .rollback-tpl
+  variables: { SVC: database-service }
+
+rollback:host-service:
+  extends: .rollback-tpl
+  variables: { SVC: host-service }
+
+rollback:network-service:
+  extends: .rollback-tpl
+  variables: { SVC: network-service }
+
+rollback:security-service:
+  extends: .rollback-tpl
+  variables: { SVC: security-service }
+
+rollback:frontend:
+  extends: .rollback-tpl
+  variables: { SVC: frontend }
+
+rollback:all-backend-services:
+  extends: .rollback-common
+  environment:
+    name: staging/rollback/all-backend-services
+  script:
+    - sh deploy/rollback.sh manual api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service
+
+rollback:all-services:
+  extends: .rollback-common
+  environment:
+    name: staging/rollback/all-services
+  script:
+    - sh deploy/rollback.sh manual api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend
 
 # GitLab Pipeline Schedule 每日触发；只清理 10 个业务服务的新格式标签。
 # 每个服务按镜像创建时间保留最近 3 个，旧 SHA 标签和依赖镜像不在清理范围内。
