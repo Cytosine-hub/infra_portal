@@ -53,7 +53,9 @@
             <div class="doc-card-grid">
               <a v-for="doc in relatedDocs" :key="doc.id" class="doc-card" href="#" @click.prevent="openDocDetail(doc.id)">
                 <span class="doc-card-title">{{ doc.title }}</span>
-                <span class="doc-card-meta muted">v{{ doc.version || '-' }}</span>
+                <span class="doc-card-meta muted">
+                  <span v-for="field in documentMetaFields(doc)" :key="field.label">{{ field.label }} {{ field.value }}</span>
+                </span>
               </a>
             </div>
           </div>
@@ -125,31 +127,13 @@
     <!-- 列表页 -->
     <template v-else>
       <div class="standards-grid">
-        <section v-for="group in standardGroups" :key="group.category" class="standard-category-section">
-          <div class="standard-category-head">
-            <div>
-              <h2>{{ group.category }}</h2>
-            </div>
-            <span>{{ group.standards.length }} 项标准</span>
-          </div>
-          <div class="standard-list">
-            <article v-for="standard in group.standards" :key="standard.id" class="standard-row">
-              <div class="standard-row-main">
-                <button type="button" class="standard-title-link" @click="openStandardDetail(standard.id)">
-                  {{ standard.software || '-' }} / {{ displayTitle(standard) }}
-                </button>
-                <div class="manual-list">
-                  <button v-for="doc in standard.relatedDocuments" :key="doc.id" type="button"
-                    class="ghost related-document-link" @click="openDocFromList(standard, doc.id)">
-                    {{ doc.title }}
-                  </button>
-                  <span v-if="!standard.relatedDocuments?.length" class="muted">暂无已发布标准文档</span>
-                </div>
-              </div>
-            </article>
-          </div>
-        </section>
-        <EmptyState v-if="filteredStandards.length === 0" message="当前类别暂无已发布标准，可切换其他类别查看。" />
+        <StandardsOverviewPanel v-model:keyword="keyword" v-model:sort-by="sortBy" :metrics="summaryMetrics" />
+        <StandardCategorySection v-for="group in standardGroups" :key="group.category"
+          :group="group" :expanded-docs="docsExpanded"
+          @open-standard="openStandardDetail"
+          @open-document="openDocFromList"
+          @toggle-documents="toggleDocs" />
+        <EmptyState v-if="standardGroups.length === 0" :message="emptyMessage" />
       </div>
     </template>
       </div>
@@ -166,14 +150,29 @@ import EmptyState from '../components/ui/EmptyState.vue'
 import PdfDocumentPreview from '../components/previews/PdfDocumentPreview.vue'
 import WordDocumentPreview from '../components/previews/WordDocumentPreview.vue'
 import MarkdownDocumentPreview from '../components/previews/MarkdownDocumentPreview.vue'
+import StandardsOverviewPanel from '../components/standards/StandardsOverviewPanel.vue'
+import StandardCategorySection from '../components/standards/StandardCategorySection.vue'
+import {
+  buildCategoryGroups,
+  buildSummaryMetrics,
+  displayTitle,
+  documentMetaFields,
+  searchAndSortStandards
+} from '../components/standards/standardsCatalog.js'
 import JobNavigation from '../shared/jobs/JobNavigation.vue'
 import { filterItemsByJob } from '../shared/jobs/jobFilter.js'
 import { useJobFilter } from '../shared/jobs/useJobFilter.js'
+import { useNotify } from '../composables/useNotify'
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
+const { notify } = useNotify()
+
 // State
 const standards = ref([])
+const keyword = ref('')
+const sortBy = ref('recent')
+const docsExpanded = reactive({})
 const selectedStandard = ref(null)
 const selectedDoc = ref(null)
 const activeTocId = ref('')
@@ -205,16 +204,14 @@ const relatedDocs = computed(() => {
   if (!selectedStandard.value) return []
   return (selectedStandard.value.relatedDocuments || []).filter(d => d.status === 'PUBLISHED')
 })
-const standardGroups = computed(() => {
-  const groups = new Map()
-  for (const s of filteredStandards.value) {
-    const cat = s.category || '未分类'
-    if (!groups.has(cat)) groups.set(cat, { category: cat, standards: [] })
-    groups.get(cat).standards.push(s)
-  }
-  return [...groups.values()]
-})
 const filteredStandards = computed(() => filterItemsByJob(standards.value, selectedJob.value, (standard) => standard.category))
+// 关键字过滤 + 排序后的标准，概览指标与分类分区都以它为准，保证「看到什么就统计什么」
+const visibleStandards = computed(() => searchAndSortStandards(filteredStandards.value, keyword.value, sortBy.value))
+const standardGroups = computed(() => buildCategoryGroups(visibleStandards.value))
+const summaryMetrics = computed(() => buildSummaryMetrics(visibleStandards.value))
+const emptyMessage = computed(() => (keyword.value
+  ? '未找到匹配的标准，请调整搜索关键字或切换其他类别查看。'
+  : '暂无已发布标准，可切换其他类别查看。'))
 const docHtml = computed(() => {
   const doc = selectedDoc.value || selectedStandard.value
   if (!doc) return ''
@@ -257,12 +254,11 @@ const pagedParams = computed(() => {
 })
 
 // Functions
-function displayTitle(doc) {
-  if (!doc) return ''
-  return doc.title || [doc.category, doc.software, doc.softwareVersion].filter(Boolean).join(' / ') || '未命名'
-}
 function toggleExpand(id) {
   expanded[id] = !expanded[id]
+}
+function toggleDocs(id) {
+  docsExpanded[id] = !docsExpanded[id]
 }
 
 function handleJobChange(jobId) {
@@ -276,9 +272,13 @@ async function loadStandards() {
   try {
     const data = await request('/api/public/parameter-standards?size=100', { token: null })
     standards.value = (Array.isArray(data) ? data : (data?.content ?? []))
-  } catch { standards.value = [] }
+  } catch (error) {
+    standards.value = []
+    notify(error.message, 'error')
+  }
 }
 
+// 详情加载失败时统一提示并停留在列表页，避免出现空白详情或无响应
 async function openStandardDetail(id) {
   loading.value = true
   selectedDoc.value = null
@@ -288,7 +288,9 @@ async function openStandardDetail(id) {
     expanded[id] = true
     await nextTick()
     initScrollSpy()
-  } catch { /* ignore */ }
+  } catch (error) {
+    notify(error.message, 'error')
+  }
   finally { loading.value = false }
 }
 
@@ -304,7 +306,11 @@ async function openDocDetail(id) {
     selectedDoc.value = doc
     await nextTick()
     initScrollSpy()
-  } catch { /* ignore */ }
+    return true
+  } catch (error) {
+    notify(error.message, 'error')
+    return false
+  }
   finally { loading.value = false }
 }
 
@@ -336,11 +342,14 @@ function destroyScrollSpy() {
   if (scrollHandler) { window.removeEventListener('scroll', scrollHandler); scrollHandler = null }
 }
 
-// 从列表直接点文档：先建立标准上下文，再加载文档
+// 从列表直接点文档：先建立标准上下文，再加载文档；文档加载失败则回退到原上下文
 async function openDocFromList(standard, docId) {
+  const previousStandard = selectedStandard.value
   selectedStandard.value = standard
   expanded[standard.id] = true
-  await openDocDetail(docId)
+  if (!await openDocDetail(docId)) {
+    selectedStandard.value = previousStandard
+  }
 }
 
 onMounted(loadStandards)
@@ -348,8 +357,12 @@ onBeforeUnmount(destroyScrollSpy)
 </script>
 
 <style scoped>
-.public-module-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 6fr); gap: var(--space-xl); padding-top: var(--space-xl); }
+.public-module-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--space-xl); padding-top: var(--space-xl); }
 .public-module-content { min-width: 0; }
+
+/* ===== 标准发布列表：概览面板（StandardsOverviewPanel）+ 分类分区（StandardCategorySection） ===== */
+.standards-grid { display: grid; gap: var(--space-lg); align-items: start; }
+
 .standards-tree {
   width: 260px; border-right: 1px solid var(--color-border);
   display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
@@ -405,7 +418,7 @@ onBeforeUnmount(destroyScrollSpy)
   border-color: var(--color-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 .doc-card-title { font-size: var(--text-base); font-weight: 500; color: var(--color-primary); }
-.doc-card-meta { font-size: var(--text-xs); color: var(--color-text-tertiary); }
+.doc-card-meta { display: flex; flex-wrap: wrap; gap: var(--space-2xs) var(--space-sm); font-size: var(--text-xs); color: var(--color-text-tertiary); }
 .doc-empty-hint { padding: var(--space-md) 0; }
 .public-document-preview {
   width: 100%;
