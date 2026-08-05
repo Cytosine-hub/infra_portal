@@ -62,8 +62,13 @@ let previewTimer = null
 
 function addTag() {
   const names = tagInput.value.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+  const existingNames = new Set(form.tags.map(name => name.toLowerCase()))
   for (const name of names) {
-    if (!form.tags.includes(name)) form.tags.push(name)
+    const normalizedName = name.toLowerCase()
+    if (!existingNames.has(normalizedName)) {
+      form.tags.push(name)
+      existingNames.add(normalizedName)
+    }
   }
   tagInput.value = ''
 }

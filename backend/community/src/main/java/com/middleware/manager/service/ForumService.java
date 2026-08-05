@@ -204,6 +204,10 @@ public class ForumService {
         return tagMapper.findAllByOrderByPostCountDesc();
     }
 
+    public List<ForumTag> getTagsByPostId(Long postId) {
+        return tagMapper.findByPostId(postId);
+    }
+
     private Set<ForumTag> resolveTags(List<String> names) {
         if (names == null || names.isEmpty()) return new HashSet<>();
         Set<ForumTag> tags = new HashSet<>();
@@ -214,24 +218,37 @@ public class ForumService {
     }
 
     private void updateTags(Long postId, List<String> newNames) {
-        Set<String> newSet = newNames != null ?
-                newNames.stream().map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toSet()) :
-                new HashSet<>();
+        Map<String, String> newTagsByNormalizedName = new LinkedHashMap<>();
+        if (newNames != null) {
+            for (String name : newNames) {
+                if (name == null || name.trim().isEmpty()) continue;
+                String trimmed = name.trim();
+                newTagsByNormalizedName.putIfAbsent(normalizeTagName(trimmed), trimmed);
+            }
+        }
         List<ForumTag> currentTags = findTagsByPostId(postId);
-        Set<String> oldSet = currentTags.stream().map(ForumTag::getName).collect(Collectors.toSet());
+        Set<String> oldNames = currentTags.stream()
+                .map(ForumTag::getName)
+                .map(this::normalizeTagName)
+                .collect(Collectors.toSet());
 
         for (ForumTag tag : currentTags) {
-            if (!newSet.contains(tag.getName())) {
+            if (!newTagsByNormalizedName.containsKey(normalizeTagName(tag.getName()))) {
                 deletePostTag(postId, tag.getId());
                 tagMapper.decrementPostCount(tag.getId());
             }
         }
-        for (String name : newSet) {
-            if (!oldSet.contains(name)) {
+        for (Map.Entry<String, String> entry : newTagsByNormalizedName.entrySet()) {
+            if (!oldNames.contains(entry.getKey())) {
+                String name = entry.getValue();
                 ForumTag tag = getOrCreateTag(name);
                 insertPostTag(postId, tag.getId());
             }
         }
+    }
+
+    private String normalizeTagName(String name) {
+        return name.toLowerCase(Locale.ROOT);
     }
 
     private ForumTag getOrCreateTag(String name) {
