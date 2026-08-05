@@ -5,6 +5,7 @@ IMAGE_NAMESPACE=${IMAGE_NAMESPACE:-infra-portal}
 BUSINESS_IMAGE_KEEP_COUNT=${BUSINESS_IMAGE_KEEP_COUNT:-3}
 BUSINESS_IMAGE_SERVICES=${BUSINESS_IMAGE_SERVICES:-api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend}
 DOCKER_COMMAND=${DOCKER_COMMAND:-docker}
+ROLLBACK_STATE_ROOT=${ROLLBACK_STATE_ROOT:-${DEPLOY_ROLLBACK_STATE_ROOT:-/app/infra-portal/compose/rollback}}
 
 case "$BUSINESS_IMAGE_KEEP_COUNT" in
     ''|*[!0-9]*|0)
@@ -50,6 +51,14 @@ for service_name in $BUSINESS_IMAGE_SERVICES; do
     fi
 
     while IFS= read -r image_ref; do
+        rollback_state_file="$ROLLBACK_STATE_ROOT/$service_name.state"
+        if [ -f "$rollback_state_file" ] \
+            && grep -Fqx -e "CURRENT_IMAGE=$image_ref" \
+                -e "PREVIOUS_IMAGE=$image_ref" "$rollback_state_file"; then
+            printf '| Task info: retained image referenced by rollback history: %s\n' \
+                "$image_ref"
+            continue
+        fi
         referencing_containers=$("$DOCKER_COMMAND" container ls --all \
             --filter "ancestor=$image_ref" --quiet)
         if [ -n "$referencing_containers" ]; then

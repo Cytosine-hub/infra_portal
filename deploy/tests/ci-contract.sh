@@ -187,6 +187,20 @@ assert_text .gitlab-ci.yml 'sh deploy/tests/nacos-init-test\.sh' 'TC-CI-013 Naco
 assert_text .gitlab-ci.yml '^verify:deployment:' 'TC-CI-038 active deployment contract gate'
 assert_text .gitlab-ci.yml 'sh deploy/tests/ai-auth-preflight-test\.sh' \
     'TC-CI-038 AI authentication preflight test gate'
+assert_text .gitlab-ci.yml 'sh deploy/tests/rollback-test\.sh' \
+    'TC-CI-045 rollback test gate'
+assert_no_text .gitlab-ci.yml '^  AUTO_ROLLBACK_ENABLED:' \
+    'TC-CI-045 automatic rollback switch must not be defined in repository CI variables'
+assert_text .gitlab-ci.yml \
+    'AUTO_ROLLBACK_ENABLED:\?缺少 AUTO_ROLLBACK_ENABLED（GitLab CI/CD Variable' \
+    'TC-CI-045 automatic rollback project variable guard'
+assert_text .gitlab-ci.yml \
+    '^  DEPLOY_ROLLBACK_STATE_ROOT: "/app/infra-portal/compose/rollback"$' \
+    'TC-CI-045 persistent rollback state root'
+assert_text .gitlab-ci.yml '^rollback:manual:' \
+    'TC-CI-045 manual rollback job'
+assert_text .gitlab-ci.yml 'ROLLBACK_TARGET' \
+    'TC-CI-045 selectable manual rollback target'
 
 assert_text .gitlab-ci.yml 'CI_OPEN_MERGE_REQUESTS.*CI_PIPELINE_SOURCE.*push' \
     'TC-CI-014 duplicate pipeline guard'
@@ -249,8 +263,8 @@ printf '%s\n' "$all_backend_services_job" | grep -Eq \
     || fail 'TC-CI-023 backend deployment must include all nine backend services'
 printf '%s\n' "$all_backend_services_job" | grep -Eq 'frontend' \
     && fail 'TC-CI-023 backend deployment must not include frontend'
-printf '%s\n' "$all_backend_services_job" | grep -Eq '\$DEPLOY_COMPOSE_FILE' \
-    || fail 'TC-CI-023 backend deployment must use business compose'
+printf '%s\n' "$all_backend_services_job" | grep -Eq 'deploy/rollback\.sh deploy' \
+    || fail 'TC-CI-023 backend deployment must use business rollback wrapper'
 pass 'TC-CI-023 all-backend deployment mode'
 
 all_services_job=$(extract_job deploy:all-services)
@@ -270,8 +284,8 @@ full_stack_job=$(extract_job deploy:full-stack)
 printf '%s\n' "$full_stack_job" | grep -Eq \
     'DEPLOY_DEPENDENCIES_COMPOSE_FILE|nacos-init|mysql|milvus|minio|etcd' \
     || fail 'TC-CI-025 full-stack deployment must initialize dependencies'
-printf '%s\n' "$full_stack_job" | grep -Eq '\$DEPLOY_COMPOSE_FILE' \
-    || fail 'TC-CI-025 full-stack deployment must use business compose'
+printf '%s\n' "$full_stack_job" | grep -Eq 'deploy/rollback\.sh deploy' \
+    || fail 'TC-CI-025 full-stack deployment must use business rollback wrapper'
 printf '%s\n' "$full_stack_job" | grep -Eq 'frontend' \
     || fail 'TC-CI-025 full-stack deployment must include frontend'
 pass 'TC-CI-025 dependency and business full-stack deployment mode'
@@ -287,5 +301,23 @@ for deploy_job in deploy:all-backend-services deploy:all-services deploy:full-st
         || fail "TC-CI-038 $deploy_job lacks authentication preflight"
 done
 pass 'TC-CI-038 all ai-service deployment paths require authentication preflight'
+
+deploy_template=$(extract_job .deploy-tpl)
+printf '%s\n' "$deploy_template" | grep -Eq \
+    'sh deploy/rollback\.sh deploy.*\$SVC' \
+    || fail 'TC-CI-046 single-service deployment bypasses rollback wrapper'
+for deploy_job in deploy:all-backend-services deploy:all-services deploy:full-stack deploy:frontend; do
+    job_body=$(extract_job "$deploy_job")
+    printf '%s\n' "$job_body" | grep -Eq 'sh deploy/rollback\.sh deploy' \
+        || fail "TC-CI-046 $deploy_job bypasses rollback wrapper"
+done
+pass 'TC-CI-046 all business deployment paths use rollback wrapper'
+
+manual_rollback_job=$(extract_job rollback:manual)
+printf '%s\n' "$manual_rollback_job" | grep -Eq 'AUTO_ROLLBACK_ENABLED' \
+    && fail 'TC-CI-049 manual rollback must not require automatic rollback variable'
+printf '%s\n' "$manual_rollback_job" | grep -Eq 'rollback\.sh manual' \
+    || fail 'TC-CI-049 manual rollback command is missing'
+pass 'TC-CI-049 manual rollback remains available without automatic rollback variable'
 
 printf '%s\n' '* Task complete: GitLab CI contract'

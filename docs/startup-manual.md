@@ -87,10 +87,16 @@ GitLab 流水线中的 `verify:deployment` 会执行 Shell 语法检查、CI/Com
 | `DEPLOY_SERVICES_ENV_FILE` | File | 基于 `deploy/services.env.example` 的完整业务密钥配置 |
 | `DEPLOY_COMPOSE_ROOT` | Variable，可选 | Runner 宿主机上的 Compose 总目录，默认 `/app/infra-portal/compose` |
 | `DEPLOY_DATA_ROOT` | Variable，可选 | Runner 宿主机上的数据总目录，默认 `/app/infra-portal/data` |
+| `DEPLOY_ROLLBACK_STATE_ROOT` | Variable，可选 | 每服务回滚历史目录，默认 `/app/infra-portal/compose/rollback` |
+| `AUTO_ROLLBACK_ENABLED` | Variable，必填 | 业务部署失败自动回滚开关；`true` 开启，`false` 关闭 |
 
 `verify:all-backend-services` 只验证并构建 9 个后端镜像，不执行部署。`deploy:dependencies` 只执行依赖镜像缺失检查、MySQL/Nacos/Milvus 依赖栈初始化或更新，以及 Nacos 配置幂等初始化；它不读取 `DEPLOY_SERVICES_ENV_FILE`，也不构建或部署业务服务。手动业务部署分为三个范围：`deploy:all-backend-services` 仅部署全部后端，`deploy:all-services` 部署前端和全部后端，`deploy:full-stack` 用于初始化或全量部署，会先处理依赖栈和 Nacos 初始化，再部署完整业务栈。
 
-部署 job 读取到的 File 变量值是 GitLab 临时文件路径。业务部署持久化到 `$DEPLOY_COMPOSE_ROOT/business`，依赖部署持久化到 `$DEPLOY_COMPOSE_ROOT/dependencies`，MySQL 初始化脚本放在依赖目录的 `initdb` 中。环境文件中的 `IMAGE_TAG` 会同步为实际部署标签，`DEPLOY_DATA_ROOT` 固定为 `/app/infra-portal/data`，业务 `BUSINESS_ENV_FILE` 固定为 `./services.env`，依赖 `MYSQL_INIT_DIR` 固定为 `./initdb`。密钥文件权限为 `0600`。
+所有业务部署入口在启动容器前都会记录受影响服务的实际运行镜像。`AUTO_ROLLBACK_ENABLED` 只从 GitLab 项目 **Settings > CI/CD > Variables** 获取，仓库不定义默认值；设为 `true` 时，Compose 健康等待或前端连通检查失败后按服务恢复部署前快照，即使恢复成功，部署 job 仍返回失败；设为 `false` 时保留失败现场。修改项目变量即可调整开关，无需提交代码。变量缺失或值不是 `true`/`false` 时，业务部署会在更新容器前失败。依赖栈是有状态组件，不参与自动回滚。
+
+手动回滚不读取 `AUTO_ROLLBACK_ENABLED`，该变量缺失时仍可执行。需在 GitLab **Run pipeline** 页面选择 `ROLLBACK_TARGET`，创建流水线后点击 `rollback:manual`。目标支持单个业务服务、`all-backend-services` 和 `all-services`。作业先检查所有目标历史和镜像都存在，再执行回滚；成功后交换当前/上一镜像记录，后续可再次执行切回。首次成功部署前没有上一版本记录，手动回滚会安全失败且不更新容器。
+
+部署 job 读取到的 File 变量值是 GitLab 临时文件路径。业务部署持久化到 `$DEPLOY_COMPOSE_ROOT/business`，依赖部署持久化到 `$DEPLOY_COMPOSE_ROOT/dependencies`，MySQL 初始化脚本放在依赖目录的 `initdb` 中；回滚历史写入 `$DEPLOY_ROLLBACK_STATE_ROOT`。环境文件中的 `IMAGE_TAG` 会同步为实际部署标签，`DEPLOY_DATA_ROOT` 固定为 `/app/infra-portal/data`，业务 `BUSINESS_ENV_FILE` 固定为 `./services.env`，依赖 `MYSQL_INIT_DIR` 固定为 `./initdb`。密钥文件和回滚状态文件权限为 `0600`。
 
 Runner 必须将宿主机 `/app` 挂载到 Job 容器的 `/app`。默认部署完成后，在宿主机执行：
 
@@ -110,7 +116,7 @@ Runner 的 Docker Executor 应保持 `pull_policy = "if-not-present"`，并挂�
 
 内部构建镜像统一使用 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-${commit:7}`，时间由 `CI_PIPELINE_CREATED_AT` 转换到 `Asia/Shanghai` 后生成。例如 `infra-portal/core-service:20260803153012-0123456`。后端与前端最终镜像均将完整提交 SHA 写入 `org.opencontainers.image.revision`，将 `IMAGE_TAG` 写入 `org.opencontainers.image.version`；版本元数据使每次流水线生成独立的平台镜像配置，实际文件层仍复用 BuildKit 缓存，避免 containerd 将共享同一平台 manifest 的多个历史 image index 同时显示为使用中。标签在同一流水线中保持稳定，并避免同一提交的不同流水线覆盖镜像；增量部署必须等待当前流水线全部验证和构建任务成功，不会在其他服务仍失败时提前发布；部署开始后不可被新流水线取消。开放 MR 的分支只创建 MR 流水线，避免重复占用单并发 Runner。
 
-在 GitLab 项目的 Pipeline Schedules 中为 `master` 创建每日清理计划：Cron 填写 `0 3 * * *`，Cron timezone 选择 `Asia/Shanghai`。定时流水线会跳过构建和部署，仅执行 `cleanup:business-images`。该任务对 9 个后端服务和前端逐仓库按 Docker 镜像创建时间降序排序，只保留最近 3 个符合 `yyyyMMddHHmmss-commit7` 格式的标签；依赖镜像、`nacos-init`、旧格式标签和历史完整 SHA 标签不在清理范围内。若过期镜像仍被容器引用，Docker 会拒绝删除，任务会保留该镜像并记录提示，不强制影响运行容器。
+在 GitLab 项目的 Pipeline Schedules 中为 `master` 创建每日清理计划：Cron 填写 `0 3 * * *`，Cron timezone 选择 `Asia/Shanghai`。定时流水线会跳过构建和部署，仅执行 `cleanup:business-images`。该任务对 9 个后端服务和前端逐仓库按 Docker 镜像创建时间降序排序，保留最近 3 个符合 `yyyyMMddHHmmss-commit7` 格式的标签以及回滚状态引用的当前/上一镜像；依赖镜像、`nacos-init`、旧格式标签和历史完整 SHA 标签不在清理范围内。若过期镜像仍被容器引用，Docker 会拒绝删除，任务会保留该镜像并记录提示，不强制影响运行容器。
 
 测试环境也可直接将生成的两个 `.test.env` 文件内容分别配置为上述 File 变量。部署入口会统一把业务密钥文件路径覆盖为 `./services.env`，不依赖上传前的本地文件名。
 

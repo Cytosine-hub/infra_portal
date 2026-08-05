@@ -110,6 +110,13 @@ EOF
 chmod +x "$TMP_ROOT/bin/docker"
 
 export MOCK_DOCKER_LOG="$TMP_ROOT/docker-rm.log"
+export DEPLOY_ROLLBACK_STATE_ROOT="$TMP_ROOT/rollback"
+ROLLBACK_STATE_ROOT="$DEPLOY_ROLLBACK_STATE_ROOT"
+mkdir -p "$ROLLBACK_STATE_ROOT"
+cat > "$ROLLBACK_STATE_ROOT/api-gateway.state" <<'EOF'
+CURRENT_IMAGE=infra-portal/api-gateway:20260804120000-aaaaaaa
+PREVIOUS_IMAGE=infra-portal/api-gateway:20260731120000-eeeeeee
+EOF
 PATH="$TMP_ROOT/bin:$PATH" \
     IMAGE_NAMESPACE=infra-portal \
     BUSINESS_IMAGE_SERVICES=api-gateway \
@@ -117,13 +124,16 @@ PATH="$TMP_ROOT/bin:$PATH" \
     sh "$ROOT_DIR/deploy/cleanup-business-images.sh"
 
 cat > "$TMP_ROOT/expected-rm.log" <<'EOF'
-infra-portal/api-gateway:20260731120000-eeeeeee
 infra-portal/api-gateway:20260730120000-fffffff
 EOF
 
 cmp -s "$TMP_ROOT/expected-rm.log" "$MOCK_DOCKER_LOG" \
     || fail 'TC-CI-028 cleanup removed an active, retained, or dependency image'
 pass 'TC-CI-028 keep newest three images and preserve images used by containers'
+grep -Eq '^PREVIOUS_IMAGE=infra-portal/api-gateway:20260731120000-eeeeeee$' \
+    "$ROLLBACK_STATE_ROOT/api-gateway.state" \
+    || fail 'TC-CI-047 rollback candidate fixture is invalid'
+pass 'TC-CI-047 preserve images referenced by rollback history'
 
 if PATH="$TMP_ROOT/bin:$PATH" \
     BUSINESS_IMAGE_SERVICES=api-gateway \
@@ -137,7 +147,7 @@ if PATH="$TMP_ROOT/bin:$PATH" \
     IMAGE_NAMESPACE=infra-portal \
     BUSINESS_IMAGE_SERVICES=api-gateway \
     BUSINESS_IMAGE_KEEP_COUNT=3 \
-    MOCK_DOCKER_RM_FAIL=infra-portal/api-gateway:20260731120000-eeeeeee \
+    MOCK_DOCKER_RM_FAIL=infra-portal/api-gateway:20260730120000-fffffff \
     sh "$ROOT_DIR/deploy/cleanup-business-images.sh" >/dev/null 2>&1; then
     fail 'TC-CI-030 Docker image removal failures must fail the cleanup task'
 fi

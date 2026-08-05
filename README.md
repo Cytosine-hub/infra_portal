@@ -93,11 +93,13 @@ sh deploy/smoke-test.sh
 
 GitLab 的 `verify:deployment` 会执行部署脚本语法、CI/Compose/镜像维护契约测试，并自动生成临时测试配置完成 Compose 解析，不启动运行栈。Nacos 初始化单元测试依赖 `jq`，不在 `docker:27-cli` 门禁中执行；生产 `nacos-init` 镜像仍内置 `jq`。后端镜像首次构建运行完整 Maven 验证并通过 BuildKit 复用结果，前端镜像构建会执行 Vitest。实际部署使用 File 类型 CI/CD Variable：依赖部署只要求 `DEPLOY_COMPOSE_ENV_FILE`，业务部署还要求 `DEPLOY_SERVICES_ENV_FILE`。
 
-CI 构建镜像统一命名为 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-${commit:7}`，例如 `infra-portal/core-service:20260803153012-0123456`；时间取流水线创建时间并转换为 `Asia/Shanghai`，避免同一提交的不同流水线覆盖镜像。后端与前端最终镜像同时写入 OCI `revision` 和 `version` 标签，使每条不可变标签对应独立的平台镜像配置；文件层仍由 BuildKit 复用，避免 Docker containerd 镜像存储把多个历史 image index 同时标记为使用中。在 GitLab 为 `master` 创建时区为 `Asia/Shanghai`、Cron 为 `0 3 * * *` 的 Pipeline Schedule 后，`cleanup:business-images` 每日只运行镜像清理：9 个后端服务和前端各自保留按创建时间排序的最近 3 个新格式镜像，不清理 MySQL、Nacos、Milvus 等依赖镜像、`nacos-init` 和历史完整 SHA 标签。
+CI 构建镜像统一命名为 `${IMAGE_NAMESPACE}/${service}:${yyyyMMddHHmmss}-${commit:7}`，例如 `infra-portal/core-service:20260803153012-0123456`；时间取流水线创建时间并转换为 `Asia/Shanghai`，避免同一提交的不同流水线覆盖镜像。后端与前端最终镜像同时写入 OCI `revision` 和 `version` 标签，使每条不可变标签对应独立的平台镜像配置；文件层仍由 BuildKit 复用，避免 Docker containerd 镜像存储把多个历史 image index 同时标记为使用中。在 GitLab 为 `master` 创建时区为 `Asia/Shanghai`、Cron 为 `0 3 * * *` 的 Pipeline Schedule 后，`cleanup:business-images` 每日只运行镜像清理：9 个后端服务和前端各自保留按创建时间排序的最近 3 个新格式镜像，并额外保留回滚状态引用的当前/上一成功镜像；不清理 MySQL、Nacos、Milvus 等依赖镜像、`nacos-init` 和历史完整 SHA 标签。
 
 CI 中 `verify:all-backend-services` 只验证并构建 9 个后端镜像，不执行部署。手动部署入口按范围分为：`deploy:all-backend-services` 部署全部后端服务，`deploy:all-services` 部署前端和全部后端服务，`deploy:full-stack` 先初始化或更新 MySQL、Nacos、Milvus 等依赖，再部署完整业务栈。`deploy:dependencies` 仍可单独初始化或更新依赖栈，且仅要求 `DEPLOY_COMPOSE_ENV_FILE`。
 
-部署 job 将运行清单和数据分别持久化到 Runner 宿主机 `/app/infra-portal/compose` 与 `/app/infra-portal/data`。业务清单保存在 `compose/business`，依赖清单及 MySQL 初始化脚本保存在 `compose/dependencies`；两个 Compose 项目和两类数据均可独立管理。Job 结束后可在宿主机分别操作：
+业务部署的失败自动回滚开关只从 GitLab 项目 **Settings > CI/CD > Variables** 中的 `AUTO_ROLLBACK_ENABLED` 读取，仓库不提供默认值；设置为 `true` 开启，设置为 `false` 关闭，修改后无需提交代码。部署前会按服务读取运行中容器的实际镜像，`docker compose up --wait` 或前端连通检查失败时恢复该快照；恢复成功后原部署 job 仍保持失败，便于告警和排查。手动回滚不依赖该变量：即使变量缺失，仍可选择 `ROLLBACK_TARGET`（单服务、`all-backend-services` 或 `all-services`），创建 Web 流水线后点击 `rollback:manual`；成功后当前/上一版本会交换，可再次执行切回。回滚只覆盖前端和 9 个无状态业务服务，不回滚 MySQL、Nacos、Milvus 等依赖或数据库结构。
+
+部署 job 将运行清单和数据分别持久化到 Runner 宿主机 `/app/infra-portal/compose` 与 `/app/infra-portal/data`。业务清单保存在 `compose/business`，依赖清单及 MySQL 初始化脚本保存在 `compose/dependencies`，每服务的当前/上一成功镜像记录保存在 `compose/rollback`；两个 Compose 项目和两类数据均可独立管理。Job 结束后可在宿主机分别操作：
 
 ```bash
 cd /app/infra-portal/compose
