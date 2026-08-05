@@ -1,0 +1,74 @@
+/* 表格类文档（Markdown / Word HTML / docx）统一的横向滚动视口。
+   列数较多时不再把单元格压缩到容器宽度内，而是按内容宽度撑开表格并提供横向滚动，
+   同时固定表头与首列，保证首列到末列的内容都能完整查看。
+   视口由 documentTables.js 在内容渲染后动态包裹，不带 scoped 属性，因此选择器统一用 :deep()。 */
+
+:deep(.doc-table-viewport) {
+  max-width: 100%;
+  max-height: 70vh;
+  margin: var(--space-md) 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
+:deep(.doc-table-viewport:focus-visible) {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* Word / docx 预览会给表格带上固定宽度，这里统一改为按内容撑开 */
+:deep(.doc-table-viewport > table) {
+  width: max-content !important;
+  min-width: 100%;
+  max-width: none !important;
+  margin: 0;
+  table-layout: auto !important;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--text-sm);
+}
+
+:deep(.doc-table-viewport > table th),
+:deep(.doc-table-viewport > table td) {
+  width: auto !important;
+  max-width: none !important;
+  overflow: visible !important;
+  white-space: nowrap;
+  text-overflow: clip;
+  padding: var(--space-sm) var(--space-md);
+  border-right: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  color: var(--color-text);
+}
+
+:deep(.doc-table-viewport > table thead th) {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--color-bg-tertiary);
+  font-weight: 600;
+}
+
+/* 首列固定，横向滚动时始终能对照行标识 */
+:deep(.doc-table-viewport > table tr > :first-child) {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--color-bg);
+  box-shadow: 1px 0 0 var(--color-border);
+}
+
+:deep(.doc-table-viewport > table thead tr > :first-child) {
+  z-index: 3;
+  background: var(--color-bg-tertiary);
+}
+
+@media (max-width: 760px) {
+  :deep(.doc-table-viewport) {
+    max-height: 60vh;
+  }
+}

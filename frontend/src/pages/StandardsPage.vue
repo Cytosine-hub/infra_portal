@@ -1,7 +1,12 @@
 <template>
   <section class="workspace standards-page">
-    <div class="public-module-layout">
-      <JobNavigation :model-value="selectedJob" @update:model-value="handleJobChange" />
+    <div :class="['public-module-layout', { 'category-collapsed': categoryCollapsed }]">
+      <StandardsCategorySidebar
+        :model-value="selectedJob"
+        :collapsed="categoryCollapsed"
+        @update:model-value="handleJobChange"
+        @update:collapsed="(value) => categoryCollapsed = value"
+      />
       <div class="public-module-content">
     <div v-if="selectedStandard" class="standards-detail-layout">
       <!-- 左侧树形目录 -->
@@ -159,10 +164,11 @@ import {
   documentMetaFields,
   searchAndSortStandards
 } from '../components/standards/standardsCatalog.js'
-import JobNavigation from '../shared/jobs/JobNavigation.vue'
+import StandardsCategorySidebar from '../components/standards/StandardsCategorySidebar.vue'
 import { filterItemsByJob } from '../shared/jobs/jobFilter.js'
 import { useJobFilter } from '../shared/jobs/useJobFilter.js'
 import { useNotify } from '../composables/useNotify'
+import { parseHashRoute } from '../composables/useRoute'
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: true })
 
@@ -181,7 +187,10 @@ const paramSearch = ref('')
 const paramPage = reactive({ page: 0, size: 10, totalPages: 0, totalElements: 0, first: true, last: true })
 const loading = ref(false)
 const expanded = reactive({})
+const categoryCollapsed = ref(false)
 const { selectedJob, selectJob } = useJobFilter()
+
+const STANDARDS_HASH = '#/standards'
 
 const isPdfDoc = computed(() =>
   selectedDoc.value?.storedFileName?.toLowerCase().endsWith('.pdf') ?? false
@@ -286,6 +295,7 @@ async function openStandardDetail(id) {
     selectedStandard.value = await request(`/api/public/parameter-standards/${id}`, { token: null })
     params.value = await request(`/api/public/standard-parameters?parameterStandardId=${id}`, { token: null }) || []
     expanded[id] = true
+    syncHash()
     await nextTick()
     initScrollSpy()
   } catch (error) {
@@ -298,12 +308,17 @@ async function openDocDetail(id) {
   loading.value = true
   try {
     const doc = await request(`/api/public/standards/${id}`, { token: null })
-    if (doc?.relatedStandardDocumentId) {
-      params.value = await request(`/api/public/standard-parameters?parameterStandardId=${doc.relatedStandardDocumentId}`, { token: null }) || []
-    } else {
-      params.value = []
+    const standardId = doc?.relatedStandardDocumentId
+    // 直接从地址栏进入文档时没有标准上下文，按文档归属补齐左侧树
+    if (standardId && String(selectedStandard.value?.id) !== String(standardId)) {
+      selectedStandard.value = await request(`/api/public/parameter-standards/${standardId}`, { token: null })
+      expanded[standardId] = true
     }
+    params.value = standardId
+      ? await request(`/api/public/standard-parameters?parameterStandardId=${standardId}`, { token: null }) || []
+      : []
     selectedDoc.value = doc
+    syncHash()
     await nextTick()
     initScrollSpy()
     return true
@@ -319,6 +334,36 @@ function closeDetail() {
   selectedDoc.value = null
   params.value = []
   destroyScrollSpy()
+  syncHash()
+}
+
+// ===== 地址栏路径同步：标准详情 #/standards/ps/<id>，标准文档 #/standards/doc/<id> =====
+function currentDetailHash() {
+  if (selectedDoc.value) return `${STANDARDS_HASH}/doc/${selectedDoc.value.id}`
+  if (selectedStandard.value) return `${STANDARDS_HASH}/ps/${selectedStandard.value.id}`
+  return STANDARDS_HASH
+}
+
+function syncHash() {
+  if (typeof window === 'undefined') return
+  const next = currentDetailHash()
+  if (window.location.hash !== next) window.location.hash = next
+}
+
+// 地址栏路径（首次进入、刷新、前进后退）反向驱动页面状态，已是目标状态时不重复加载
+function syncFromHash() {
+  if (typeof window === 'undefined') return
+  const { name, standardId, standardType } = parseHashRoute(window.location.hash)
+  if (name !== 'standards') return
+  if (!standardId) {
+    if (selectedStandard.value || selectedDoc.value) closeDetail()
+    return
+  }
+  if (standardType === 'doc') {
+    if (String(selectedDoc.value?.id) !== String(standardId)) openDocDetail(standardId)
+    return
+  }
+  if (selectedDoc.value || String(selectedStandard.value?.id) !== String(standardId)) openStandardDetail(standardId)
 }
 function scrollTo(id) {
   const el = document.getElementById(id)
@@ -352,12 +397,25 @@ async function openDocFromList(standard, docId) {
   }
 }
 
-onMounted(loadStandards)
-onBeforeUnmount(destroyScrollSpy)
+onMounted(async () => {
+  await loadStandards()
+  syncFromHash()
+  window.addEventListener('hashchange', syncFromHash)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('hashchange', syncFromHash)
+  destroyScrollSpy()
+})
 </script>
 
 <style scoped>
-.public-module-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--space-xl); padding-top: var(--space-xl); }
+.public-module-layout {
+  display: grid; grid-template-columns: 240px minmax(0, 1fr);
+  gap: var(--space-xl); padding-top: var(--space-xl);
+  transition: grid-template-columns var(--transition-normal);
+}
+/* 分类侧边栏收起后只保留收起/展开按钮的宽度，释放出的篇幅全部交给标准详情主体 */
+.public-module-layout.category-collapsed { grid-template-columns: 40px minmax(0, 1fr); gap: var(--space-md); }
 .public-module-content { min-width: 0; }
 
 /* ===== 标准发布列表：概览面板（StandardsOverviewPanel）+ 分类分区（StandardCategorySection） ===== */
@@ -386,7 +444,8 @@ onBeforeUnmount(destroyScrollSpy)
 .tree-item.active { background: var(--color-primary-light); color: var(--color-primary); }
 .tree-parent { font-weight: 500; }
 @media (max-width: 760px) {
-  .public-module-layout { grid-template-columns: 1fr; }
+  .public-module-layout,
+  .public-module-layout.category-collapsed { grid-template-columns: 1fr; }
 }
 .tree-child { padding-left: calc(var(--space-lg) + 20px); font-weight: 400; }
 .tree-toggle {
