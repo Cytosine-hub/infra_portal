@@ -3,13 +3,14 @@
     <div v-if="loading" class="preview-state">加载中...</div>
     <div v-else-if="error" class="preview-state error">{{ error }}</div>
     <div v-else-if="isDocx" ref="docxContainer" class="docx-container"></div>
-    <div v-else class="word-html-content" v-html="htmlContent"></div>
+    <div v-else ref="htmlContainer" class="word-html-content" v-html="htmlContent"></div>
   </div>
 </template>
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { fetchBinary, request } from '../../api'
+import { enhanceDocumentTables } from './documentTables.js'
 
 const DOCX_RENDER_OPTIONS = {
   className: 'docx-render',
@@ -31,6 +32,7 @@ const props = defineProps({
 })
 
 const docxContainer = ref(null)
+const htmlContainer = ref(null)
 const htmlContent = ref('')
 const loading = ref(false)
 const error = ref('')
@@ -70,6 +72,7 @@ async function loadDocx() {
     docxContainer.value.innerHTML = ''
     await renderAsync(blob, docxContainer.value, null, DOCX_RENDER_OPTIONS)
     applyParamsToDOM(docxContainer.value, props.parameters)
+    enhanceDocumentTables(docxContainer.value)
   }
 }
 
@@ -93,6 +96,11 @@ async function loadWord() {
   } finally {
     loading.value = false
   }
+  // 内容节点在 loading 结束后才挂载，此时再为表格补上横向滚动视口
+  if (!isDocx.value && !error.value) {
+    await nextTick()
+    enhanceDocumentTables(htmlContainer.value)
+  }
 }
 
 watch(
@@ -101,6 +109,8 @@ watch(
   { immediate: true }
 )
 </script>
+
+<style scoped src="./documentTables.css"></style>
 
 <style scoped>
 .word-document-preview {
@@ -113,7 +123,9 @@ watch(
 
 .docx-container {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
+  overflow-x: auto;
   overflow-y: auto;
   padding: 0;
 }
@@ -126,6 +138,7 @@ watch(
 
 .word-html-content {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding: var(--space-xl) var(--space-2xl);

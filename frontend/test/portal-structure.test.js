@@ -154,7 +154,9 @@ describe('门户页面结构优化验收', () => {
 
     const navigation = wrapper.findComponent(JobNavigation)
     expect(navigation.exists()).toBe(true)
-    expect(wrapper.find('.public-module-layout').element.firstElementChild).toBe(navigation.element)
+    // 岗位导航固定在布局第一列（标准发布额外包了一层可收起容器，导航本身仍在该列内）
+    const navigationColumn = wrapper.find('.public-module-layout').element.firstElementChild
+    expect(navigationColumn === navigation.element || navigationColumn.contains(navigation.element)).toBe(true)
     expect(navigation.findAll('.job-navigation-button')).toHaveLength(6)
 
     await selectJob(wrapper, '网络')

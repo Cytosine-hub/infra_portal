@@ -122,6 +122,8 @@ beforeEach(() => {
   Object.defineProperty(window, 'localStorage', { value: localStorageMock, configurable: true })
   vi.stubGlobal('localStorage', localStorageMock)
   window.localStorage.clear()
+  // 详情页会把路径写进地址栏，每条用例都从标准列表路径开始，避免用例间互相影响
+  window.location.hash = '#/standards'
   installApiMock()
   useNotify().notice.value = null
 })
