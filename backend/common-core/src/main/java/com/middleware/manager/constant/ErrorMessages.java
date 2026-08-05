@@ -20,6 +20,13 @@ public final class ErrorMessages {
     public static final String DUPLICATE = "数据已存在";
     public static final String STATUS_CONFLICT = "当前状态不允许此操作";
 
+    // 论坛标签相关
+    public static final String FORUM_TAG_NOT_FOUND = "论坛标签不存在";
+    public static final String FORUM_TAG_DUPLICATE = "该小组已存在同名标签";
+    public static final String FORUM_TAG_NAME_REQUIRED = "标签名称不能为空";
+    public static final String FORUM_TAG_NAME_TOO_LONG = "标签名称不能超过 50 个字符";
+    public static final String FORUM_TAG_CATEGORY_REQUIRED = "请选择所属小组";
+
     // 文件操作
     public static final String FILE_TOO_LARGE = "上传文件超过大小限制";
     public static final String FILE_UPLOAD_FAILED = "文件上传失败";

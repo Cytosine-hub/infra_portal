@@ -141,6 +141,13 @@ class CommunityServiceApplicationTests {
                 @Override
                 public ForumPost createPost(String title, String content, List<String> tagNames,
                                             String authorUsername, String authorDisplayName) {
+                    return createPost(title, content, tagNames, authorUsername, authorDisplayName, null);
+                }
+
+                @Override
+                public ForumPost createPost(String title, String content, List<String> tagNames,
+                                            String authorUsername, String authorDisplayName,
+                                            String tagCategory) {
                     ForumPost post = new ForumPost();
                     post.setId(1L);
                     post.setTitle(title);

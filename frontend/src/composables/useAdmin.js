@@ -746,6 +746,7 @@ export function useAdmin(auth, notify, confirm, onSettingsSaved) {
 
   function switchAdminSection(s) {
     adminSection.value = s
+    window.history.replaceState(null, '', s === 'forumTags' ? '#/admin/forum-tags' : '#/admin')
     showImport.value = false
     editing.value = false
     selectedStandard.value = null
@@ -759,6 +760,8 @@ export function useAdmin(auth, notify, confirm, onSettingsSaved) {
       loadReviews()
     } else if (s === 'settings') {
       loadSystemSettings()
+    } else if (s === 'forumTags') {
+      return
     } else {
       loadAdmin(); loadSoftwareTypes(); loadSoftwareCategories(); loadAllParameterStandards()
     }

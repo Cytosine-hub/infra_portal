@@ -149,6 +149,7 @@
           <AdminPage
             :section="adminSection"
             :isSysAdmin="isSysAdmin"
+            :canManageForumTags="isSysAdmin || isCategoryAdmin"
             @switchSection="switchAdminSection"
             @showPassword="showPassword = !showPassword"
             @logout="logout()"
@@ -210,6 +211,10 @@
                 :isSysAdmin="isSysAdmin" :isCategoryAdmin="isCategoryAdmin" :managedCategory="managedCategory"
                 @filterChange="(v) => { reviewFilters.status = v; applyReviewFilters() }"
                 @viewDetail="openReviewDetail" @changePage="changeReviewPage"
+              />
+              <ForumTagsSection v-else-if="adminSection === 'forumTags'"
+                :isSysAdmin="isSysAdmin"
+                :managedCategory="managedCategory"
               />
               <UsersSection v-else-if="adminSection === 'users'"
                 :users="userList"
@@ -289,6 +294,7 @@ import FilesSection from './pages/admin/FilesSection.vue'
 import TypesSection from './pages/admin/TypesSection.vue'
 import StandardsSection from './pages/admin/StandardsSection.vue'
 import ReviewsSection from './pages/admin/ReviewsSection.vue'
+import ForumTagsSection from './pages/admin/ForumTagsSection.vue'
 import UsersSection from './pages/admin/UsersSection.vue'
 import DocumentsSection from './pages/admin/DocumentsSection.vue'
 import SettingsSection from './pages/admin/SettingsSection.vue'
@@ -368,6 +374,9 @@ function syncRoute() {
     token: null, standardId: null, standardType: null, documentId: null, postId: null,
     jobId: null, feature: null, legacy: false, legacyTarget: null
   }, next)
+  if (next.name === 'admin' && next.adminSection === 'forumTags') {
+    adminSection.value = 'forumTags'
+  }
   if (next.legacy) {
     const target = next.legacyTarget === 'knowledge'
       ? '#/knowledge'
@@ -388,7 +397,7 @@ function syncRoute() {
     return
   }
   if (auth.token) {
-    if (isReadOnly.value) {
+    if (!canAccessAdmin.value) {
       window.location.hash = '#/home'
       return
     }

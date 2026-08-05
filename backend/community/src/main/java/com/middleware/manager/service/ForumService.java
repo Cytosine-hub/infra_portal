@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ForumService {
     private static final String STATUS_PUBLISHED = "PUBLISHED";
+    private static final String DEFAULT_TAG_CATEGORY = "未分组";
     private static final int MAX_PAGE_SIZE = 50;
     private static final int INITIAL_TAG_COUNT = 0;
 
@@ -69,6 +70,13 @@ public class ForumService {
     @Transactional
     public ForumPost createPost(String title, String content, List<String> tagNames,
                                  String authorUsername, String authorDisplayName) {
+        return createPost(title, content, tagNames, authorUsername,
+                authorDisplayName, DEFAULT_TAG_CATEGORY);
+    }
+
+    @Transactional
+    public ForumPost createPost(String title, String content, List<String> tagNames,
+                                String authorUsername, String authorDisplayName, String tagCategory) {
         ForumPost post = new ForumPost();
         post.setTitle(title);
         post.setContent(content);
@@ -79,7 +87,7 @@ public class ForumService {
         post.setUpdatedAt(LocalDateTime.now());
         postMapper.insert(post);
         if (tagNames != null && !tagNames.isEmpty()) {
-            Set<ForumTag> tags = resolveTags(tagNames);
+            Set<ForumTag> tags = resolveTags(tagNames, tagCategory);
             for (ForumTag tag : tags) {
                 insertPostTag(post.getId(), tag.getId());
             }
@@ -90,6 +98,12 @@ public class ForumService {
 
     @Transactional
     public ForumPost updatePost(Long id, String title, String content, List<String> tagNames, String username) {
+        return updatePost(id, title, content, tagNames, username, DEFAULT_TAG_CATEGORY);
+    }
+
+    @Transactional
+    public ForumPost updatePost(Long id, String title, String content, List<String> tagNames,
+                                String username, String tagCategory) {
         ForumPost post = getPost(id);
         if (!post.getAuthorUsername().equals(username)) {
             throw new ForbiddenException(ErrorCode.FORBIDDEN, "只能编辑自己的文章");
@@ -97,7 +111,7 @@ public class ForumService {
         post.setTitle(title);
         post.setContent(content);
         post.setUpdatedAt(LocalDateTime.now());
-        updateTags(post.getId(), tagNames);
+        updateTags(post.getId(), tagNames, tagCategory);
         postMapper.update(post);
         log.info("文章已更新 id={}", id);
         return post;
@@ -208,16 +222,16 @@ public class ForumService {
         return tagMapper.findByPostId(postId);
     }
 
-    private Set<ForumTag> resolveTags(List<String> names) {
+    private Set<ForumTag> resolveTags(List<String> names, String category) {
         if (names == null || names.isEmpty()) return new HashSet<>();
         Set<ForumTag> tags = new HashSet<>();
         for (String name : names) {
-            tags.add(getOrCreateTag(name));
+            tags.add(getOrCreateTag(name, category));
         }
         return tags;
     }
 
-    private void updateTags(Long postId, List<String> newNames) {
+    private void updateTags(Long postId, List<String> newNames, String category) {
         Map<String, String> newTagsByNormalizedName = new LinkedHashMap<>();
         if (newNames != null) {
             for (String name : newNames) {
@@ -241,7 +255,7 @@ public class ForumService {
         for (Map.Entry<String, String> entry : newTagsByNormalizedName.entrySet()) {
             if (!oldNames.contains(entry.getKey())) {
                 String name = entry.getValue();
-                ForumTag tag = getOrCreateTag(name);
+                ForumTag tag = getOrCreateTag(name, category);
                 insertPostTag(postId, tag.getId());
             }
         }
@@ -251,16 +265,23 @@ public class ForumService {
         return name.toLowerCase(Locale.ROOT);
     }
 
-    private ForumTag getOrCreateTag(String name) {
+    private ForumTag getOrCreateTag(String name, String category) {
         String trimmed = name.trim();
-        ForumTag tag = tagMapper.findByNameIgnoreCase(trimmed);
+        String normalizedCategory = StringUtils.hasText(category)
+                ? category.trim()
+                : DEFAULT_TAG_CATEGORY;
+        ForumTag tag = tagMapper.findByNameIgnoreCaseAndCategory(trimmed, normalizedCategory);
         if (tag == null) {
             tag = new ForumTag();
             tag.setName(trimmed);
             tag.setPostCount(INITIAL_TAG_COUNT);
+            tag.setCategory(normalizedCategory);
+            tag.setCreatedAt(LocalDateTime.now());
+            tag.setUpdatedAt(LocalDateTime.now());
             tagMapper.insert(tag);
         }
         tag.setPostCount(tag.getPostCount() + 1);
+        tag.setUpdatedAt(LocalDateTime.now());
         tagMapper.update(tag);
         return tag;
     }

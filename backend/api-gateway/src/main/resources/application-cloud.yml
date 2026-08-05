@@ -30,7 +30,7 @@ spring:
             - id: community-api
               uri: lb://community-service
               predicates:
-                - Path=/api/forum/**
+                - Path=/api/forum/**,/api/admin/forum-tags/**
             - id: ai-api
               uri: lb://ai-service
               predicates:
