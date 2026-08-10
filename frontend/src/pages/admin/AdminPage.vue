@@ -1,5 +1,5 @@
 <template>
-  <div class="admin-layout">
+  <div :class="['admin-layout', { 'forum-tags-layout': section === 'forumTags' }]">
     <aside class="admin-sidebar">
       <div class="sidebar-title">
         <p class="eyebrow">Admin</p>
@@ -41,7 +41,7 @@ const allSections = [
   { key: 'standardPublish', label: '参数标准', sysAdmin: false },
   { key: 'documentMaintenance', label: '标准文档', sysAdmin: false },
   { key: 'reviews', label: '审核管理', sysAdmin: false },
-  { key: 'forumTags', label: '论坛管理 / 标签管理', sysAdmin: false, forumAdmin: true },
+  { key: 'forumTags', label: '论坛管理', sysAdmin: false, forumAdmin: true },
   { key: 'users', label: '用户管理', sysAdmin: true },
   { key: 'settings', label: '系统设置', sysAdmin: true }
 ]
@@ -92,4 +92,46 @@ const visibleSections = computed(() => allSections.filter((section) =>
 .admin-body > :deep(div) > .list-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .admin-body > :deep(div) > .list-panel > .table-wrap { flex: 1; overflow-y: auto; min-height: 0; }
 .admin-body > :deep(div) > .list-panel > nav { flex-shrink: 0; justify-content: flex-end; padding-top: 12px; }
+
+@media (max-width: 720px) {
+  .admin-layout.forum-tags-layout {
+    flex-direction: column;
+  }
+  .forum-tags-layout .admin-sidebar {
+    width: 100%;
+    padding: var(--space-md);
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-md);
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .forum-tags-layout .sidebar-title {
+    flex: 0 0 auto;
+    margin: 0;
+  }
+  .forum-tags-layout .sidebar-title .eyebrow { display: none; }
+  .forum-tags-layout .sidebar-title h2 { margin: 0; }
+  .forum-tags-layout .side-nav {
+    flex: 0 0 auto;
+    flex-direction: row;
+  }
+  .forum-tags-layout .side-nav button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .forum-tags-layout .side-nav button.active { order: -1; }
+  .forum-tags-layout .sidebar-actions {
+    flex: 0 0 auto;
+    flex-direction: row;
+    margin: 0 0 0 auto;
+  }
+  .forum-tags-layout .sidebar-actions button { white-space: nowrap; }
+  .forum-tags-layout .admin-content {
+    width: 100%;
+    padding: var(--space-lg);
+  }
+}
 </style>

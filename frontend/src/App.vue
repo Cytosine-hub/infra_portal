@@ -149,7 +149,7 @@
           <AdminPage
             :section="adminSection"
             :isSysAdmin="isSysAdmin"
-            :canManageForumTags="isSysAdmin || isCategoryAdmin"
+            :canManageForumTags="canManageForumTags"
             @switchSection="switchAdminSection"
             @showPassword="showPassword = !showPassword"
             @logout="logout()"
@@ -212,10 +212,7 @@
                 @filterChange="(v) => { reviewFilters.status = v; applyReviewFilters() }"
                 @viewDetail="openReviewDetail" @changePage="changeReviewPage"
               />
-              <ForumTagsSection v-else-if="adminSection === 'forumTags'"
-                :isSysAdmin="isSysAdmin"
-                :managedCategory="managedCategory"
-              />
+              <ForumTagsSection v-else-if="adminSection === 'forumTags'" />
               <UsersSection v-else-if="adminSection === 'users'"
                 :users="userList"
                 @changeRole="openChangeRoleDialog" @resetPassword="openResetPasswordDialog"
@@ -345,6 +342,7 @@ const markdown = new MarkdownIt({ html: false, linkify: true, breaks: true })
 const siteConfig = reactive({ knowledgeEnabled: true, diagnosticsEnabled: true })
 const loginForm = reactive({ username: '', password: '' })
 const selectedPreviewDocument = ref(null)
+const canManageForumTags = computed(() => isSysAdmin.value || isCategoryAdmin.value)
 const currentJob = computed(() => getJobModule(route.jobId))
 const jobModuleContext = computed(() => ({
   auth,
@@ -375,6 +373,10 @@ function syncRoute() {
     jobId: null, feature: null, legacy: false, legacyTarget: null
   }, next)
   if (next.name === 'admin' && next.adminSection === 'forumTags') {
+    if (!canManageForumTags.value) {
+      window.location.hash = '#/home'
+      return
+    }
     adminSection.value = 'forumTags'
   }
   if (next.legacy) {
