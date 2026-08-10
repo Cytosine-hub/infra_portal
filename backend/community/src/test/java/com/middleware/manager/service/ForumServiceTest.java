@@ -59,7 +59,7 @@ class ForumServiceTest {
         ForumTag kafka = tag(11L, "Kafka", 1);
         ForumTag rocketMq = tag(12L, "RocketMQ", 0);
         when(tagMapper.findByPostId(1L)).thenReturn(List.of(middleware, kafka));
-        when(tagMapper.findByNameIgnoreCase("RocketMQ")).thenReturn(rocketMq);
+        when(tagMapper.findByNameIgnoreCaseAndCategory("RocketMQ", "未分组")).thenReturn(rocketMq);
 
         service.updatePost(1L, "新标题", "新正文", List.of("中间件", "Kafka", "RocketMQ"), "tester");
 
@@ -90,8 +90,8 @@ class ForumServiceTest {
         ForumTag redis = tag(12L, "Redis", 0);
         ForumTag mq = tag(13L, "MQ", 0);
         when(tagMapper.findByPostId(1L)).thenReturn(List.of(middleware, kafka));
-        when(tagMapper.findByNameIgnoreCase("Redis")).thenReturn(redis);
-        when(tagMapper.findByNameIgnoreCase("MQ")).thenReturn(mq);
+        when(tagMapper.findByNameIgnoreCaseAndCategory("Redis", "未分组")).thenReturn(redis);
+        when(tagMapper.findByNameIgnoreCaseAndCategory("MQ", "未分组")).thenReturn(mq);
 
         service.updatePost(1L, "新标题", "新正文", List.of("中间件", "Redis", "MQ"), "tester");
 
@@ -118,7 +118,7 @@ class ForumServiceTest {
     void updateUntaggedPostAddsTag() {
         ForumTag middleware = tag(10L, "中间件", 0);
         when(tagMapper.findByPostId(1L)).thenReturn(List.of());
-        when(tagMapper.findByNameIgnoreCase("中间件")).thenReturn(middleware);
+        when(tagMapper.findByNameIgnoreCaseAndCategory("中间件", "未分组")).thenReturn(middleware);
 
         service.updatePost(1L, "新标题", "新正文", List.of("中间件"), "tester");
 
@@ -135,7 +135,21 @@ class ForumServiceTest {
 
         verify(tagMapper, never()).deletePostTag(any(), any());
         verify(tagMapper, never()).insertPostTag(any(), any());
-        verify(tagMapper, never()).findByNameIgnoreCase(any());
+        verify(tagMapper, never()).findByNameIgnoreCaseAndCategory(any(), any());
+    }
+
+    @Test
+    @DisplayName("TC-FORUM-TAG-004 发帖时应在用户所属组内查找标签")
+    void createPostUsesSignedUserCategoryForTags() {
+        ForumTag tag = tag(10L, "性能优化", 0);
+        tag.setCategory("中间件");
+        when(tagMapper.findByNameIgnoreCaseAndCategory("性能优化", "中间件"))
+                .thenReturn(tag);
+
+        service.createPost("新标题", "新正文", List.of("性能优化"),
+                "tester", "测试用户", "中间件");
+
+        verify(tagMapper).findByNameIgnoreCaseAndCategory("性能优化", "中间件");
     }
 
     private ForumPost post() {
