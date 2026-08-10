@@ -1,5 +1,16 @@
 <template>
   <section class="forum-tags-section">
+    <header class="forum-management-header">
+      <div>
+        <h2>论坛管理</h2>
+        <p>管理论坛内容与标签配置。</p>
+      </div>
+    </header>
+
+    <nav class="forum-tabs" aria-label="论坛管理子栏目" role="tablist">
+      <button type="button" class="active" role="tab" aria-selected="true">标签管理</button>
+    </nav>
+
     <div class="section-heading">
       <div>
         <h3>论坛文章标签</h3>
@@ -11,12 +22,6 @@
     <div class="section-toolbar">
       <div class="filters">
         <BaseInput v-model="keyword" placeholder="搜索标签名称" />
-        <select v-if="isSysAdmin" v-model="categoryFilter" aria-label="所属小组筛选">
-          <option value="">全部小组</option>
-          <option v-for="category in categories" :key="category" :value="category">
-            {{ category }}
-          </option>
-        </select>
       </div>
       <div class="actions">
         <BaseButton variant="ghost" @click="loadTags">刷新</BaseButton>
@@ -115,7 +120,6 @@ const saving = ref(false)
 const loadError = ref('')
 const formError = ref('')
 const keyword = ref('')
-const categoryFilter = ref('')
 const showForm = ref(false)
 const showDelete = ref(false)
 const editingTag = ref(null)
@@ -127,8 +131,7 @@ const filteredTags = computed(() => {
   return tags.value.filter((tag) => {
     const matchesKeyword = !normalizedKeyword
       || tag.name.toLocaleLowerCase().includes(normalizedKeyword)
-    const matchesCategory = !categoryFilter.value || tag.category === categoryFilter.value
-    return matchesKeyword && matchesCategory
+    return matchesKeyword
   })
 })
 
@@ -220,6 +223,21 @@ function formatDate(value) {
 
 <style scoped>
 .forum-tags-section { min-height: 0; display: flex; flex-direction: column; }
+.forum-management-header { margin-bottom: var(--space-lg); }
+.forum-management-header h2 { margin: 0; font-size: var(--text-2xl); letter-spacing: 0; }
+.forum-management-header p { margin: var(--space-xs) 0 0; color: var(--color-text-secondary); }
+.forum-tabs {
+  display: flex; border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--space-xl);
+}
+.forum-tabs button {
+  min-height: 44px; padding: var(--space-sm) var(--space-lg); border: 0;
+  border-bottom: 2px solid transparent; background: transparent;
+  color: var(--color-text-secondary); font-size: var(--text-base); cursor: pointer;
+}
+.forum-tabs button.active {
+  border-bottom-color: var(--color-primary); color: var(--color-primary); font-weight: 600;
+}
 .section-heading {
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--space-lg); margin-bottom: var(--space-lg);
@@ -231,12 +249,12 @@ function formatDate(value) {
   gap: var(--space-md); margin-bottom: var(--space-lg);
 }
 .filters { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
-.filters select, .field-label select {
+.field-label select {
   min-height: 38px; padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--color-border); border-radius: var(--radius-md);
   background: var(--color-bg); color: var(--color-text); font-size: var(--text-base);
 }
-.filters select:focus, .field-label select:focus { outline: none; border-color: var(--color-border-focus); }
+.field-label select:focus { outline: none; border-color: var(--color-border-focus); }
 .form-grid { display: grid; gap: var(--space-lg); }
 .field-label { display: grid; gap: var(--space-xs); color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: 500; }
 .field-label select:disabled { background: var(--color-bg-tertiary); opacity: 0.7; }

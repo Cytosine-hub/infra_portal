@@ -6,6 +6,7 @@ import ForumTagsSection from '../src/pages/admin/ForumTagsSection.vue'
 import AdminPage from '../src/pages/admin/AdminPage.vue'
 import { parseHashRoute } from '../src/composables/useRoute.js'
 import appSource from '../src/App.vue?raw'
+import useAdminSource from '../src/composables/useAdmin.js?raw'
 
 const tags = [
   { id: 1, name: '性能优化', category: '中间件', postCount: 3 },
@@ -46,43 +47,73 @@ describe('论坛标签管理验收', () => {
     })
   }
 
-  it('TC-FORUM-TAG-001 (TC-01) 管理员看到所有组标签、文章数和操作入口', async () => {
+  it('TC-FORUM-TAG-001 (TC-01) 论坛管理页面展示标签管理子 Tab', async () => {
+    const admin = mount(AdminPage, {
+      props: { section: 'forumTags', isSysAdmin: true, canManageForumTags: true }
+    })
+    const forumEntry = admin.findAll('.side-nav button').find((button) => button.text() === '论坛管理')
+
+    expect(forumEntry).toBeTruthy()
+    expect(forumEntry.classes()).toContain('active')
+    expect(admin.text()).not.toContain('论坛管理 / 标签管理')
+
     const wrapper = mountSection({ isSysAdmin: true, managedCategory: '' })
     await flushPromises()
 
+    const tagTab = wrapper.get('[role="tab"]')
+    expect(tagTab.text()).toBe('标签管理')
+    expect(tagTab.attributes('aria-selected')).toBe('true')
+  })
+
+  it('TC-FORUM-TAG-002 (TC-02) 点击论坛管理后进入标签管理并保留核心功能入口', async () => {
+    const admin = mount(AdminPage, {
+      props: { section: 'files', isSysAdmin: true, canManageForumTags: true }
+    })
+    const forumEntry = admin.findAll('.side-nav button').find((button) => button.text() === '论坛管理')
+    await forumEntry.trigger('click')
+    expect(admin.emitted('switchSection')).toContainEqual(['forumTags'])
+
+    const wrapper = mountSection({ isSysAdmin: true, managedCategory: '' })
+    await flushPromises()
     expect(wrapper.text()).toContain('性能优化')
-    expect(wrapper.text()).toContain('数据库')
+    expect(wrapper.get('input[placeholder="搜索标签名称"]')).toBeTruthy()
+    expect(wrapper.get('[data-action="add"]')).toBeTruthy()
     expect(wrapper.text()).toContain('3 篇')
     expect(wrapper.findAll('[data-action="edit"]')).toHaveLength(2)
     expect(wrapper.findAll('[data-action="delete"]')).toHaveLength(2)
   })
 
-  it('TC-FORUM-TAG-002 (TC-02) 组管理员仅展示并固定所属组', async () => {
-    vi.mocked(fetch).mockImplementation(() => response([tags[0]]))
-    const wrapper = mountSection({ isSysAdmin: false, managedCategory: '中间件' })
+  it('TC-FORUM-TAG-003 (TC-03) 标签管理主页面不展示小组选择或切换入口', async () => {
+    const wrapper = mountSection({ isSysAdmin: true, managedCategory: '' })
     await flushPromises()
-    await wrapper.get('[data-action="add"]').trigger('click')
 
-    expect(wrapper.text()).toContain('性能优化')
-    expect(wrapper.text()).not.toContain('索引设计')
-    expect(wrapper.get('[data-field="category"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('[data-field="category"]').element.value).toBe('中间件')
+    expect(wrapper.find('[aria-label="所属小组筛选"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('全部小组')
   })
 
-  it('TC-FORUM-TAG-003 (TC-03) 普通用户无标签管理入口且直达地址受后台权限守卫', () => {
+  it('TC-FORUM-TAG-004 (TC-04) 刷新论坛管理标签地址后保持标签管理子 Tab', () => {
+    expect(parseHashRoute('#/admin/forum/tags')).toEqual({
+      name: 'admin', token: null, adminSection: 'forumTags'
+    })
+    expect(useAdminSource).toContain("s === 'forumTags' ? '#/admin/forum/tags' : '#/admin'")
+    expect(appSource).toContain("next.adminSection === 'forumTags'")
+  })
+
+  it('TC-FORUM-TAG-006 (TC-06) 无论坛管理权限用户看不到入口且直达地址受后台权限守卫', () => {
     const admin = mount(AdminPage, {
       props: { isSysAdmin: false, canManageForumTags: false }
     })
 
-    expect(admin.text()).not.toContain('论坛管理 / 标签管理')
-    expect(parseHashRoute('#/admin/forum-tags')).toEqual({
+    expect(admin.text()).not.toContain('论坛管理')
+    expect(parseHashRoute('#/admin/forum/tags')).toEqual({
       name: 'admin', token: null, adminSection: 'forumTags'
     })
     expect(appSource).toContain('if (!canAccessAdmin.value)')
+    expect(appSource).toContain('if (!canManageForumTags.value)')
     expect(appSource).toContain("window.location.hash = '#/home'")
   })
 
-  it('TC-FORUM-TAG-004/005/006 (TC-04/05/06) 添加编辑删除调用统一API并刷新列表', async () => {
+  it('TC-FORUM-TAG-007 添加编辑删除调用统一API并刷新列表', async () => {
     vi.mocked(fetch).mockImplementation((input, options = {}) => {
       const method = options.method || 'GET'
       if (method === 'GET') return response(tags)
