@@ -746,7 +746,7 @@ export function useAdmin(auth, notify, confirm, onSettingsSaved) {
 
   function switchAdminSection(s) {
     adminSection.value = s
-    window.history.replaceState(null, '', s === 'forumTags' ? '#/admin/forum-tags' : '#/admin')
+    window.history.replaceState(null, '', s === 'forumTags' ? '#/admin/forum/tags' : '#/admin')
     showImport.value = false
     editing.value = false
     selectedStandard.value = null

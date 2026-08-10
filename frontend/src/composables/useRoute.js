@@ -16,7 +16,9 @@ export function parseHashRoute(hashValue = '') {
     return { name: 'documentEditor', documentId: match ? match[1] : null }
   }
   if (hash.startsWith('/admin/word-preview')) return { name: 'wordPreview' }
-  if (hash === '/admin/forum-tags') return { name: 'admin', token: null, adminSection: 'forumTags' }
+  if (hash === '/admin/forum/tags' || hash === '/admin/forum-tags') {
+    return { name: 'admin', token: null, adminSection: 'forumTags' }
+  }
   if (hash.startsWith('/admin')) return { name: 'admin', token: null }
   if (hash === '/forum/mine') return { name: 'forumMine', postId: null }
   if (hash.startsWith('/forum/new')) return { name: 'forumEditor', postId: null }

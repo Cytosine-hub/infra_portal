@@ -58,4 +58,34 @@ class AdminForumTagApiControllerSecurityTest {
         verify(tagService, never()).rename(8L, "越权修改");
         verify(tagService, never()).delete(8L);
     }
+
+    @Test
+    @DisplayName("TC-FORUM-TAG-009 (TC-03) 系统管理员新增标签时由后端自动归入未分组")
+    void systemAdminCreateUsesDefaultCategory() {
+        GatewayAuthenticationToken systemAdmin = GatewayAuthenticationToken.authenticated(
+                "admin", "系统管理员", List.of("ROLE_SYS_ADMIN"), null, false);
+        ForumTag created = new ForumTag();
+        created.setName("容量规划");
+        created.setCategory("未分组");
+        when(tagService.create("容量规划", "未分组", "admin")).thenReturn(created);
+
+        controller.create(new ForumTagRequest("容量规划", "数据库"), systemAdmin);
+
+        verify(tagService).create("容量规划", "未分组", "admin");
+    }
+
+    @Test
+    @DisplayName("TC-FORUM-TAG-010 (TC-03) 组管理员新增标签时由后端使用管理上下文")
+    void categoryAdminCreateUsesManagedCategory() {
+        GatewayAuthenticationToken categoryAdmin = GatewayAuthenticationToken.authenticated(
+                "middleware-admin", "中间件管理员", List.of("ROLE_MIDDLEWARE_ADMIN"), "中间件", true);
+        ForumTag created = new ForumTag();
+        created.setName("容量规划");
+        created.setCategory("中间件");
+        when(tagService.create("容量规划", "中间件", "middleware-admin")).thenReturn(created);
+
+        controller.create(new ForumTagRequest("容量规划", "数据库"), categoryAdmin);
+
+        verify(tagService).create("容量规划", "中间件", "middleware-admin");
+    }
 }
