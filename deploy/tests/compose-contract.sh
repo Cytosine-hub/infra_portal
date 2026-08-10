@@ -40,6 +40,31 @@ assert_no_text deploy/compose.env.example '^COMPOSE_PROJECT_NAME=' \
 assert_text deploy/Dockerfile.nacos-init '^COPY deploy/nacos-config /config$' 'TC-DOCKER-029'
 assert_no_text deploy/docker-compose.dependencies.yml 'nacos-config:/config' 'TC-DOCKER-030'
 assert_text deploy/docker-compose.yml '^  frontend:' 'TC-DOCKER-005'
+assert_text deploy/docker-compose.yml '^x-shanghai-timezone: &shanghai-timezone$' \
+    'TC-DOCKER-039 business timezone anchor'
+assert_text deploy/docker-compose.yml '^  TZ: Asia/Shanghai$' \
+    'TC-DOCKER-039 business Shanghai timezone'
+assert_text deploy/docker-compose.dependencies.yml '^x-shanghai-timezone: &shanghai-timezone$' \
+    'TC-DOCKER-039 dependency timezone anchor'
+assert_text deploy/docker-compose.dependencies.yml '^  TZ: Asia/Shanghai$' \
+    'TC-DOCKER-039 dependency Shanghai timezone'
+assert_text deploy/milvus-offline/docker-compose.yml '^x-shanghai-timezone: &shanghai-timezone$' \
+    'TC-DOCKER-039 offline Milvus timezone anchor'
+assert_text deploy/milvus-offline/docker-compose.yml '^  TZ: Asia/Shanghai$' \
+    'TC-DOCKER-039 offline Milvus Shanghai timezone'
+assert_fixed_text deploy/docker-compose.dependencies.yml \
+    '/usr/share/zoneinfo/Asia/Shanghai:/usr/share/zoneinfo/Asia/Shanghai:ro' \
+    'TC-DOCKER-039 dependency MinIO Shanghai zoneinfo'
+assert_fixed_text deploy/milvus-offline/docker-compose.yml \
+    '/usr/share/zoneinfo/Asia/Shanghai:/usr/share/zoneinfo/Asia/Shanghai:ro' \
+    'TC-DOCKER-039 offline MinIO Shanghai zoneinfo'
+assert_text scripts/services.env.example '^TZ=Asia/Shanghai$' \
+    'TC-DOCKER-039 systemd service Shanghai timezone'
+for service_path in "$ROOT_DIR"/scripts/*.service; do
+    service_file=${service_path#"$ROOT_DIR"/}
+    assert_text "$service_file" '^Environment=TZ=Asia/Shanghai$' \
+        "TC-DOCKER-039 $service_file Shanghai timezone"
+done
 assert_no_text deploy/docker-compose.yml '^  (mysql|nacos|nacos-init|etcd|minio|milvus):' \
     'TC-DOCKER-032 business compose excludes dependencies'
 assert_text deploy/docker-compose.dependencies.yml '^  nacos-init:' 'TC-DOCKER-006'

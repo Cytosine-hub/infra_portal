@@ -37,6 +37,7 @@ default:
     - export IMAGE_TAG="$(sh deploy/image-tag.sh "$CI_COMMIT_SHA" "$CI_PIPELINE_CREATED_AT")"
 
 variables:
+  TZ: "Asia/Shanghai"
   DOCKER_BUILDKIT: "1"
   IMAGE_NAMESPACE: "infra-portal"
   # Compose 清单与运行数据分别持久化，避免 Job 清理 /builds 后无法手动管理。
