@@ -56,19 +56,6 @@
           placeholder="请输入标签名称"
           data-field="name"
         />
-        <label class="field-label">
-          <span>所属小组</span>
-          <select
-            v-model="form.category"
-            :disabled="!isSysAdmin || Boolean(editingTag)"
-            data-field="category"
-          >
-            <option value="" disabled>请选择所属小组</option>
-            <option v-for="category in categories" :key="category" :value="category">
-              {{ category }}
-            </option>
-          </select>
-        </label>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
       </div>
     </FormModal>
@@ -100,13 +87,7 @@ import BaseModal from '../../components/ui/BaseModal.vue'
 import DataTable from '../../components/ui/DataTable.vue'
 import FormModal from '../../components/ui/FormModal.vue'
 
-const props = defineProps({
-  isSysAdmin: { type: Boolean, default: false },
-  managedCategory: { type: String, default: '' }
-})
-
 const MAX_TAG_NAME_LENGTH = 50
-const categories = ['中间件', '数据库', '主机', '网络', '安全']
 const columns = [
   { key: 'name', label: '标签名称' },
   { key: 'category', label: '所属小组' },
@@ -124,7 +105,7 @@ const showForm = ref(false)
 const showDelete = ref(false)
 const editingTag = ref(null)
 const deletingTag = ref(null)
-const form = reactive({ name: '', category: '' })
+const form = reactive({ name: '' })
 
 const filteredTags = computed(() => {
   const normalizedKeyword = keyword.value.trim().toLocaleLowerCase()
@@ -153,7 +134,6 @@ async function loadTags() {
 function openCreate() {
   editingTag.value = null
   form.name = ''
-  form.category = props.isSysAdmin ? '' : props.managedCategory
   formError.value = ''
   showForm.value = true
 }
@@ -161,7 +141,6 @@ function openCreate() {
 function openEdit(tag) {
   editingTag.value = tag
   form.name = tag.name
-  form.category = tag.category
   formError.value = ''
   showForm.value = true
 }
@@ -170,7 +149,6 @@ function validateForm() {
   const name = form.name.trim()
   if (!name) return '标签名称不能为空'
   if (name.length > MAX_TAG_NAME_LENGTH) return `标签名称不能超过 ${MAX_TAG_NAME_LENGTH} 个字符`
-  if (!form.category) return '请选择所属小组'
   return ''
 }
 
@@ -179,7 +157,7 @@ async function saveTag() {
   if (formError.value || saving.value) return
   saving.value = true
   try {
-    const payload = { name: form.name.trim(), category: form.category }
+    const payload = { name: form.name.trim() }
     if (editingTag.value) {
       await updateAdminForumTag(editingTag.value.id, payload)
       notify('标签已更新，关联文章已同步', 'success')
@@ -249,15 +227,7 @@ function formatDate(value) {
   gap: var(--space-md); margin-bottom: var(--space-lg);
 }
 .filters { display: flex; align-items: center; gap: var(--space-sm); min-width: 0; }
-.field-label select {
-  min-height: 38px; padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
-  background: var(--color-bg); color: var(--color-text); font-size: var(--text-base);
-}
-.field-label select:focus { outline: none; border-color: var(--color-border-focus); }
 .form-grid { display: grid; gap: var(--space-lg); }
-.field-label { display: grid; gap: var(--space-xs); color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: 500; }
-.field-label select:disabled { background: var(--color-bg-tertiary); opacity: 0.7; }
 .form-error, .page-error { color: var(--color-danger); margin: 0; }
 .page-error { padding: var(--space-md); background: var(--color-danger-light); border-radius: var(--radius-md); }
 .delete-message { margin: 0; line-height: var(--leading-relaxed); color: var(--color-text-secondary); }

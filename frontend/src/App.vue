@@ -212,10 +212,7 @@
                 @filterChange="(v) => { reviewFilters.status = v; applyReviewFilters() }"
                 @viewDetail="openReviewDetail" @changePage="changeReviewPage"
               />
-              <ForumTagsSection v-else-if="adminSection === 'forumTags'"
-                :isSysAdmin="isSysAdmin"
-                :managedCategory="managedCategory"
-              />
+              <ForumTagsSection v-else-if="adminSection === 'forumTags'" />
               <UsersSection v-else-if="adminSection === 'users'"
                 :users="userList"
                 @changeRole="openChangeRoleDialog" @resetPassword="openResetPasswordDialog"

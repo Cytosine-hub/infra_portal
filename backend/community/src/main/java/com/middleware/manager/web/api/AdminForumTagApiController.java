@@ -25,6 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/admin/forum-tags")
 public class AdminForumTagApiController {
+    private static final String DEFAULT_TAG_CATEGORY = "未分组";
+
     private final ForumTagManagementService tagService;
     private final PermissionService permissionService;
 
@@ -48,7 +50,7 @@ public class AdminForumTagApiController {
     public ForumTagResponse create(@Valid @RequestBody ForumTagRequest request,
                                    Authentication authentication) {
         requireForumAdmin(authentication);
-        String category = resolveCreateCategory(request.getCategory(), authentication);
+        String category = resolveCreateCategory(authentication);
         return ForumTagResponse.from(tagService.create(request.getName(), category, authentication.getName()));
     }
 
@@ -69,16 +71,11 @@ public class AdminForumTagApiController {
         tagService.delete(id);
     }
 
-    private String resolveCreateCategory(String requestedCategory, Authentication authentication) {
+    private String resolveCreateCategory(Authentication authentication) {
         if (permissionService.isAdmin(authentication)) {
-            return requestedCategory;
+            return DEFAULT_TAG_CATEGORY;
         }
-        String managedCategory = permissionService.requireManagedCategory(authentication);
-        if (requestedCategory != null && !requestedCategory.isBlank()
-                && !managedCategory.equals(requestedCategory.trim())) {
-            throw forbidden();
-        }
-        return managedCategory;
+        return permissionService.requireManagedCategory(authentication);
     }
 
     private void requireTagAccess(ForumTag tag, Authentication authentication) {

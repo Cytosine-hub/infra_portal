@@ -83,12 +83,16 @@ describe('论坛标签管理验收', () => {
     expect(wrapper.findAll('[data-action="delete"]')).toHaveLength(2)
   })
 
-  it('TC-FORUM-TAG-003 (TC-03) 标签管理主页面不展示小组选择或切换入口', async () => {
+  it('TC-FORUM-TAG-003 (TC-03) 标签管理及添加标签弹窗不展示小组选择或切换入口', async () => {
     const wrapper = mountSection({ isSysAdmin: true, managedCategory: '' })
     await flushPromises()
 
     expect(wrapper.find('[aria-label="所属小组筛选"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('全部小组')
+
+    await wrapper.get('[data-action="add"]').trigger('click')
+    expect(wrapper.find('[data-field="category"]').exists()).toBe(false)
+    expect(wrapper.get('form').text()).not.toContain('所属小组')
   })
 
   it('TC-FORUM-TAG-004 (TC-04) 刷新论坛管理标签地址后保持标签管理子 Tab', () => {
@@ -125,10 +129,13 @@ describe('论坛标签管理验收', () => {
 
     await wrapper.get('[data-action="add"]').trigger('click')
     await wrapper.get('[data-field="name"] input').setValue('容量规划')
-    await wrapper.get('[data-field="category"]').setValue('主机')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(fetch).toHaveBeenCalledWith('/api/admin/forum-tags', expect.objectContaining({ method: 'POST' }))
+    const createRequest = vi.mocked(fetch).mock.calls.find(([path, options]) =>
+      path === '/api/admin/forum-tags' && options?.method === 'POST'
+    )
+    expect(JSON.parse(createRequest[1].body)).toEqual({ name: '容量规划' })
 
     await wrapper.get('[data-action="edit"]').trigger('click')
     await wrapper.get('[data-field="name"] input').setValue('性能调优')
@@ -157,7 +164,6 @@ describe('论坛标签管理验收', () => {
 
     vi.mocked(fetch).mockImplementation(() => response({ message: '该小组已存在同名标签' }, 400))
     await wrapper.get('[data-field="name"] input').setValue('性能优化')
-    await wrapper.get('[data-field="category"]').setValue('中间件')
     await wrapper.get('form').trigger('submit')
     await flushPromises()
     expect(wrapper.text()).toContain('该小组已存在同名标签')
