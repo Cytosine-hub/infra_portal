@@ -6,11 +6,26 @@ import ForumTagsSection from '../src/pages/admin/ForumTagsSection.vue'
 import AdminPage from '../src/pages/admin/AdminPage.vue'
 import { parseHashRoute } from '../src/composables/useRoute.js'
 import appSource from '../src/App.vue?raw'
+import forumTagsSource from '../src/pages/admin/ForumTagsSection.vue?raw'
 import useAdminSource from '../src/composables/useAdmin.js?raw'
 
 const tags = [
-  { id: 1, name: '性能优化', category: '中间件', postCount: 3 },
-  { id: 2, name: '索引设计', category: '数据库', postCount: 2 }
+  {
+    id: 1,
+    name: '性能优化',
+    category: '中间件',
+    postCount: 3,
+    createdBy: 'admin',
+    createdAt: '2026-08-10T10:24:00'
+  },
+  {
+    id: 2,
+    name: '索引设计',
+    category: '数据库',
+    postCount: 2,
+    createdBy: 'database-admin',
+    createdAt: '2026-08-09T15:12:00'
+  }
 ]
 const storage = new Map()
 const localStorageMock = {
@@ -60,9 +75,28 @@ describe('论坛标签管理验收', () => {
     const wrapper = mountSection({ isSysAdmin: true, managedCategory: '' })
     await flushPromises()
 
-    const tagTab = wrapper.get('[role="tab"]')
+    const tabs = wrapper.findAll('[role="tab"]')
+    const tagTab = tabs[0]
+    expect(tabs.map((tab) => tab.text())).toEqual(['标签管理', '文章管理'])
     expect(tagTab.text()).toBe('标签管理')
     expect(tagTab.attributes('aria-selected')).toBe('true')
+  })
+
+  it('TC-FORUM-TAG-011 文章管理 Tab 展示待开发占位页并可切回标签管理', async () => {
+    const wrapper = mountSection({ isSysAdmin: true, managedCategory: '' })
+    await flushPromises()
+
+    const articleTab = wrapper.findAll('[role="tab"]')[1]
+    await articleTab.trigger('click')
+
+    expect(articleTab.attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('.forum-article-placeholder').text()).toBe('待开发')
+    expect(wrapper.find('.tag-management-panel').exists()).toBe(false)
+
+    const tagTab = wrapper.findAll('[role="tab"]')[0]
+    await tagTab.trigger('click')
+    expect(tagTab.attributes('aria-selected')).toBe('true')
+    expect(wrapper.get('.tag-management-panel')).toBeTruthy()
   })
 
   it('TC-FORUM-TAG-002 (TC-02) 点击论坛管理后进入标签管理并保留核心功能入口', async () => {
@@ -89,10 +123,52 @@ describe('论坛标签管理验收', () => {
 
     expect(wrapper.find('[aria-label="所属小组筛选"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('全部小组')
+    expect(wrapper.text()).not.toContain('所属小组')
 
     await wrapper.get('[data-action="add"]').trigger('click')
     expect(wrapper.find('[data-field="category"]').exists()).toBe(false)
     expect(wrapper.get('form').text()).not.toContain('所属小组')
+  })
+
+  it('TC-FORUM-TAG-008 标签管理使用分段 Tab、列表面板和标签胶囊样式', async () => {
+    const wrapper = mountSection({ isSysAdmin: true, managedCategory: '' })
+    await flushPromises()
+
+    expect(wrapper.get('.forum-tabs').classes()).toContain('segmented-tabs')
+    expect(wrapper.get('.tag-management-panel')).toBeTruthy()
+    expect(wrapper.get('.tag-name-chip').text()).toBe('性能优化')
+    expect(wrapper.get('[data-action="add"]').text()).toBe('新建标签')
+    expect(wrapper.findAll('th').map((header) => header.text())).toEqual([
+      'ID', '标签名称', '关联文章数', '创建人', '创建时间', '操作'
+    ])
+  })
+
+  it('TC-FORUM-TAG-009 仅标签管理启用移动端专用后台布局', () => {
+    const forumAdmin = mount(AdminPage, {
+      props: { section: 'forumTags', isSysAdmin: true, canManageForumTags: true }
+    })
+    const filesAdmin = mount(AdminPage, {
+      props: { section: 'files', isSysAdmin: true, canManageForumTags: true }
+    })
+
+    expect(forumAdmin.get('.admin-layout').classes()).toContain('forum-tags-layout')
+    expect(filesAdmin.get('.admin-layout').classes()).not.toContain('forum-tags-layout')
+  })
+
+  it('TC-FORUM-TAG-010 操作列对齐并复用后台统一操作按钮样式', async () => {
+    const wrapper = mountSection({ isSysAdmin: true, managedCategory: '' })
+    await flushPromises()
+
+    const actionCell = wrapper.get('td.row-actions')
+    const editButton = actionCell.get('[data-action="edit"]')
+    const deleteButton = actionCell.get('[data-action="delete"]')
+
+    expect(actionCell.get('.tag-row-actions')).toBeTruthy()
+    expect(editButton.classes()).toContain('ghost')
+    expect(editButton.classes()).not.toContain('btn')
+    expect(deleteButton.classes()).toContain('danger')
+    expect(deleteButton.classes()).not.toContain('btn')
+    expect(forumTagsSource).toMatch(/:deep\(th\.col-actions\)[\s\S]*?text-align:\s*left/)
   })
 
   it('TC-FORUM-TAG-004 (TC-04) 刷新论坛管理标签地址后保持标签管理子 Tab', () => {
