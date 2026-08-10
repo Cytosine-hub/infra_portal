@@ -13,6 +13,11 @@ public interface ForumTagMapper {
 
     ForumTag findByNameIgnoreCase(String name);
 
+    ForumTag findByNameIgnoreCaseAndCategory(@Param("name") String name,
+                                             @Param("category") String category);
+
+    List<ForumTag> findByCategory(String category);
+
     ForumTag findById(Long id);
 
     int insert(ForumTag tag);
@@ -32,4 +37,8 @@ public interface ForumTagMapper {
     int deletePostTag(@Param("postId") Long postId, @Param("tagId") Long tagId);
 
     int deletePostTagsByPostId(Long postId);
+
+    int deletePostTagsByTagId(Long tagId);
+
+    int deleteById(Long id);
 }

@@ -144,3 +144,19 @@ export async function fetchBinary(path) {
   }
   return response.blob()
 }
+
+export function listAdminForumTags() {
+  return request('/api/admin/forum-tags')
+}
+
+export function createAdminForumTag(payload) {
+  return request('/api/admin/forum-tags', { method: 'POST', body: payload })
+}
+
+export function updateAdminForumTag(id, payload) {
+  return request(`/api/admin/forum-tags/${id}`, { method: 'PUT', body: payload })
+}
+
+export function deleteAdminForumTag(id) {
+  return request(`/api/admin/forum-tags/${id}`, { method: 'DELETE' })
+}

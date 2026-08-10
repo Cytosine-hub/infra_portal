@@ -1,0 +1,61 @@
+package com.middleware.manager.web.api;
+
+import com.middleware.manager.domain.ForumTag;
+import com.middleware.manager.exception.ForbiddenException;
+import com.middleware.manager.security.GatewayAuthenticationToken;
+import com.middleware.manager.security.PermissionService;
+import com.middleware.manager.service.ForumTagManagementService;
+import com.middleware.manager.web.api.dto.ForumTagRequest;
+import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class AdminForumTagApiControllerSecurityTest {
+    @Mock
+    private ForumTagManagementService tagService;
+
+    private AdminForumTagApiController controller;
+
+    @BeforeEach
+    void setUp() {
+        controller = new AdminForumTagApiController(tagService, new PermissionService());
+    }
+
+    @Test
+    @DisplayName("TC-FORUM-TAG-003 (TC-03) 普通用户不可查看管理后台标签")
+    void ordinaryUserCannotListTags() {
+        GatewayAuthenticationToken ordinary = GatewayAuthenticationToken.authenticated(
+                "user", "普通用户", List.of("ROLE_USER"), null, false);
+
+        assertThrows(ForbiddenException.class, () -> controller.list(ordinary));
+        verify(tagService, never()).listAll();
+    }
+
+    @Test
+    @DisplayName("TC-FORUM-TAG-008 (TC-08) 组管理员不可越权编辑或删除其他组标签")
+    void categoryAdminCannotMutateAnotherCategory() {
+        GatewayAuthenticationToken categoryAdmin = GatewayAuthenticationToken.authenticated(
+                "middleware-admin", "中间件管理员", List.of("ROLE_MIDDLEWARE_ADMIN"), "中间件", true);
+        ForumTag anotherCategory = new ForumTag();
+        anotherCategory.setId(8L);
+        anotherCategory.setCategory("数据库");
+        when(tagService.get(8L)).thenReturn(anotherCategory);
+
+        assertThrows(ForbiddenException.class,
+                () -> controller.rename(8L, new ForumTagRequest("越权修改", "数据库"), categoryAdmin));
+        assertThrows(ForbiddenException.class, () -> controller.delete(8L, categoryAdmin));
+
+        verify(tagService, never()).rename(8L, "越权修改");
+        verify(tagService, never()).delete(8L);
+    }
+}

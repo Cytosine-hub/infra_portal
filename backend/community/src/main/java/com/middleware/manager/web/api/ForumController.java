@@ -4,6 +4,7 @@ import com.middleware.manager.domain.ForumComment;
 import com.middleware.manager.domain.ForumPost;
 import com.middleware.manager.domain.ForumTag;
 import com.middleware.manager.repository.ForumTagMapper;
+import com.middleware.manager.security.GatewayAuthenticationToken;
 import com.middleware.manager.service.ForumService;
 import com.middleware.manager.web.api.dto.PageResult;
 import org.springframework.http.HttpStatus;
@@ -62,7 +63,7 @@ public class ForumController {
         if (req.title == null || req.title.trim().length() < 2) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "标题不能为空");
         if (req.content == null || req.content.trim().isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "内容不能为空");
         ForumPost post = forumService.createPost(req.title, req.content, req.tags,
-                auth.getName(), getDisplayName(auth));
+                auth.getName(), getDisplayName(auth), getCategory(auth));
         return toDetail(post, req.tags);
     }
 
@@ -70,7 +71,8 @@ public class ForumController {
     public Map<String, Object> update(@PathVariable Long id, @RequestBody CreatePostRequest req, Authentication auth) {
         if (req.title == null || req.title.trim().length() < 2) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "标题不能为空");
         if (req.content == null || req.content.trim().isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "内容不能为空");
-        ForumPost post = forumService.updatePost(id, req.title, req.content, req.tags, auth.getName());
+        ForumPost post = forumService.updatePost(
+                id, req.title, req.content, req.tags, auth.getName(), getCategory(auth));
         return toDetail(post, req.tags);
     }
 
@@ -174,6 +176,12 @@ public class ForumController {
 
     private String getDisplayName(Authentication auth) {
         return auth.getName();
+    }
+
+    private String getCategory(Authentication auth) {
+        return auth instanceof GatewayAuthenticationToken gatewayAuthentication
+                ? gatewayAuthentication.getCategory()
+                : null;
     }
 
     static class CreatePostRequest {
