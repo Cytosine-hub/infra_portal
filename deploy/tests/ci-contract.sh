@@ -50,6 +50,14 @@ assert_env_equals() {
 
 printf '%s\n' '+ Task start: GitLab CI contract'
 
+assert_text runner/config.md '^      TZ: Asia/Shanghai$' \
+    'TC-CI-053 Runner container Shanghai timezone'
+assert_text runner/config.md \
+    '^  environment = \["TZ=Asia/Shanghai"\]$' \
+    'TC-CI-053 Docker executor Shanghai timezone'
+assert_text .gitlab-ci.yml '^  TZ: "Asia/Shanghai"$' \
+    'TC-CI-053 CI job Shanghai timezone'
+
 sh "$ROOT_DIR/deploy/generate-test-env.sh" \
     "$TMP_ROOT/compose.test.env" "$TMP_ROOT/services.test.env"
 

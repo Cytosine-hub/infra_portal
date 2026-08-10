@@ -43,6 +43,7 @@ shutdown_timeout = 0
   token_expires_at = 0001-01-01T00:00:00Z
   executor = "docker"
   request_concurrency = 2
+  environment = ["TZ=Asia/Shanghai"]
   [runners.docker]
     tls_verify = false
     image = "alpine"

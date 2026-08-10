@@ -1,6 +1,10 @@
 name: ${COMPOSE_BUSINESS_PROJECT_NAME:-infra-portal}
 
+x-shanghai-timezone: &shanghai-timezone
+  TZ: Asia/Shanghai
+
 x-app-environment: &app-environment
+  <<: *shanghai-timezone
   SPRING_PROFILES_ACTIVE: cloud
   APP_DB_HOST: mysql
   APP_DB_PORT: 3306
@@ -15,6 +19,7 @@ x-app-environment: &app-environment
   NACOS_DISCOVERY_GROUP: ${NACOS_DISCOVERY_GROUP:-DEFAULT_GROUP}
 
 x-gateway-environment: &gateway-environment
+  <<: *shanghai-timezone
   SPRING_PROFILES_ACTIVE: cloud
   NACOS_SERVER_ADDR: nacos:8848
   NACOS_NAMESPACE: ${NACOS_NAMESPACE:-}
@@ -233,6 +238,8 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.frontend
     restart: unless-stopped
+    environment:
+      <<: *shanghai-timezone
     ports:
       - "${FRONTEND_PORT:-5173}:80"
     depends_on:

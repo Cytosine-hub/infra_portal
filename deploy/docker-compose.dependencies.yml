@@ -1,11 +1,15 @@
 name: ${COMPOSE_DEPENDENCIES_PROJECT_NAME:-infra-portal-dependencies}
 
+x-shanghai-timezone: &shanghai-timezone
+  TZ: Asia/Shanghai
+
 services:
   mysql:
     container_name: infra-portal-mysql
     image: mysql:${MYSQL_VERSION:-8.0}
     restart: unless-stopped
     environment:
+      <<: *shanghai-timezone
       MYSQL_DATABASE: ${APP_DB_NAME:-middleware_resource_manager}
       MYSQL_ROOT_PASSWORD: ${APP_DB_PASSWORD:-infra-portal-local-db}
     ports:
@@ -26,6 +30,7 @@ services:
     image: nacos/nacos-server:${NACOS_VERSION:-v2.3.2-slim}
     restart: unless-stopped
     environment:
+      <<: *shanghai-timezone
       MODE: standalone
       PREFER_HOST_MODE: hostname
       NACOS_AUTH_ENABLE: ${NACOS_AUTH_ENABLE:-true}
@@ -52,6 +57,7 @@ services:
       dockerfile: deploy/Dockerfile.nacos-init
     restart: "no"
     environment:
+      <<: *shanghai-timezone
       NACOS_URL: http://nacos:8848
       NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
       NACOS_PASSWORD: ${NACOS_PASSWORD:-nacos}
@@ -67,6 +73,7 @@ services:
     image: quay.io/coreos/etcd:${ETCD_VERSION:-v3.5.5}
     restart: unless-stopped
     environment:
+      <<: *shanghai-timezone
       ETCD_AUTO_COMPACTION_MODE: revision
       ETCD_AUTO_COMPACTION_RETENTION: "1000"
       ETCD_QUOTA_BACKEND_BYTES: "4294967296"
@@ -89,6 +96,7 @@ services:
     image: minio/minio:${MINIO_VERSION:-RELEASE.2023-03-20T20-16-18Z}
     restart: unless-stopped
     environment:
+      <<: *shanghai-timezone
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-infra-portal-local-minio}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
@@ -98,6 +106,7 @@ services:
       - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
       - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
+      - /usr/share/zoneinfo/Asia/Shanghai:/usr/share/zoneinfo/Asia/Shanghai:ro
       - ${DEPLOY_DATA_ROOT:-./data}/dependencies/milvus/minio:/minio_data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -113,6 +122,7 @@ services:
       - seccomp:unconfined
     command: ["milvus", "run", "standalone"]
     environment:
+      <<: *shanghai-timezone
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}

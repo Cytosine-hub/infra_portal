@@ -6,6 +6,7 @@ Wants=community-service.service ai-service.service core-service.service middlewa
 [Service]
 Type=simple
 User=root
+Environment=TZ=Asia/Shanghai
 WorkingDirectory=/app/infra_portal/backend
 EnvironmentFile=-/app/infra_portal/backend/services.env
 ExecStart=/usr/local/java/bisheng-jdk-17.0.12/bin/java -Xms512m -Xmx512m -jar /app/infra_portal/backend/api-gateway-0.0.1-SNAPSHOT-exec.jar

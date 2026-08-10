@@ -77,6 +77,8 @@ sh deploy/smoke-test.sh
 
 不传 `--env-file` 时，两份 Compose 配置仍可解析，缺省使用仅限本地开发的 MySQL、Nacos 和 MinIO 凭据；缺失的 `services.env` 不阻断 Compose 配置解析。业务服务实际启动及生产部署仍必须提供至少 32 字节的 `GATEWAY_SIGNING_SECRET` 等业务密钥。
 
+Runner 容器、Docker executor 启动的 CI Job，以及业务和依赖 Compose 中的全部服务统一使用 `Asia/Shanghai` 时区。裸机 systemd 部署同样在各 unit 中显式设置该时区。更新 Runner 容器环境后需重建 Runner 容器；`config.toml` 会由 Runner 自动重载，也可重启确认。更新 Compose 或 systemd 配置后，需重建对应容器或执行 `systemctl daemon-reload` 并重启服务。
+
 从旧版配置升级时，必须删除 `compose.env` 中的 Docker Compose 保留变量 `COMPOSE_PROJECT_NAME`，并改用 `COMPOSE_BUSINESS_PROJECT_NAME`。保留旧变量会覆盖两份清单顶层的独立项目名，使业务栈和依赖栈重新归入同一 Compose 项目。
 
 GitLab 流水线中的 `verify:deployment` 会执行 Shell 语法检查、CI/Compose/镜像维护契约测试，并使用临时测试配置解析 Compose；该门禁不安装 `jq`，也不执行依赖该工具的 Nacos 初始化单元测试，不启动或更新数据库、Nacos 和业务容器。生产 `nacos-init` 镜像仍内置 `jq`。后端首次镜像构建执行完整 `mvn clean verify`，同一提交的其他服务复用 BuildKit 构建层；前端镜像构建执行 Vitest 和 Vite 构建。真实部署需要在 GitLab CI/CD Variables 中创建以下变量：

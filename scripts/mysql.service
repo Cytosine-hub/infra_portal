@@ -5,6 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
+Environment=TZ=Asia/Shanghai
 ExecStart=/app/mysql/bin/mysqld --defaults-file=/app/mysql/etc/my.cnf --user=root
 ExecStop=/app/mysql/bin/mysqladmin -u root -S /app/mysql/tmp/mysql.sock shutdown
 Restart=on-failure

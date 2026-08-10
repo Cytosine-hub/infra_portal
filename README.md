@@ -87,6 +87,8 @@ sh deploy/smoke-test.sh
 
 不指定 `--env-file` 时，两份 Compose 仍可正常解析，并使用仅限本地开发的基础组件默认值；业务密钥文件也按可选文件处理。生产部署必须提供并替换 `compose.env` 和 `services.env` 中的全部密钥，禁止使用仓库内的开发默认凭据。
 
+Runner 容器、Docker executor 启动的 CI Job，以及业务和依赖 Compose 中的全部服务统一使用 `Asia/Shanghai` 时区；裸机 systemd 部署的服务也通过 unit 配置显式使用相同时区。更新 Runner 容器环境后需重建 Runner 容器；`config.toml` 会由 Runner 自动重载，也可重启确认。Compose 或 systemd 配置更新后需重建对应容器，或执行 daemon-reload 并重启服务才能生效。
+
 旧版 `compose.env` 中若存在 Docker Compose 保留变量 `COMPOSE_PROJECT_NAME`，升级时必须删除并改用 `COMPOSE_BUSINESS_PROJECT_NAME`；否则它会覆盖两份清单各自的项目名，破坏独立启停。
 
 `nacos-init` 会创建缺失的 namespace 和 9 个 Data ID，并在模板内容变化时更新对应 Data ID。MySQL 只在全新数据目录首次执行 `db/init.sql` 和 `db/seed.sql`，已有数据目录不会重放初始化脚本。前端入口为 `http://localhost:5173`。
