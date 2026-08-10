@@ -41,7 +41,7 @@ const allSections = [
   { key: 'standardPublish', label: '参数标准', sysAdmin: false },
   { key: 'documentMaintenance', label: '标准文档', sysAdmin: false },
   { key: 'reviews', label: '审核管理', sysAdmin: false },
-  { key: 'forumTags', label: '论坛管理 / 标签管理', sysAdmin: false, forumAdmin: true },
+  { key: 'forum', label: '论坛管理', sysAdmin: false, forumAdmin: true },
   { key: 'users', label: '用户管理', sysAdmin: true },
   { key: 'settings', label: '系统设置', sysAdmin: true }
 ]

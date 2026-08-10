@@ -212,7 +212,7 @@
                 @filterChange="(v) => { reviewFilters.status = v; applyReviewFilters() }"
                 @viewDetail="openReviewDetail" @changePage="changeReviewPage"
               />
-              <ForumTagsSection v-else-if="adminSection === 'forumTags'"
+              <ForumManagementSection v-else-if="adminSection === 'forum'"
                 :isSysAdmin="isSysAdmin"
                 :managedCategory="managedCategory"
               />
@@ -294,7 +294,7 @@ import FilesSection from './pages/admin/FilesSection.vue'
 import TypesSection from './pages/admin/TypesSection.vue'
 import StandardsSection from './pages/admin/StandardsSection.vue'
 import ReviewsSection from './pages/admin/ReviewsSection.vue'
-import ForumTagsSection from './pages/admin/ForumTagsSection.vue'
+import ForumManagementSection from './pages/admin/ForumManagementSection.vue'
 import UsersSection from './pages/admin/UsersSection.vue'
 import DocumentsSection from './pages/admin/DocumentsSection.vue'
 import SettingsSection from './pages/admin/SettingsSection.vue'
@@ -374,8 +374,8 @@ function syncRoute() {
     token: null, standardId: null, standardType: null, documentId: null, postId: null,
     jobId: null, feature: null, legacy: false, legacyTarget: null
   }, next)
-  if (next.name === 'admin' && next.adminSection === 'forumTags') {
-    adminSection.value = 'forumTags'
+  if (next.name === 'admin' && next.adminSection === 'forum') {
+    adminSection.value = 'forum'
   }
   if (next.legacy) {
     const target = next.legacyTarget === 'knowledge'

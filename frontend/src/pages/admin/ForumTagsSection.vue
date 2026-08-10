@@ -11,12 +11,6 @@
     <div class="section-toolbar">
       <div class="filters">
         <BaseInput v-model="keyword" placeholder="搜索标签名称" />
-        <select v-if="isSysAdmin" v-model="categoryFilter" aria-label="所属小组筛选">
-          <option value="">全部小组</option>
-          <option v-for="category in categories" :key="category" :value="category">
-            {{ category }}
-          </option>
-        </select>
       </div>
       <div class="actions">
         <BaseButton variant="ghost" @click="loadTags">刷新</BaseButton>
@@ -26,17 +20,23 @@
     <p v-if="loadError" class="page-error">{{ loadError }}</p>
     <DataTable
       :columns="columns"
-      :data="filteredTags"
+      :data="pagedTags"
       :loading="loading"
       empty-text="暂无符合条件的标签"
     >
       <template #cell-postCount="{ value }">{{ value }} 篇</template>
-      <template #cell-updatedAt="{ value }">{{ formatDate(value) }}</template>
+      <template #cell-createdAt="{ value }">{{ formatDate(value) }}</template>
       <template #actions="{ row }">
         <BaseButton size="sm" variant="ghost" data-action="edit" @click="openEdit(row)">编辑</BaseButton>
         <BaseButton size="sm" variant="danger" data-action="delete" @click="openDelete(row)">删除</BaseButton>
       </template>
     </DataTable>
+    <nav v-if="pageCount > 1 || tags.length" class="pagination" aria-label="标签分页">
+      <span>共 {{ filteredTags.length }} 条</span>
+      <button data-page="previous" :disabled="page === 1" @click="page--">上一页</button>
+      <span data-page="current">{{ page }}</span>
+      <button data-page="next" :disabled="page === pageCount" @click="page++">下一页</button>
+    </nav>
 
     <FormModal
       v-model="showForm"
@@ -51,19 +51,6 @@
           placeholder="请输入标签名称"
           data-field="name"
         />
-        <label class="field-label">
-          <span>所属小组</span>
-          <select
-            v-model="form.category"
-            :disabled="!isSysAdmin || Boolean(editingTag)"
-            data-field="category"
-          >
-            <option value="" disabled>请选择所属小组</option>
-            <option v-for="category in categories" :key="category" :value="category">
-              {{ category }}
-            </option>
-          </select>
-        </label>
         <p v-if="formError" class="form-error" role="alert">{{ formError }}</p>
       </div>
     </FormModal>
@@ -101,12 +88,11 @@ const props = defineProps({
 })
 
 const MAX_TAG_NAME_LENGTH = 50
-const categories = ['中间件', '数据库', '主机', '网络', '安全']
 const columns = [
   { key: 'name', label: '标签名称' },
-  { key: 'category', label: '所属小组' },
   { key: 'postCount', label: '关联文章数' },
-  { key: 'updatedAt', label: '更新时间' }
+  { key: 'createdBy', label: '创建人' },
+  { key: 'createdAt', label: '创建时间' }
 ]
 const { notify } = useNotify()
 const tags = ref([])
@@ -115,22 +101,24 @@ const saving = ref(false)
 const loadError = ref('')
 const formError = ref('')
 const keyword = ref('')
-const categoryFilter = ref('')
+const page = ref(1)
+const pageSize = 10
 const showForm = ref(false)
 const showDelete = ref(false)
 const editingTag = ref(null)
 const deletingTag = ref(null)
-const form = reactive({ name: '', category: '' })
+const form = reactive({ name: '' })
 
 const filteredTags = computed(() => {
   const normalizedKeyword = keyword.value.trim().toLocaleLowerCase()
   return tags.value.filter((tag) => {
     const matchesKeyword = !normalizedKeyword
       || tag.name.toLocaleLowerCase().includes(normalizedKeyword)
-    const matchesCategory = !categoryFilter.value || tag.category === categoryFilter.value
-    return matchesKeyword && matchesCategory
+    return matchesKeyword
   })
 })
+const pageCount = computed(() => Math.max(1, Math.ceil(filteredTags.value.length / pageSize)))
+const pagedTags = computed(() => filteredTags.value.slice((page.value - 1) * pageSize, page.value * pageSize))
 
 onMounted(loadTags)
 
@@ -139,6 +127,7 @@ async function loadTags() {
   loadError.value = ''
   try {
     tags.value = await listAdminForumTags()
+    page.value = 1
   } catch (error) {
     loadError.value = error.message
     notify(error.message, 'error')
@@ -150,7 +139,6 @@ async function loadTags() {
 function openCreate() {
   editingTag.value = null
   form.name = ''
-  form.category = props.isSysAdmin ? '' : props.managedCategory
   formError.value = ''
   showForm.value = true
 }
@@ -158,7 +146,6 @@ function openCreate() {
 function openEdit(tag) {
   editingTag.value = tag
   form.name = tag.name
-  form.category = tag.category
   formError.value = ''
   showForm.value = true
 }
@@ -167,7 +154,6 @@ function validateForm() {
   const name = form.name.trim()
   if (!name) return '标签名称不能为空'
   if (name.length > MAX_TAG_NAME_LENGTH) return `标签名称不能超过 ${MAX_TAG_NAME_LENGTH} 个字符`
-  if (!form.category) return '请选择所属小组'
   return ''
 }
 
@@ -176,7 +162,7 @@ async function saveTag() {
   if (formError.value || saving.value) return
   saving.value = true
   try {
-    const payload = { name: form.name.trim(), category: form.category }
+    const payload = { name: form.name.trim(), category: props.managedCategory || '未分组' }
     if (editingTag.value) {
       await updateAdminForumTag(editingTag.value.id, payload)
       notify('标签已更新，关联文章已同步', 'success')

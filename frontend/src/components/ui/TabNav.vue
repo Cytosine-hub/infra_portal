@@ -4,6 +4,8 @@
       v-for="tab in tabs"
       :key="tab.key"
       :class="{ active: modelValue === tab.key }"
+      role="tab"
+      :aria-selected="modelValue === tab.key"
       @click="$emit('update:modelValue', tab.key)"
     >
       <span v-if="tab.icon" class="tab-icon">{{ tab.icon }}</span>

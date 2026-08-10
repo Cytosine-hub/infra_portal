@@ -42,6 +42,20 @@ class AdminForumTagApiControllerSecurityTest {
     }
 
     @Test
+    @DisplayName("TC-FORUM-TAG-009 (TC-04) 系统管理员新增标签未提交小组时使用未分组")
+    void systemAdminCreatesTagWithoutCategory() {
+        GatewayAuthenticationToken admin = GatewayAuthenticationToken.authenticated(
+                "admin", "系统管理员", List.of("ROLE_SYS_ADMIN"), null, true);
+        ForumTag created = new ForumTag();
+        created.setName("容量规划");
+        when(tagService.create("容量规划", "未分组", "admin")).thenReturn(created);
+
+        controller.create(new ForumTagRequest("容量规划", null), admin);
+
+        verify(tagService).create("容量规划", "未分组", "admin");
+    }
+
+    @Test
     @DisplayName("TC-FORUM-TAG-008 (TC-08) 组管理员不可越权编辑或删除其他组标签")
     void categoryAdminCannotMutateAnotherCategory() {
         GatewayAuthenticationToken categoryAdmin = GatewayAuthenticationToken.authenticated(

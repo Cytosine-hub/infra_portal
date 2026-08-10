@@ -18,7 +18,7 @@
             <EmptyState :message="emptyText" />
           </td>
         </tr>
-        <tr v-for="(row, idx) in data" :key="row.id || idx">
+        <tr v-for="(row, idx) in data" :key="row.id || idx" :data-row-key="row.id || idx">
           <td v-for="col in columns" :key="col.key">
             <slot :name="`cell-${col.key}`" :row="row" :value="row[col.key]">
               {{ row[col.key] }}
