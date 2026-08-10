@@ -125,6 +125,12 @@ describe('论坛标签管理验收', () => {
     expect(admin.text()).not.toContain('论坛管理')
     expect(appSource).toContain('if (!canAccessAdmin.value)')
     expect(appSource).toContain("window.location.hash = '#/home'")
+    expect(appSource).toMatch(
+      /next\.name === 'admin' && next\.adminSection === 'forum'[\s\S]*!isSysAdmin\.value && !isCategoryAdmin\.value/
+    )
+    expect(parseHashRoute('#/admin/forum-tags').adminSection).toBe('forum')
+    expect(parseHashRoute('#/admin/forum/tags').adminForumTab).toBe('tags')
+    expect(parseHashRoute('#/admin/forum').adminForumTab).toBe('tags')
   })
 
   it('TC-FORUM-TAG-008 添加编辑删除调用统一API并刷新列表', async () => {

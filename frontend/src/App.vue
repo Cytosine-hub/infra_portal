@@ -374,6 +374,11 @@ function syncRoute() {
     token: null, standardId: null, standardType: null, documentId: null, postId: null,
     jobId: null, feature: null, legacy: false, legacyTarget: null
   }, next)
+  if (next.name === 'admin' && next.adminSection === 'forum'
+      && !isSysAdmin.value && !isCategoryAdmin.value) {
+    window.location.hash = '#/home'
+    return
+  }
   if (next.name === 'admin' && next.adminSection === 'forum') {
     adminSection.value = 'forum'
   }
