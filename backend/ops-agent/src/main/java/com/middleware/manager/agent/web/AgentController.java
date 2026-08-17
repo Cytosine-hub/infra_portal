@@ -40,6 +40,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Slf4j
 public class AgentController {
 
+    private static final long SSE_TIMEOUT_DISABLED = 0L;
+
     private final AgentService agentService;
     private final SkillLoader skillLoader;
     private final ChatSessionMapper chatSessionMapper;
@@ -88,7 +90,8 @@ public class AgentController {
                                  Map<String, String> context,
                                  List<DiagnosticAttachment> attachments,
                                  Authentication authentication) {
-        SseEmitter emitter = new SseEmitter(300_000L);
+        // 上游与代理的空闲超时会清理停滞请求，固定总时长反而会截断仍在正常执行的长任务。
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_DISABLED);
         AtomicBoolean clientOpen = new AtomicBoolean(true);
 
         sseExecutor.submit(() -> {
