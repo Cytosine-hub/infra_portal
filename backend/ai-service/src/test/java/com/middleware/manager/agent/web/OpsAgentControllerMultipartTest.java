@@ -13,11 +13,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -54,8 +56,9 @@ class OpsAgentControllerMultipartTest {
         MockMultipartFile file = new MockMultipartFile(
                 "attachments", "error.log", "text/plain", "timeout".getBytes());
 
-        controller.chatMultipart(2L, "分析日志", List.of(file), authentication);
+        SseEmitter emitter = controller.chatMultipart(2L, "分析日志", List.of(file), authentication);
 
+        assertThat(emitter.getTimeout()).isZero();
         verify(agentService, timeout(1000)).chat(eq("分析日志"), any(), any(),
                 eq(2L), any(), any(), anyList());
         verify(messageMapper, timeout(1000)).insert(argThat((ChatMessage message) ->

@@ -29,7 +29,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
@@ -168,35 +167,47 @@ public class TroubleshootAgent {
                                     Consumer<String> onRetry, Consumer<String> onDelta,
                                     Authentication authentication) {
         ChatContext context = prepareChatContext(sessionId, userMessage, attachments, authentication);
-        AtomicBoolean deltaSent = new AtomicBoolean(false);
+        StringBuilder partialAnswer = new StringBuilder();
+        String answer;
         try {
             log.info("Calling streaming LLM for session {}, message count: {}", sessionId, context.messages().size());
-            String answer = streamClient.stream(context.messages(), delta -> {
-                deltaSent.set(true);
+            answer = streamClient.stream(context.messages(), delta -> {
+                partialAnswer.append(delta);
                 onDelta.accept(delta);
             });
-            if (answer.isBlank()) {
-                throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
-            }
-            answer = finalizeAnswer(context, answer);
-            saveAssistantMessage(sessionId, answer, context.references());
-            return new AgentResponse(answer, context.references());
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
-            if (isClientDisconnect(e)) {
-                throw new IllegalStateException("client disconnected", e);
-            }
-            if (deltaSent.get()) {
-                log.warn("Streaming LLM failed after partial response sessionId={} error={}", sessionId, e.getMessage());
-                throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
-            }
-            log.warn("Streaming LLM failed, fallback to non-streaming chat sessionId={} error={}", sessionId, e.getMessage());
-            if (onRetry != null) {
-                onRetry.accept(ErrorMessages.LLM_STREAM_UNAVAILABLE);
-            }
-            return chatWithoutSavingUserMessage(sessionId, context, onRetry);
+            return handleStreamFailure(sessionId, context, partialAnswer.toString(), onRetry, e);
         }
+        if (answer.isBlank()) {
+            throw new BusinessException(ErrorCode.UNKNOWN_ERROR, ErrorMessages.LLM_RESPONSE_TIMEOUT);
+        }
+        answer = finalizeAnswer(context, answer);
+        saveAssistantMessage(sessionId, answer, context.references());
+        return new AgentResponse(answer, context.references());
+    }
+
+    private AgentResponse handleStreamFailure(Long sessionId, ChatContext context, String partialAnswer,
+                                              Consumer<String> onRetry, Exception exception) {
+        if (isClientDisconnect(exception)) {
+            throw new IllegalStateException("client disconnected", exception);
+        }
+        String exceptionType = exception.getClass().getName();
+        if (!partialAnswer.isBlank()) {
+            log.warn("Streaming LLM interrupted after partial response sessionId={} exceptionType={}",
+                    sessionId, exceptionType, exception);
+            String answer = "> " + ErrorMessages.LLM_STREAM_INTERRUPTED + "\n\n"
+                    + finalizeAnswer(context, partialAnswer);
+            saveAssistantMessage(sessionId, answer, context.references());
+            return new AgentResponse(answer, context.references());
+        }
+        log.warn("Streaming LLM failed before first response sessionId={} exceptionType={}",
+                sessionId, exceptionType, exception);
+        if (onRetry != null) {
+            onRetry.accept(ErrorMessages.LLM_STREAM_UNAVAILABLE);
+        }
+        return chatWithoutSavingUserMessage(sessionId, context, onRetry);
     }
 
     private AgentResponse chatWithoutSavingUserMessage(Long sessionId, ChatContext context, Consumer<String> onRetry) {

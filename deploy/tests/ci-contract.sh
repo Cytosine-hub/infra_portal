@@ -112,6 +112,14 @@ assert_text deploy/services.env.example '^AI_BASE_URL=http://ai\.tlb\.shcj-s\.co
     'TC-CI-034 chat model base URL env'
 assert_text deploy/services.env.example '^AI_MODEL=gpt-5\.6-sol$' \
     'TC-CI-034 chat model name env'
+assert_text deploy/services.env.example '^LLM_STREAM_READ_TIMEOUT_SECONDS=600$' \
+    'TC-CI-054 streaming model read timeout env'
+assert_text deploy/nacos-config/ai-service.properties \
+    '^app\.llm\.stream-read-timeout-seconds=\$\{LLM_STREAM_READ_TIMEOUT_SECONDS:600\}$' \
+    'TC-CI-054 Nacos streaming model read timeout override'
+assert_text backend/ai-service/src/main/resources/application.yml \
+    '^    stream-read-timeout-seconds: \$\{LLM_STREAM_READ_TIMEOUT_SECONDS:\$\{LLM_TIMEOUT_SECONDS:600\}\}$' \
+    'TC-CI-054 application streaming model read timeout fallback'
 assert_text deploy/nacos-config/ai-service.properties \
     '^app\.ai\.base-url=\$\{AI_BASE_URL:http://ai\.tlb\.shcj-s\.com:8080/v1\}$' \
     'TC-CI-034 Nacos app AI base URL override'

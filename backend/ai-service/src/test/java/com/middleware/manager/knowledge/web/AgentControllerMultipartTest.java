@@ -10,9 +10,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
@@ -44,8 +46,9 @@ class AgentControllerMultipartTest {
         MockMultipartFile file = new MockMultipartFile(
                 "attachments", "error.log", "text/plain", "timeout".getBytes());
 
-        controller.chatMultipart(1L, "", List.of(file), authentication);
+        SseEmitter emitter = controller.chatMultipart(1L, "", List.of(file), authentication);
 
+        assertThat(emitter.getTimeout()).isZero();
         verify(agent, timeout(1000)).chatStream(eq(1L),
                 eq("请分析附件内容并给出排查结论"),
                 anyList(), any(), any(), eq(authentication));

@@ -1,5 +1,6 @@
 package com.middleware.manager.knowledge.agent;
 
+import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.knowledge.service.KnowledgeSearchPort;
 import com.middleware.manager.knowledge.service.KnowledgeSearchResult;
 import com.middleware.manager.wiki.service.WikiSearchPort;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -141,6 +143,47 @@ class TroubleshootAgentTest {
         assertThat(response.getAnswer()).contains("收集错误日志");
         assertThat(response.getReferences()).isEmpty();
         verify(streamClient).stream(any(List.class), any());
+        verifyNoInteractions(chatModel);
+    }
+
+    @Test
+    @DisplayName("TC-RAG-009 流式回答中断后应保存已接收内容并提示继续")
+    void preservesPartialAnswerWhenStreamIsInterrupted() throws Exception {
+        ChatModel chatModel = mock(ChatModel.class);
+        OpenAiStreamClient streamClient = mock(OpenAiStreamClient.class);
+        KnowledgeSearchPort knowledgeService = mock(KnowledgeSearchPort.class);
+        @SuppressWarnings("unchecked")
+        ObjectProvider<WikiSearchPort> wikiProvider = mock(ObjectProvider.class);
+        ChatSessionMapper sessionMapper = mock(ChatSessionMapper.class);
+        ChatMessageMapper messageMapper = mock(ChatMessageMapper.class);
+
+        ChatSession session = new ChatSession();
+        session.setId(1L);
+        session.setTitle("已有会话");
+        when(sessionMapper.findById(1L)).thenReturn(session);
+        when(messageMapper.findBySessionIdOrderByCreatedAtAsc(1L)).thenReturn(List.of());
+        when(knowledgeService.search(eq("检查 TongWeb 参数"), eq(5))).thenReturn(List.of());
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            Consumer<String> onDelta = invocation.getArgument(1);
+            onDelta.accept("已完成的诊断内容");
+            throw new IOException();
+        }).when(streamClient).stream(any(List.class), any());
+
+        TroubleshootAgent agent = new TroubleshootAgent(
+                chatModel, streamClient, knowledgeService, wikiProvider,
+                sessionMapper, messageMapper, new RetrievalEvidenceFilter(), new AnswerGroundingVerifier(),
+                new DiagnosticAttachmentService(List.of()));
+
+        TroubleshootAgent.AgentResponse response =
+                agent.chatStream(1L, "检查 TongWeb 参数", null, ignored -> {}, null);
+
+        assertThat(response.getAnswer())
+                .contains("已完成的诊断内容")
+                .contains(ErrorMessages.LLM_STREAM_INTERRUPTED);
+        verify(messageMapper).insert(argThat(message -> "assistant".equals(message.getRole())
+                && message.getContent().contains("已完成的诊断内容")
+                && message.getContent().contains(ErrorMessages.LLM_STREAM_INTERRUPTED)));
         verifyNoInteractions(chatModel);
     }
 
