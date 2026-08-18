@@ -93,11 +93,11 @@ second_gateway_secret=$(env_value "$TMP_ROOT/services.test.second.env" GATEWAY_S
     || fail 'TC-CI-004 repeated generation returned the same gateway secret'
 pass 'TC-CI-004'
 
-assert_text deploy/services.env.example '^EMBEDDING_BASE_URL=' \
+assert_text deploy/services.env.example '^EMBEDDING_BASE_URL=http://ollama:11434/v1$' \
     'TC-CI-032 embedding base URL env'
-assert_text deploy/services.env.example '^EMBEDDING_MODEL=' \
+assert_text deploy/services.env.example '^EMBEDDING_MODEL=bge-m3$' \
     'TC-CI-032 embedding model env'
-assert_text deploy/services.env.example '^EMBEDDING_MAX_TOKENS=' \
+assert_text deploy/services.env.example '^EMBEDDING_MAX_TOKENS=8192$' \
     'TC-CI-032 embedding token limit env'
 assert_text deploy/nacos-config/ai-service.properties \
     '^langchain4j\.open-ai\.embedding-model\.base-url=\$\{EMBEDDING_BASE_URL:' \
@@ -142,8 +142,14 @@ assert_no_text backend/ai-service/src/main/resources/application-local.yml \
     'mimo-v2\.5-pro|token-plan-cn\.xiaomimimo\.com' \
     'TC-CI-034 no legacy local chat model fallback'
 assert_text backend/ai-service/src/main/resources/application.yml \
-    '^    max-tokens: \$\{EMBEDDING_MAX_TOKENS:512\}$' \
+    '^    max-tokens: \$\{EMBEDDING_MAX_TOKENS:8192\}$' \
     'TC-CI-033 application embedding token limit fallback'
+assert_text backend/ai-service/src/main/resources/application.yml \
+    '^      base-url: \$\{EMBEDDING_BASE_URL:http://ollama:11434/v1\}$' \
+    'TC-CI-055 application Ollama embedding endpoint fallback'
+assert_text backend/ai-service/src/main/resources/application.yml \
+    '^      model-name: \$\{EMBEDDING_MODEL:bge-m3\}$' \
+    'TC-CI-055 application bge-m3 fallback'
 assert_no_text backend/ai-service/src/main/resources/application.yml \
     'EMBEDDING_MAX_CHARS' \
     'TC-CI-033 no obsolete embedding character limit'
@@ -259,6 +265,11 @@ printf '%s\n' "$dependency_job" | grep -Eq '\$DEPLOY_DEPENDENCIES_COMPOSE_FILE' 
 printf '%s\n' "$dependency_job" | grep -Eq '\$DEPLOY_COMPOSE_FILE' \
     && fail 'TC-CI-020 dependency deployment must not use business compose'
 pass 'TC-CI-020 dependency-only deployment'
+printf '%s\n' "$dependency_job" | grep -Eq 'mysql nacos etcd minio milvus ollama' \
+    || fail 'TC-CI-055 dependency deployment must start Ollama'
+printf '%s\n' "$dependency_job" | grep -Eq 'run --rm --no-deps ollama-init' \
+    || fail 'TC-CI-055 dependency deployment must initialize bge-m3'
+pass 'TC-CI-055 Ollama dependency deployment'
 
 dependency_common=$(extract_job .deploy-dependencies-common)
 printf '%s\n' "$dependency_common" | grep -Eq 'DEPLOY_SERVICES_ENV_FILE|DEPLOY_SERVICES_ENV' \

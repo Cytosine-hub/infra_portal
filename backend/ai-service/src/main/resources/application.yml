@@ -56,7 +56,7 @@ app:
     timeout-seconds: ${LLM_TIMEOUT_SECONDS:600}
     stream-read-timeout-seconds: ${LLM_STREAM_READ_TIMEOUT_SECONDS:${LLM_TIMEOUT_SECONDS:600}}
   embedding:
-    max-tokens: ${EMBEDDING_MAX_TOKENS:512}
+    max-tokens: ${EMBEDDING_MAX_TOKENS:8192}
   ai:
     base-url: ${AI_BASE_URL:http://ai.tlb.shcj-s.com:8080/v1}
     api-key: ${AI_API_KEY:}
@@ -95,9 +95,9 @@ langchain4j:
       log-requests: true
       log-responses: true
     embedding-model:
-      base-url: ${EMBEDDING_BASE_URL:http://host.containers.internal:11434/v1}
+      base-url: ${EMBEDDING_BASE_URL:http://ollama:11434/v1}
       api-key: ${EMBEDDING_API_KEY:ollama}
-      model-name: ${EMBEDDING_MODEL:bge-large}
+      model-name: ${EMBEDDING_MODEL:bge-m3}
 
 skills:
   external-dir: ${SKILLS_DIR:./data/skills}
