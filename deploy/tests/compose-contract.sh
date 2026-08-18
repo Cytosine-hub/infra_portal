@@ -65,9 +65,44 @@ for service_path in "$ROOT_DIR"/scripts/*.service; do
     assert_text "$service_file" '^Environment=TZ=Asia/Shanghai$' \
         "TC-DOCKER-039 $service_file Shanghai timezone"
 done
-assert_no_text deploy/docker-compose.yml '^  (mysql|nacos|nacos-init|etcd|minio|milvus):' \
+assert_no_text deploy/docker-compose.yml \
+    '^  (mysql|nacos|nacos-init|ollama|ollama-init|etcd|minio|milvus):' \
     'TC-DOCKER-032 business compose excludes dependencies'
 assert_text deploy/docker-compose.dependencies.yml '^  nacos-init:' 'TC-DOCKER-006'
+assert_text deploy/docker-compose.dependencies.yml '^  ollama:' \
+    'TC-DOCKER-040 Ollama dependency service'
+assert_text deploy/docker-compose.dependencies.yml '^  ollama-init:' \
+    'TC-DOCKER-040 Ollama model initializer'
+assert_fixed_text deploy/docker-compose.dependencies.yml \
+    'ollama/ollama:${OLLAMA_VERSION:-0.24.0}' \
+    'TC-DOCKER-040 pinned Ollama image'
+assert_fixed_text deploy/docker-compose.dependencies.yml \
+    '${DEPLOY_DATA_ROOT:-./data}/dependencies/ollama:/root/.ollama' \
+    'TC-DOCKER-040 Ollama model persistence'
+assert_fixed_text deploy/docker-compose.dependencies.yml \
+    'OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}' \
+    'TC-DOCKER-040 Ollama single request concurrency'
+assert_fixed_text deploy/docker-compose.dependencies.yml \
+    'OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}' \
+    'TC-DOCKER-040 Ollama single loaded model'
+assert_fixed_text deploy/docker-compose.dependencies.yml \
+    'cpus: ${OLLAMA_CPUS:-6.0}' \
+    'TC-DOCKER-040 Ollama CPU limit'
+assert_fixed_text deploy/docker-compose.dependencies.yml \
+    'mem_limit: ${OLLAMA_MEMORY_LIMIT:-3g}' \
+    'TC-DOCKER-040 Ollama memory limit'
+assert_fixed_text deploy/docker-compose.dependencies.yml \
+    'OLLAMA_HOST: http://ollama:11434' \
+    'TC-DOCKER-040 Ollama initializer endpoint'
+assert_fixed_text deploy/docker-compose.dependencies.yml \
+    'command: ["pull", "${OLLAMA_EMBEDDING_MODEL:-bge-m3}"]' \
+    'TC-DOCKER-040 bge-m3 model initialization'
+assert_no_text deploy/docker-compose.dependencies.yml \
+    '11434:11434' \
+    'TC-DOCKER-040 Ollama has no host port exposure'
+assert_fixed_text deploy/smoke-test.sh \
+    'dependency_compose exec -T ollama ollama show "$OLLAMA_EMBEDDING_MODEL"' \
+    'TC-DOCKER-040 Ollama model smoke check'
 assert_no_text deploy/docker-compose.dependencies.yml \
     '^  (api-gateway|core-service|ai-service|community-service|middleware-service|database-service|host-service|network-service|security-service|frontend):' \
     'TC-DOCKER-032 dependency compose excludes business services'
@@ -115,6 +150,10 @@ assert_text deploy/docker-compose.dependencies.yml \
     'TC-DOCKER-037 Nacos LAN bind address'
 assert_text deploy/compose.env.example '^NACOS_BIND_ADDRESS=0\.0\.0\.0$' \
     'TC-DOCKER-037 Nacos LAN bind env'
+assert_text deploy/compose.env.example '^OLLAMA_VERSION=0\.24\.0$' \
+    'TC-DOCKER-040 Ollama version env'
+assert_text deploy/compose.env.example '^OLLAMA_EMBEDDING_MODEL=bge-m3$' \
+    'TC-DOCKER-040 Ollama model env'
 assert_text deploy/docker-compose.dependencies.yml \
     'milvusdb/milvus:\$\{MILVUS_VERSION:-v2\.5\.10\}' \
     'TC-DOCKER-038 Milvus hybrid-search compatible version'

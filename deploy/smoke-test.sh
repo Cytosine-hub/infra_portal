@@ -34,7 +34,7 @@ service_compose() {
     service=$1
     shift
     case "$service" in
-        mysql|nacos|nacos-init|etcd|minio|milvus)
+        mysql|nacos|nacos-init|ollama|ollama-init|etcd|minio|milvus)
             dependency_compose "$@"
             ;;
         *)
@@ -83,8 +83,9 @@ NACOS_DISCOVERY_GROUP=${NACOS_DISCOVERY_GROUP:-DEFAULT_GROUP}
 NACOS_NAMESPACE=${NACOS_NAMESPACE:-}
 NACOS_USERNAME=${NACOS_USERNAME:-nacos}
 NACOS_PASSWORD=${NACOS_PASSWORD:-nacos}
+OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-bge-m3}
 
-long_running_services='mysql nacos etcd minio milvus api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend'
+long_running_services='mysql nacos ollama etcd minio milvus api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend'
 java_services='api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service'
 
 printf '%s\n' '+ Task start: Docker Compose full-stack smoke test'
@@ -93,6 +94,10 @@ for service in $long_running_services; do
     wait_for_service "$service" || fail "TC-DOCKER-018 service not healthy: $service" "$service"
 done
 pass 'TC-DOCKER-018'
+
+dependency_compose exec -T ollama ollama show "$OLLAMA_EMBEDDING_MODEL" >/dev/null \
+    || fail "TC-DOCKER-040 Ollama model is unavailable: $OLLAMA_EMBEDDING_MODEL" ollama
+pass 'TC-DOCKER-040'
 
 nacos_init_output=$(dependency_compose run --rm --no-deps nacos-init 2>&1) \
     || fail 'TC-DOCKER-019 nacos-init failed' nacos-init

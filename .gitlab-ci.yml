@@ -400,9 +400,10 @@ deploy:dependencies:
           docker pull "$IMAGE"
         fi
       done
-    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" up --detach --wait --no-build --pull never mysql nacos etcd minio milvus
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" up --detach --wait --no-build --pull never mysql nacos etcd minio milvus ollama
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" run --rm --no-deps ollama-init
     - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" run --rm --no-deps nacos-init
-    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" ps --all mysql nacos nacos-init etcd minio milvus
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" ps --all mysql nacos nacos-init ollama ollama-init etcd minio milvus
 
 # 部署全部 9 个后端服务，不构建或重启前端，也不操作依赖组件。
 deploy:all-backend-services:
@@ -475,7 +476,8 @@ deploy:full-stack:
     - chmod 644 "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" "$DEPLOY_MYSQL_INIT_DIR/init.sql" "$DEPLOY_MYSQL_INIT_DIR/seed.sql"
     - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" config --quiet
     - docker build --tag "$IMAGE_NAMESPACE/nacos-init:$IMAGE_TAG" --file deploy/Dockerfile.nacos-init .
-    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" up --detach --wait --no-build --pull missing mysql nacos etcd minio milvus
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" up --detach --wait --no-build --pull missing mysql nacos etcd minio milvus ollama
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" run --rm --no-deps ollama-init
     - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" run --rm --no-deps nacos-init
     - |
       for SVC in api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service; do
@@ -484,7 +486,7 @@ deploy:full-stack:
     - docker build --build-arg IMAGE_REVISION="$CI_COMMIT_SHA" --build-arg IMAGE_VERSION="$IMAGE_TAG" --tag "$IMAGE_NAMESPACE/frontend:$IMAGE_TAG" --file deploy/Dockerfile.frontend .
     - sh deploy/validate-ai-auth.sh "$DEPLOY_SERVICES_ENV" "$IMAGE_NAMESPACE/ai-service:$IMAGE_TAG" "$DEPLOY_COMPOSE_ENV"
     - DEPLOY_VERIFY_MODE=full sh deploy/rollback.sh deploy api-gateway core-service ai-service community-service middleware-service database-service host-service network-service security-service frontend
-    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" ps --all mysql nacos nacos-init etcd minio milvus
+    - docker compose --env-file "$DEPLOY_DEPENDENCIES_COMPOSE_ENV" --file "$DEPLOY_DEPENDENCIES_COMPOSE_FILE" ps --all mysql nacos nacos-init ollama ollama-init etcd minio milvus
 
 # ----------------------------------------------------------------------------
 # 单服务自动部署（增量 CD）：master 上仅当该服务自身/能力模块/共享库变更时，
