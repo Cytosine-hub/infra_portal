@@ -3,6 +3,8 @@ package com.middleware.manager.web.api;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.middleware.manager.constant.ErrorCode;
+import com.middleware.manager.constant.ErrorMessages;
+import com.middleware.manager.exception.UnauthorizedException;
 import com.middleware.manager.web.api.dto.ApiError;
 import jakarta.validation.ConstraintViolationException;
 import java.util.Set;
@@ -56,5 +58,18 @@ class ApiExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getCode()).isEqualTo(ErrorCode.PARAM_INVALID);
+    }
+
+    @Test
+    @DisplayName("TC-WEB-004 登录认证失败返回 LOGIN_FAILED 401")
+    void loginFailureReturnsUnauthorized() {
+        ResponseEntity<ApiError> response = handler.handleUnauthorized(
+                new UnauthorizedException(ErrorCode.LOGIN_FAILED, ErrorMessages.LOGIN_FAILED));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getStatus()).isEqualTo(401);
+        assertThat(response.getBody().getCode()).isEqualTo(ErrorCode.LOGIN_FAILED);
+        assertThat(response.getBody().getMessage()).isEqualTo(ErrorMessages.LOGIN_FAILED);
     }
 }
