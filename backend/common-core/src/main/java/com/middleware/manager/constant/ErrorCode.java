@@ -12,6 +12,7 @@ public final class ErrorCode {
 
     // 认证授权
     public static final String UNAUTHORIZED = "UNAUTHORIZED";
+    public static final String LOGIN_FAILED = "LOGIN_FAILED";
     public static final String FORBIDDEN = "FORBIDDEN";
     public static final String TOKEN_EXPIRED = "TOKEN_EXPIRED";
 

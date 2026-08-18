@@ -5,6 +5,7 @@ import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.exception.BusinessException;
 import com.middleware.manager.exception.ForbiddenException;
 import com.middleware.manager.exception.NotFoundException;
+import com.middleware.manager.exception.UnauthorizedException;
 import com.middleware.manager.web.api.dto.ApiError;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -78,6 +79,13 @@ public class ApiExceptionHandler {
         log.warn("权限不足: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(new ApiError(403, ex.getCode(), ex.getMessage()));
+    }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<ApiError> handleUnauthorized(UnauthorizedException ex) {
+        log.warn("认证失败 code={} message={}", ex.getCode(), ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ApiError(401, ex.getCode(), ex.getMessage()));
     }
 
     @ExceptionHandler(BusinessException.class)

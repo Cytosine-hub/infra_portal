@@ -1,20 +1,22 @@
 package com.middleware.manager.web.api;
 
+import com.middleware.manager.constant.ErrorCode;
+import com.middleware.manager.constant.ErrorMessages;
 import com.middleware.manager.domain.RoleEntity;
+import com.middleware.manager.exception.UnauthorizedException;
 import com.middleware.manager.service.AdminAccountService;
 import com.middleware.manager.service.RoleService;
 import com.middleware.manager.service.TokenService;
 import com.middleware.manager.web.api.dto.AuthResponse;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
@@ -48,13 +50,13 @@ public class AuthApiController {
         UserDetails user;
         try {
             user = adminAccountService.loadUserByUsername(credentials.username);
-        } catch (Exception e) {
-            log.warn("login failed: username={} user_not_found", credentials.username);
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户名或密码错误");
+        } catch (UsernameNotFoundException e) {
+            log.debug("login failed: username={} user_not_found", credentials.username);
+            throw loginFailed();
         }
         if (!passwordEncoder.matches(credentials.password, user.getPassword())) {
-            log.warn("login failed: username={} password_mismatch", credentials.username);
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户名或密码错误");
+            log.debug("login failed: username={} password_mismatch", credentials.username);
+            throw loginFailed();
         }
 
         String authority = user.getAuthorities().stream().findFirst()
@@ -96,19 +98,23 @@ public class AuthApiController {
 
     private Credentials parseBasicCredentials(String authorization) {
         if (authorization == null || !authorization.startsWith("Basic ")) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Missing credentials");
+            throw loginFailed();
         }
 
         try {
             String decoded = new String(Base64.getDecoder().decode(authorization.substring(6)), StandardCharsets.UTF_8);
             int separator = decoded.indexOf(':');
             if (separator <= 0) {
-                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+                throw loginFailed();
             }
             return new Credentials(decoded.substring(0, separator), decoded.substring(separator + 1));
         } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
+            throw loginFailed();
         }
+    }
+
+    private UnauthorizedException loginFailed() {
+        return new UnauthorizedException(ErrorCode.LOGIN_FAILED, ErrorMessages.LOGIN_FAILED);
     }
 
     private static class Credentials {

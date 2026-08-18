@@ -66,6 +66,34 @@ describe('登录错误边界', () => {
     wrapper.unmount()
   })
 
+  test('TC-AUTH-006 错误用户名或密码应显示明确登录失败提示', async () => {
+    vi.stubGlobal('fetch', vi.fn((input) => {
+      const path = new URL(String(input), 'http://localhost').pathname
+      if (path === '/api/auth/login') {
+        return response({
+          status: 401,
+          code: 'LOGIN_FAILED',
+          message: '用户名或密码错误'
+        }, 401, 'Unauthorized')
+      }
+      if (path === '/api/public/config') return response({ knowledgeEnabled: true, diagnosticsEnabled: true })
+      return response([])
+    }))
+
+    const wrapper = mount(App)
+    await flushPromises()
+    await wrapper.find('.login-form input[autocomplete="username"]').setValue('wrong-user')
+    await wrapper.find('.login-form input[type="password"]').setValue('wrong-password')
+    await wrapper.find('.login-form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('.toast-message').text()).toBe('用户名或密码错误')
+    expect(wrapper.find('.toast-message').text()).not.toContain('系统异常')
+    expect(useAuth().auth.token).toBe('')
+
+    wrapper.unmount()
+  })
+
   test('TC-AUTH-003 已登录用户在首页也应看到完整顶部导航', async () => {
     localStorageMock.setItem('mrm.token', 'valid-token')
     localStorageMock.setItem('mrm.user', JSON.stringify({

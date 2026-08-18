@@ -12,6 +12,7 @@ public final class ErrorMessages {
 
     // 认证授权
     public static final String UNAUTHORIZED = "未认证，请先登录";
+    public static final String LOGIN_FAILED = "用户名或密码错误";
     public static final String FORBIDDEN = "权限不足";
     public static final String TOKEN_EXPIRED = "登录已过期，请重新登录";
 
